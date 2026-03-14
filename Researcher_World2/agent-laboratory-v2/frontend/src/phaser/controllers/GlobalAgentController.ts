@@ -328,25 +328,25 @@ export class GlobalAgentController {
     // In una implementazione reale, questi dati potrebbero provenire
     // da un'API o dallo store React/Redux
     
-    // Dati di esempio per agenti del laboratorio Mercatorum
+    // Agenti Mercatorum (allineati al backend)
     const mercatorumAgents = [
       { id: 'prof1', type: 'professor', labScene: SCENE_KEYS.MERCATORUM, x: 200, y: 200 },
       { id: 'res1', type: 'researcher', labScene: SCENE_KEYS.MERCATORUM, x: 400, y: 250 },
-      { id: 'stu1', type: 'phd_student', labScene: SCENE_KEYS.MERCATORUM, x: 300, y: 350 },
+      { id: 'stu1', type: 'student', labScene: SCENE_KEYS.MERCATORUM, x: 300, y: 350 },
     ];
-    
-    // Dati di esempio per agenti del laboratorio Blekinge
+
+    // Agenti Blekinge (allineati al backend)
     const blekingeAgents = [
       { id: 'prof2', type: 'professor', labScene: SCENE_KEYS.BLEKINGE, x: 250, y: 200 },
-      { id: 'eng1', type: 'ml_engineer', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 300 },
-      { id: 'res2', type: 'researcher', labScene: SCENE_KEYS.BLEKINGE, x: 500, y: 250 },
+      { id: 'res2', type: 'researcher', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 300 },
+      { id: 'stu2', type: 'student', labScene: SCENE_KEYS.BLEKINGE, x: 500, y: 250 },
     ];
-    
-    // Dati di esempio per agenti del laboratorio OPBG
+
+    // Agenti OPBG (allineati al backend)
     const opbgAgents = [
-      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 200, y: 250 },
-      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 350, y: 300 },
-      { id: 'eng2', type: 'biomedical', labScene: SCENE_KEYS.OPBG, x: 450, y: 200 },
+      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 200, y: 250 },
+      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 350, y: 300 },
+      { id: 'stu3', type: 'student', labScene: SCENE_KEYS.OPBG, x: 450, y: 200 },
     ];
     
     // Unisci tutti i dati degli agenti

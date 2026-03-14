@@ -72,26 +72,26 @@ export const MERCATORUM_THEME: LabTheme = {
   }
 };
 
-// Configurazione degli agenti per Mercatorum
+// Configurazione degli agenti per Mercatorum (allineata al backend)
 export const MERCATORUM_AGENT_CONFIG: MercatorumLabConfig = {
   agents: [
     {
       type: 'professor',
-      name: 'Prof. Rossi',
+      name: 'Elena Conti',
       position: { x: 150, y: 200 },
-      specialization: 'business_intelligence'
+      specialization: 'secure_aggregation'
     },
     {
       type: 'researcher',
-      name: 'Dr. Bianchi',
+      name: 'Luca Bianchi',
       position: { x: 300, y: 250 },
-      specialization: 'data_privacy'
+      specialization: 'optimization_theory'
     },
     {
       type: 'student',
-      name: 'Dott. Verdi',
+      name: 'Marco Rossi',
       position: { x: 200, y: 150 },
-      specialization: 'financial_analytics'
+      specialization: 'business_intelligence'
     }
   ]
 };

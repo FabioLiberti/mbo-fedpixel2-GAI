@@ -312,25 +312,12 @@ export default class LabMiniature extends Phaser.GameObjects.Container {
   }
   
   getResearcherSpriteKey(researcherType: string): string {
-    // Use the stored scene reference
     const scene = this.gameScene;
-    
-    // Try different naming patterns
-    const possibleKeys = [
-      `researcher_${researcherType.toLowerCase()}`,
-      `researcher_${researcherType}`,
-      `agent_${researcherType.toLowerCase()}`,
-      `agent_${researcherType}`,
-      researcherType.toLowerCase(),
-      researcherType
-    ];
-    
-    for (const key of possibleKeys) {
-      if (scene.textures.exists(key)) {
-        return key;
-      }
+    // Texture keys match agent type names directly (professor, researcher, student, doctor)
+    const key = researcherType.toLowerCase();
+    if (scene.textures.exists(key)) {
+      return key;
     }
-    
     return 'default_researcher';
   }
   
@@ -353,33 +340,25 @@ export default class LabMiniature extends Phaser.GameObjects.Container {
         return 0xE63946;
       case 'researcher':
         return 0x457B9D;
-      case 'phd_student':
+      case 'student':
         return 0x2A9D8F;
       case 'doctor':
         return 0x9B5DE5;
-      case 'ml_engineer':
-        return 0xF15BB5;
-      case 'biomedical':
-        return 0xFEE440;
       default:
         return 0xFFFFFF;
     }
   }
-  
+
   getAgentInitial(agentType: string): string {
     switch(agentType.toLowerCase()) {
       case 'professor':
         return 'P';
       case 'researcher':
         return 'R';
-      case 'phd_student':
+      case 'student':
         return 'S';
       case 'doctor':
         return 'D';
-      case 'ml_engineer':
-        return 'E';
-      case 'biomedical':
-        return 'B';
       default:
         return 'A';
     }

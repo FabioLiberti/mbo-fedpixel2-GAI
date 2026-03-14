@@ -383,9 +383,10 @@ function createCharacterAnimations(scene: MercatorumLabScene): void {
         return;
       }
       
-      const frameCount = texture.frameTotal;
-      console.log(`Creating animations for ${char} with ${frameCount} frames`);
-      
+      // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+      const actualFrames = Math.max(1, texture.frameTotal - 1);
+      console.log(`Creating animations for ${char} with ${actualFrames} actual frames`);
+
       // Crea animazione 'idle' - usa sempre il primo frame
       if (!scene.anims.exists(`${char}_idle`)) {
         scene.anims.create({
@@ -394,56 +395,52 @@ function createCharacterAnimations(scene: MercatorumLabScene): void {
           frameRate: 1,
           repeat: 0
         });
-        console.log(`Created animation: ${char}_idle`);
       }
-      
+
       // Crea animazione 'walk' - usa i frame disponibili
       if (!scene.anims.exists(`${char}_walk`)) {
-        const walkFrames = frameCount >= 4 
+        const walkFrames = actualFrames >= 4
           ? { frames: [0, 1, 2, 3] }
-          : (frameCount >= 2 
+          : actualFrames >= 2
               ? { frames: [0, 1] }
-              : { frames: [0] });
-          
+              : { frames: [0] };
+
         scene.anims.create({
           key: `${char}_walk`,
           frames: scene.anims.generateFrameNumbers(char, walkFrames),
           frameRate: 6,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_walk`);
       }
 
       // Crea animazione 'working' - usa i frame disponibili
       if (!scene.anims.exists(`${char}_working`)) {
-        const workingFrames = frameCount >= 2 
+        const workingFrames = actualFrames >= 2
           ? { frames: [0, 1] }
           : { frames: [0] };
-          
+
         scene.anims.create({
           key: `${char}_working`,
           frames: scene.anims.generateFrameNumbers(char, workingFrames),
           frameRate: 3,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_working`);
       }
 
       // Crea animazione 'discussing' - usa i frame disponibili
       if (!scene.anims.exists(`${char}_discussing`)) {
-        const discussingFrames = frameCount >= 4 
+        const discussingFrames = actualFrames >= 4
           ? { frames: [0, 1, 0, 2] }
-          : (frameCount >= 2 
+          : actualFrames >= 2
               ? { frames: [0, 1] }
-              : { frames: [0] });
-          
+              : { frames: [0] };
+
         scene.anims.create({
           key: `${char}_discussing`,
           frames: scene.anims.generateFrameNumbers(char, discussingFrames),
           frameRate: 4,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_discussing`);
       }
     });
   } catch (error) {
@@ -471,9 +468,10 @@ export function createAllCharacterAnimations(scene: MercatorumLabScene): void {
         return;
       }
       
-      const frameCount = texture.frameTotal;
-      console.log(`Creating animations for ${char} with ${frameCount} frames`);
-      
+      // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+      const actualFrames = Math.max(1, texture.frameTotal - 1);
+      console.log(`[All] Creating animations for ${char} with ${actualFrames} actual frames`);
+
       // Crea animazione 'idle'
       if (!scene.anims.exists(`${char}_idle`)) {
         scene.anims.create({
@@ -482,44 +480,43 @@ export function createAllCharacterAnimations(scene: MercatorumLabScene): void {
           frameRate: 1,
           repeat: 0
         });
-        console.log(`Created animation: ${char}_idle`);
       }
-      
+
       // Crea animazione 'walk'
       if (!scene.anims.exists(`${char}_walk`)) {
-        // Per walk, usa almeno 2 frame se disponibili
-        const endWalkFrame = Math.min(3, frameCount - 1);
+        const endWalkFrame = Math.min(3, actualFrames - 1);
         scene.anims.create({
           key: `${char}_walk`,
           frames: scene.anims.generateFrameNumbers(char, { start: 0, end: endWalkFrame }),
           frameRate: 6,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_walk with frames 0-${endWalkFrame}`);
       }
-      
-      // Crea animazione 'working' 
+
+      // Crea animazione 'working'
       if (!scene.anims.exists(`${char}_working`)) {
+        const endWorkFrame = Math.min(1, actualFrames - 1);
         scene.anims.create({
           key: `${char}_working`,
-          frames: scene.anims.generateFrameNumbers(char, { start: 0, end: 1 }),
+          frames: scene.anims.generateFrameNumbers(char, { start: 0, end: endWorkFrame }),
           frameRate: 3,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_working`);
       }
-      
+
       // Crea animazione 'discussing'
       if (!scene.anims.exists(`${char}_discussing`)) {
+        const discussFrames = actualFrames >= 4
+          ? { frames: [0, 1, 0, 2] }
+          : actualFrames >= 2
+              ? { frames: [0, 1] }
+              : { frames: [0] };
         scene.anims.create({
           key: `${char}_discussing`,
-          frames: scene.anims.generateFrameNumbers(char, { 
-            frames: [0, 1, 0, 2] 
-          }),
+          frames: scene.anims.generateFrameNumbers(char, discussFrames),
           frameRate: 4,
           repeat: -1
         });
-        console.log(`Created animation: ${char}_discussing`);
       }
     });
     

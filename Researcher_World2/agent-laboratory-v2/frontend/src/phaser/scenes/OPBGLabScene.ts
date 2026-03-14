@@ -10,33 +10,27 @@ import { LabAgentsLoader } from '../utils/LabAgentsLoader';
 import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
 import { addLabInfoButton } from '../examples/AgentsLegendIntegration';
 
-// Definizione temporanea della configurazione degli agenti finché non viene creato il file corretto
+// Configurazione agenti OPBG (allineata al backend - 3 agenti)
 const AGENT_CONFIG = {
   opbg: {
     agents: [
       {
-        type: 'doctor',
-        name: 'Dr. Bianchi',
+        type: 'researcher',
+        name: 'Giulia Romano',
         position: { x: 150, y: 200 },
-        specialization: 'clinical_data'
+        specialization: 'privacy_engineering'
       },
       {
         type: 'doctor',
-        name: 'Dr. Rossi',
+        name: 'Matteo Ferri',
         position: { x: 300, y: 250 },
-        specialization: 'diagnostic_model'
-      },
-      {
-        type: 'engineer',
-        name: 'Ing. Verdi',
-        position: { x: 200, y: 150 },
         specialization: 'medical_imaging'
       },
       {
-        type: 'engineer',
-        name: 'Ing. Bruno',
-        position: { x: 400, y: 300 },
-        specialization: 'biosignal_processing'
+        type: 'student',
+        name: 'Chiara Mancini',
+        position: { x: 200, y: 150 },
+        specialization: 'bias_fairness'
       }
     ]
   }
@@ -117,15 +111,20 @@ export class OPBGLabScene extends BaseScene {
         this.updateDebugInfo(`Error loading: ${file.key}`);
       });
       
-      // Carica gli sprite specifici per OPBG
-      this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', { 
-        frameWidth: 32, 
-        frameHeight: 48 
+      // Carica gli sprite per OPBG (researcher, doctor, student)
+      this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
       });
-      
-      this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', { 
-        frameWidth: 32, 
-        frameHeight: 48 
+
+      this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
+      });
+
+      this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
       });
       
       // Aggiungi questi eventi di debug:
@@ -427,7 +426,7 @@ export class OPBGLabScene extends BaseScene {
    */
   private createMissingTextures(): void {
     try {
-      const characterTypes = ['doctor', 'engineer', 'professor', 'researcher'];
+      const characterTypes = ['doctor', 'researcher', 'student', 'professor'];
       
       characterTypes.forEach(type => {
         if (!this.textures.exists(type)) {
@@ -450,12 +449,12 @@ export class OPBGLabScene extends BaseScene {
       console.log('Creating improved placeholders for missing textures');
       
       // Lista dei tipi di personaggi che richiedono placeholder
-      const characterTypes = ['doctor', 'engineer', 'professor', 'researcher'];
+      const characterTypes = ['doctor', 'researcher', 'student', 'professor'];
       
       // Definizione dei colori per tipo
       const typeColors = {
         doctor: { main: '#00b8d4', accent: '#0089a1' },       // Verde acqua
-        engineer: { main: '#ffb6c1', accent: '#cc9299' },     // Rosa pallido
+        student: { main: '#ffb6c1', accent: '#cc9299' },      // Rosa pallido
         professor: { main: '#4fc7ff', accent: '#3a95bf' },    // Blu cielo
         researcher: { main: '#4fc3f7', accent: '#0093c4' }    // Azzurro
       };
@@ -615,7 +614,7 @@ export class OPBGLabScene extends BaseScene {
       // Colori più vivaci per ambiente pediatrico
       const colors = {
         doctor: '#00b8d4',    // Verde acqua
-        engineer: '#ffb6c1',  // Rosa pallido
+        student: '#ffb6c1',   // Rosa pallido
         professor: '#4fc7ff', // Blu cielo
         researcher: '#4fc3f7' // Azzurro
       };
@@ -687,7 +686,7 @@ export class OPBGLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['doctor', 'engineer', 'professor', 'researcher'];
+      const characters = ['doctor', 'researcher', 'student', 'professor'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste
@@ -702,75 +701,60 @@ export class OPBGLabScene extends BaseScene {
           return;
         }
         
-        const frameCount = texture.frameTotal;
-        console.log(`Creating animations for ${char} with ${frameCount} frames`);
-        
-        // Crea animazione 'idle'
+        // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+        const actualFrames = Math.max(1, texture.frameTotal - 1);
+        console.log(`Creating animations for ${char} with ${actualFrames} actual frames`);
+
         if (!this.anims.exists(`${char}_idle`)) {
           this.anims.create({
             key: `${char}_idle`,
-            frames: this.anims.generateFrameNumbers(char, { 
-              frames: [0] 
-            }),
+            frames: this.anims.generateFrameNumbers(char, { frames: [0] }),
             frameRate: 1,
             repeat: 0
           });
-          console.log(`Created animation: ${char}_idle`);
         }
-        
-        // Crea animazione 'walk'
+
         if (!this.anims.exists(`${char}_walk`)) {
-          // Per walk, usa tutti i frame disponibili o un subset
-          const walkFrames = frameCount >= 2 
-            ? { start: 0, end: Math.min(3, frameCount - 1) }
-            : { frames: [0] }; // Fallback se c'è un solo frame
-            
+          const endWalk = Math.min(3, actualFrames - 1);
           this.anims.create({
             key: `${char}_walk`,
-            frames: this.anims.generateFrameNumbers(char, walkFrames),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalk }),
             frameRate: 6,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_walk`);
         }
-        
-        // Crea animazione 'working'
+
         if (!this.anims.exists(`${char}_working`)) {
-          const workingFrames = frameCount >= 2 
-            ? { frames: [0, 1] }
-            : { frames: [0] }; // Fallback
-            
+          const endWork = Math.min(1, actualFrames - 1);
           this.anims.create({
             key: `${char}_working`,
-            frames: this.anims.generateFrameNumbers(char, workingFrames),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWork }),
             frameRate: 3,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_working`);
         }
-        
-        // Crea animazione 'discussing'
+
         if (!this.anims.exists(`${char}_discussing`)) {
-          const discussingFrames = frameCount >= 3 
+          const discussFrames = actualFrames >= 4
             ? { frames: [0, 1, 0, 2] }
-            : (frameCount >= 2 ? { frames: [0, 1] } : { frames: [0] }); // Fallback
-            
+            : actualFrames >= 2
+                ? { frames: [0, 1] }
+                : { frames: [0] };
           this.anims.create({
             key: `${char}_discussing`,
-            frames: this.anims.generateFrameNumbers(char, discussingFrames),
+            frames: this.anims.generateFrameNumbers(char, discussFrames),
             frameRate: 4,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_discussing`);
         }
       });
-      
+
       console.log('All character animations created');
     } catch (error) {
       console.error('Error creating character animations:', error);
     }
   }
-  
+
   /**
    * Metodo per eseguire un debug approfondito delle texture
    */
@@ -783,7 +767,7 @@ export class OPBGLabScene extends BaseScene {
       
       // Debug dettagliato delle texture che ci interessano
       const textureKeysToDebug = [
-        'doctor', 'engineer', 'professor', 'researcher'
+        'doctor', 'researcher', 'student', 'professor'
       ];
       
       textureKeysToDebug.forEach(key => {
@@ -807,7 +791,7 @@ export class OPBGLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['doctor', 'engineer', 'professor', 'researcher'];
+      const characters = ['doctor', 'researcher', 'student', 'professor'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste e ha frame
@@ -822,10 +806,10 @@ export class OPBGLabScene extends BaseScene {
           return;
         }
         
-        const frameCount = texture.frameTotal;
-        console.log(`Creating animations for ${char} with ${frameCount} frames`);
-        
-        // Crea animazione 'idle'
+        // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+        const actualFrames = Math.max(1, texture.frameTotal - 1);
+        console.log(`[All] Creating animations for ${char} with ${actualFrames} actual frames`);
+
         if (!this.anims.exists(`${char}_idle`)) {
           this.anims.create({
             key: `${char}_idle`,
@@ -833,53 +817,49 @@ export class OPBGLabScene extends BaseScene {
             frameRate: 1,
             repeat: 0
           });
-          console.log(`Created animation: ${char}_idle`);
         }
-        
-        // Crea animazione 'walk'
+
         if (!this.anims.exists(`${char}_walk`)) {
-          // Per walk, usa almeno 2 frame se disponibili
-          const endWalkFrame = Math.min(3, frameCount - 1);
+          const endWalk = Math.min(3, actualFrames - 1);
           this.anims.create({
             key: `${char}_walk`,
-            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalkFrame }),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalk }),
             frameRate: 6,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_walk with frames 0-${endWalkFrame}`);
         }
-        
-        // Crea animazione 'working' 
+
         if (!this.anims.exists(`${char}_working`)) {
+          const endWork = Math.min(1, actualFrames - 1);
           this.anims.create({
             key: `${char}_working`,
-            frames: this.anims.generateFrameNumbers(char, { start: 0, end: 1 }),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWork }),
             frameRate: 3,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_working`);
         }
-        
-        // Crea animazione 'discussing'
+
         if (!this.anims.exists(`${char}_discussing`)) {
+          const discussFrames = actualFrames >= 4
+            ? { frames: [0, 1, 0, 2] }
+            : actualFrames >= 2
+                ? { frames: [0, 1] }
+                : { frames: [0] };
           this.anims.create({
             key: `${char}_discussing`,
-            frames: this.anims.generateFrameNumbers(char, { 
-              frames: [0, 1, 0, 2] 
-            }),
+            frames: this.anims.generateFrameNumbers(char, discussFrames),
             frameRate: 4,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_discussing`);
         }
       });
-      
+
       console.log('All character animations created');
     } catch (error) {
       console.error('Error creating character animations:', error);
     }
   }
-  
+
   /**
    * Crea lo sfondo con tema ospedaliero pediatrico
    */

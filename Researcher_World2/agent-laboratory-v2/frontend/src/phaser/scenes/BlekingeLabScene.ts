@@ -11,27 +11,27 @@ import { addLabInfoButton } from '../examples/AgentsLegendIntegration';
 //import { LabAgentsLoader } from '../utils/LabAgentsLoader';
 
 
-// Definizione temporanea della configurazione degli agenti finché non viene creato il file corretto
+// Configurazione agenti Blekinge (allineata al backend)
 const AGENT_CONFIG = {
   blekinge: {
     agents: [
       {
         type: 'professor',
-        name: 'Prof. Johansson',
+        name: 'Anna Lindberg',
         position: { x: 150, y: 200 },
-        specialization: 'algorithms'
+        specialization: 'fl_architecture'
       },
       {
         type: 'researcher',
-        name: 'Dr. Andersson',
+        name: 'Erik Johansson',
         position: { x: 300, y: 250 },
-        specialization: 'iot_optimization'
+        specialization: 'communication_efficiency'
       },
       {
         type: 'student',
-        name: 'Dr. Nielsen',
+        name: 'Sara Nilsson',
         position: { x: 200, y: 150 },
-        specialization: 'fl_heterogeneous'
+        specialization: 'non_iid_data'
       }
     ]
   }
@@ -144,8 +144,8 @@ export class BlekingeLabScene extends BaseScene {
           }
       });
 
-      this.load.spritesheet('doctor', 'assets/characters/doctor.png', {
-        frameWidth: 32, 
+      this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
+        frameWidth: 32,
         frameHeight: 48
       });
       
@@ -835,75 +835,60 @@ export class BlekingeLabScene extends BaseScene {
           return;
         }
         
-        const frameCount = texture.frameTotal;
-        console.log(`Creating animations for ${char} with ${frameCount} frames`);
-        
-        // Crea animazione 'idle'
+        // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+        const actualFrames = Math.max(1, texture.frameTotal - 1);
+        console.log(`Creating animations for ${char} with ${actualFrames} actual frames`);
+
         if (!this.anims.exists(`${char}_idle`)) {
           this.anims.create({
             key: `${char}_idle`,
-            frames: this.anims.generateFrameNumbers(char, { 
-              frames: [0] 
-            }),
+            frames: this.anims.generateFrameNumbers(char, { frames: [0] }),
             frameRate: 1,
             repeat: 0
           });
-          console.log(`Created animation: ${char}_idle`);
         }
-        
-        // Crea animazione 'walk'
+
         if (!this.anims.exists(`${char}_walk`)) {
-          // Per walk, usa tutti i frame disponibili o un subset
-          const walkFrames = frameCount >= 2 
-            ? { start: 0, end: Math.min(3, frameCount - 1) }
-            : { frames: [0] }; // Fallback se c'è un solo frame
-            
+          const endWalk = Math.min(3, actualFrames - 1);
           this.anims.create({
             key: `${char}_walk`,
-            frames: this.anims.generateFrameNumbers(char, walkFrames),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalk }),
             frameRate: 6,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_walk`);
         }
-        
-        // Crea animazione 'working'
+
         if (!this.anims.exists(`${char}_working`)) {
-          const workingFrames = frameCount >= 2 
-            ? { frames: [0, 1] }
-            : { frames: [0] }; // Fallback
-            
+          const endWork = Math.min(1, actualFrames - 1);
           this.anims.create({
             key: `${char}_working`,
-            frames: this.anims.generateFrameNumbers(char, workingFrames),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWork }),
             frameRate: 3,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_working`);
         }
-        
-        // Crea animazione 'discussing'
+
         if (!this.anims.exists(`${char}_discussing`)) {
-          const discussingFrames = frameCount >= 3 
+          const discussFrames = actualFrames >= 4
             ? { frames: [0, 1, 0, 2] }
-            : (frameCount >= 2 ? { frames: [0, 1] } : { frames: [0] }); // Fallback
-            
+            : actualFrames >= 2
+                ? { frames: [0, 1] }
+                : { frames: [0] };
           this.anims.create({
             key: `${char}_discussing`,
-            frames: this.anims.generateFrameNumbers(char, discussingFrames),
+            frames: this.anims.generateFrameNumbers(char, discussFrames),
             frameRate: 4,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_discussing`);
         }
       });
-      
+
       console.log('All character animations created');
     } catch (error) {
       console.error('Error creating character animations:', error);
     }
   }
-  
+
   /**
    * Metodo per eseguire un debug approfondito delle texture
    */
@@ -1108,10 +1093,10 @@ export class BlekingeLabScene extends BaseScene {
           return;
         }
         
-        const frameCount = texture.frameTotal;
-        console.log(`Creating animations for ${char} with ${frameCount} frames`);
-        
-        // Crea animazione 'idle'
+        // frameTotal includes __BASE frame, subtract 1 for actual usable frames
+        const actualFrames = Math.max(1, texture.frameTotal - 1);
+        console.log(`[All] Creating animations for ${char} with ${actualFrames} actual frames`);
+
         if (!this.anims.exists(`${char}_idle`)) {
           this.anims.create({
             key: `${char}_idle`,
@@ -1119,53 +1104,49 @@ export class BlekingeLabScene extends BaseScene {
             frameRate: 1,
             repeat: 0
           });
-          console.log(`Created animation: ${char}_idle`);
         }
-        
-        // Crea animazione 'walk'
+
         if (!this.anims.exists(`${char}_walk`)) {
-          // Per walk, usa almeno 2 frame se disponibili
-          const endWalkFrame = Math.min(3, frameCount - 1);
+          const endWalk = Math.min(3, actualFrames - 1);
           this.anims.create({
             key: `${char}_walk`,
-            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalkFrame }),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalk }),
             frameRate: 6,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_walk with frames 0-${endWalkFrame}`);
         }
-        
-        // Crea animazione 'working' 
+
         if (!this.anims.exists(`${char}_working`)) {
+          const endWork = Math.min(1, actualFrames - 1);
           this.anims.create({
             key: `${char}_working`,
-            frames: this.anims.generateFrameNumbers(char, { start: 0, end: 1 }),
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWork }),
             frameRate: 3,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_working`);
         }
-        
-        // Crea animazione 'discussing'
+
         if (!this.anims.exists(`${char}_discussing`)) {
+          const discussFrames = actualFrames >= 4
+            ? { frames: [0, 1, 0, 2] }
+            : actualFrames >= 2
+                ? { frames: [0, 1] }
+                : { frames: [0] };
           this.anims.create({
             key: `${char}_discussing`,
-            frames: this.anims.generateFrameNumbers(char, { 
-              frames: [0, 1, 0, 2] 
-            }),
+            frames: this.anims.generateFrameNumbers(char, discussFrames),
             frameRate: 4,
             repeat: -1
           });
-          console.log(`Created animation: ${char}_discussing`);
         }
       });
-      
+
       console.log('All character animations created');
     } catch (error) {
       console.error('Error creating character animations:', error);
     }
   }
-  
+
   /**
  * Crea agenti utilizzando la configurazione predefinita
  */

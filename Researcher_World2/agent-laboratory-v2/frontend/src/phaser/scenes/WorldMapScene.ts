@@ -77,7 +77,21 @@ export class WorldMapScene extends BaseScene {
     
     // Immagine di fallback
     this.load.image('default_lab', 'assets/images/labs/default_preview.png');
-    
+
+    // Carica spritesheet personaggi per le miniature degli agenti
+    this.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+
     // Precarica il file di configurazione degli agenti per la legenda
     this.load.json('agentTypesConfig', 'assets/config/agentTypes.json');
   }
