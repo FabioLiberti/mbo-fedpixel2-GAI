@@ -10,12 +10,6 @@ import { LAB_TYPES, LabTypeId } from '../types/LabTypeConstants';
 import { FLState } from '../fl/FLState';
 import { emitFLPanelToggle, getFLPanelState, updateFLPanelState } from '../../utils/customEvents';
 
-interface PhaserTimer {
-  callback: Function;
-  remove: () => void;
-  paused: boolean;
-}
-
 export class WorldMapScene extends BaseScene {
   private labMiniatures: Map<string, LabMiniature> = new Map();
   
@@ -145,8 +139,8 @@ export class WorldMapScene extends BaseScene {
     // Inizializza gli effetti FL per la mappa mondiale
     this.flController.initWorldMapEffects(this);
     
-    // Emetti un evento per aggiornare lo stato FL iniziale
-    this.triggerInitialFLState();
+    // Lo stato FL iniziale NON viene emesso all'avvio della scena.
+    // Il pannello FL apparirà solo quando la simulazione viene avviata dall'utente.
     
     // Update debug info
     this.updateDebugInfo();
@@ -216,441 +210,44 @@ export class WorldMapScene extends BaseScene {
     this.game.events.on('toggleFLPanel', (data: { visible: boolean }) => {
       // Invia un evento al componente React che gestisce l'interfaccia FL
       console.log('FL Panel visibility changed:', data.visible);
-      
-      // Se il pannello dovrebbe essere visibile ma la simulazione non è attiva,
-      // avviamo anche la simulazione
-      if (data.visible && !this.flController.isEnabled()) {
-        this.startFLSimulation();
-      }
+      // Il pannello si mostra/nasconde ma NON avvia la simulazione FL.
+      // La simulazione parte solo dal pulsante "Avvia Simulazione".
     });
   }
 
   /**
    * Avvia la simulazione FL
    */
+  /**
+   * Avvia la simulazione FL (solo log, dati gestiti da React SimulationContainer)
+   */
   private startFLSimulation(): void {
-    try {
-      // Correzione per l'errore getTimers
-      let timerRemoved = false;
-      
-      try {
-        // Prima cerca di usare getTimers() se esiste
-        if (typeof this.time.getTimers === 'function') {
-          const timers = this.time.getTimers();
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.remove();
-                timerRemoved = true;
-              }
-            });
-          }
-        } else if (this.time._timerEvents) {
-          // Altrimenti usa _timerEvents
-          const timers = this.time._timerEvents;
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.remove();
-                timerRemoved = true;
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Could not access timer array:", e);
-      }
-      
-      if (!timerRemoved) {
-        console.warn("Could not access timer array, creating new timer anyway");
-      }
-
-      // Crea un nuovo stato FL attivo
-      const flStatus = {
-        enabled: true,
-        currentState: FLState.TRAINING,
-        activeAgents: [
-          {
-            id: 'agent1',
-            state: FLState.TRAINING,
-            labType: LAB_TYPES.MERCATORUM,
-            agentType: 'researcher'
-          },
-          {
-            id: 'agent2',
-            state: FLState.SENDING,
-            labType: LAB_TYPES.BLEKINGE,
-            agentType: 'ml_engineer'
-          },
-          {
-            id: 'agent3',
-            state: FLState.RECEIVING,
-            labType: LAB_TYPES.OPBG,
-            agentType: 'doctor'
-          }
-        ],
-        metrics: {
-          accuracy: 0.7,
-          loss: 0.3,
-          round: 1,
-          clientFraction: 0.67
-        },
-        connections: [
-          {
-            source: LAB_TYPES.MERCATORUM,
-            target: LAB_TYPES.BLEKINGE,
-            active: true
-          },
-          {
-            source: LAB_TYPES.BLEKINGE,
-            target: LAB_TYPES.OPBG,
-            active: true
-          },
-          {
-            source: LAB_TYPES.OPBG,
-            target: LAB_TYPES.MERCATORUM,
-            active: true
-          }
-        ]
-      };
-
-      // Invia l'evento
-      this.game.events.emit('updateFLStatus', flStatus);
-
-      // Avvia gli aggiornamenti periodici con il contesto corretto
-      this.time.addEvent({
-        delay: 5000, // Ogni 5 secondi
-        callback: this.updateFLState,
-        callbackScope: this,
-        loop: true
-      });
-
-      console.log("FL Simulation started");
-    } catch (error) {
-      console.error("Error starting FL simulation:", error);
-    }
+    console.log("FL Simulation started (data managed by React SimulationContainer)");
   }
 
   /**
-   * Mette in pausa la simulazione FL
+   * Mette in pausa la simulazione FL (solo log, dati gestiti da React)
    */
   private pauseFLSimulation(): void {
-    try {
-      // Trova e metti in pausa tutti i timer che aggiornano lo stato FL
-      let timerPaused = false;
-      
-      try {
-        if (typeof this.time.getTimers === 'function') {
-          const timers = this.time.getTimers();
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.paused = true;
-                timerPaused = true;
-              }
-            });
-          }
-        } else if (this.time._timerEvents) {
-          const timers = this.time._timerEvents;
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.paused = true;
-                timerPaused = true;
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Could not access timer array:", e);
-      }
-      
-      if (!timerPaused) {
-        console.warn("Could not pause timer");
-      }
-
-      console.log("FL Simulation paused");
-    } catch (error) {
-      console.error("Error pausing FL simulation:", error);
-    }
+    console.log("FL Simulation paused (data managed by React SimulationContainer)");
   }
 
   /**
-   * Ferma la simulazione FL
+   * Ferma la simulazione FL (solo log, dati gestiti da React)
    */
   private stopFLSimulation(): void {
-    try {
-      // Trova e rimuovi tutti i timer che aggiornano lo stato FL
-      let timerRemoved = false;
-      
-      try {
-        if (typeof this.time.getTimers === 'function') {
-          const timers = this.time.getTimers();
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.remove();
-                timerRemoved = true;
-              }
-            });
-          }
-        } else if (this.time._timerEvents) {
-          const timers = this.time._timerEvents;
-          if (Array.isArray(timers)) {
-            timers.forEach((timer: PhaserTimer) => {
-              if (timer.callback === this.updateFLState) {
-                timer.remove();
-                timerRemoved = true;
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Could not access timer array:", e);
-      }
-      
-      if (!timerRemoved) {
-        console.warn("Could not remove timer");
-      }
-
-      // Crea un evento di stato FL disabilitato
-      const flStatus = {
-        enabled: false,
-        currentState: FLState.IDLE,
-        activeAgents: [],
-        metrics: {
-          accuracy: 0,
-          loss: 0,
-          round: 0,
-          clientFraction: 0
-        },
-        connections: [
-          {
-            source: LAB_TYPES.MERCATORUM,
-            target: LAB_TYPES.BLEKINGE,
-            active: false
-          },
-          {
-            source: LAB_TYPES.BLEKINGE,
-            target: LAB_TYPES.OPBG,
-            active: false
-          },
-          {
-            source: LAB_TYPES.OPBG,
-            target: LAB_TYPES.MERCATORUM,
-            active: false
-          }
-        ]
-      };
-
-      // Invia l'evento
-      this.game.events.emit('updateFLStatus', flStatus);
-
-      console.log("FL Simulation stopped");
-    } catch (error) {
-      console.error("Error stopping FL simulation:", error);
-    }
+    console.log("FL Simulation stopped (data managed by React SimulationContainer)");
   }
 
   /**
-   * Resetta la simulazione FL
+   * Resetta la simulazione FL (solo log, dati gestiti da React)
    */
   private resetFLSimulation(): void {
-    try {
-      // Prima ferma
-      this.stopFLSimulation();
-      
-      // Poi riavvia con valori iniziali
-      const flStatus = {
-        enabled: true,
-        currentState: FLState.IDLE,
-        activeAgents: [
-          {
-            id: 'agent1',
-            state: FLState.IDLE,
-            labType: LAB_TYPES.MERCATORUM,
-            agentType: 'researcher'
-          },
-          {
-            id: 'agent2',
-            state: FLState.IDLE,
-            labType: LAB_TYPES.BLEKINGE,
-            agentType: 'ml_engineer'
-          },
-          {
-            id: 'agent3',
-            state: FLState.IDLE,
-            labType: LAB_TYPES.OPBG,
-            agentType: 'doctor'
-          }
-        ],
-        metrics: {
-          accuracy: 0,
-          loss: 1.0,
-          round: 0,
-          clientFraction: 0.67
-        },
-        connections: [
-          {
-            source: LAB_TYPES.MERCATORUM,
-            target: LAB_TYPES.BLEKINGE,
-            active: false
-          },
-          {
-            source: LAB_TYPES.BLEKINGE,
-            target: LAB_TYPES.OPBG,
-            active: false
-          },
-          {
-            source: LAB_TYPES.OPBG,
-            target: LAB_TYPES.MERCATORUM,
-            active: false
-          }
-        ]
-      };
-
-      // Invia l'evento
-      this.game.events.emit('updateFLStatus', flStatus);
-
-      console.log("FL Simulation reset");
-    } catch (error) {
-      console.error("Error resetting FL simulation:", error);
-    }
+    console.log("FL Simulation reset (data managed by React SimulationContainer)");
   }
 
-  /**
-   * Invia un evento di stato FL iniziale per attivare la visualizzazione del pannello
-   */
-  private triggerInitialFLState(): void {
-    try {
-      // Crea un evento FL di esempio per attivare la visualizzazione
-      const initialFLStatus = {
-        enabled: true,
-        currentState: FLState.IDLE,
-        activeAgents: [
-          {
-            id: 'agent1',
-            state: FLState.TRAINING,
-            labType: LAB_TYPES.MERCATORUM,
-            agentType: 'researcher'
-          },
-          {
-            id: 'agent2',
-            state: FLState.SENDING,
-            labType: LAB_TYPES.BLEKINGE,
-            agentType: 'ml_engineer'
-          },
-          {
-            id: 'agent3',
-            state: FLState.RECEIVING,
-            labType: LAB_TYPES.OPBG,
-            agentType: 'doctor'
-          }
-        ],
-        metrics: {
-          accuracy: 0.85,
-          loss: 0.12,
-          round: 3,
-          clientFraction: 0.67
-        },
-        connections: [
-          {
-            source: LAB_TYPES.MERCATORUM,
-            target: LAB_TYPES.BLEKINGE,
-            active: true
-          },
-          {
-            source: LAB_TYPES.BLEKINGE,
-            target: LAB_TYPES.OPBG,
-            active: true
-          },
-          {
-            source: LAB_TYPES.OPBG,
-            target: LAB_TYPES.MERCATORUM,
-            active: false
-          }
-        ]
-      };
-      
-      // Invia l'evento allo FLController tramite il game event emitter
-      console.log("Triggering initial FL state:", initialFLStatus);
-      this.game.events.emit('updateFLStatus', initialFLStatus);
-    } catch (error) {
-      console.error("Error triggering initial FL state:", error);
-    }
-  }
-
-  /**
-   * Aggiorna lo stato FL con nuovi dati simulati
-   */
-  private updateFLState = (): void => {
-    try {
-      // Rimuoviamo la variabile currentState non utilizzata
-      // const currentState = this.flController.getCurrentState();
-      
-      // Crea un nuovo stato casuale
-      const states = Object.values(FLState);
-      const randomState = states[Math.floor(Math.random() * states.length)];
-      
-      // Genera connessioni casuali
-      const connections = [
-        {
-          source: LAB_TYPES.MERCATORUM,
-          target: LAB_TYPES.BLEKINGE,
-          active: Math.random() > 0.5
-        },
-        {
-          source: LAB_TYPES.BLEKINGE,
-          target: LAB_TYPES.OPBG,
-          active: Math.random() > 0.5
-        },
-        {
-          source: LAB_TYPES.OPBG,
-          target: LAB_TYPES.MERCATORUM,
-          active: Math.random() > 0.5
-        }
-      ];
-      
-      // Agenti attivi casuali
-      const activeAgents = [];
-      const agentTypes = ['researcher', 'professor', 'ml_engineer', 'doctor'];
-      const labTypes = [LAB_TYPES.MERCATORUM, LAB_TYPES.BLEKINGE, LAB_TYPES.OPBG];
-      
-      // Genera da 2 a 5 agenti casuali
-      const agentCount = 2 + Math.floor(Math.random() * 4);
-      for (let i = 0; i < agentCount; i++) {
-        activeAgents.push({
-          id: `agent${i+1}`,
-          state: states[Math.floor(Math.random() * states.length)],
-          labType: labTypes[Math.floor(Math.random() * labTypes.length)],
-          agentType: agentTypes[Math.floor(Math.random() * agentTypes.length)]
-        });
-      }
-      
-      // Aggiorna le metriche
-      const metrics = {
-        accuracy: 0.7 + Math.random() * 0.25, // Tra 0.7 e 0.95
-        loss: 0.05 + Math.random() * 0.15,   // Tra 0.05 e 0.2
-        round: Math.floor(Math.random() * 10) + 1,
-        clientFraction: 0.3 + Math.random() * 0.6 // Tra 0.3 e 0.9
-      };
-      
-      // Crea l'oggetto di stato FL aggiornato
-      const updatedFLStatus = {
-        enabled: true,
-        currentState: randomState,
-        activeAgents,
-        metrics,
-        connections
-      };
-      
-      // Invia l'evento aggiornato
-      console.log("Updating FL state:", updatedFLStatus);
-      this.game.events.emit('updateFLStatus', updatedFLStatus);
-    } catch (error) {
-      console.error("Error updating FL state:", error);
-    }
-  }
+  // triggerInitialFLState e updateFLState rimossi.
+  // I dati FL sono gestiti esclusivamente da React (SimulationContainer).
 
   private setupDebugMode(): void {
     // Create debug graphics
@@ -1625,15 +1222,8 @@ export class WorldMapScene extends BaseScene {
           this.globalAgentController.destroy();
         }
         
-        // Salva lo stato corrente del pannello FL prima di chiudere la scena
-        // Usa entrambi i metodi per sicurezza
-        const flPanelVisible = this.game.registry.get('flPanelVisible') || false;
-        this.game.registry.set('flPanelState', {
-          visible: flPanelVisible
-        });
-        
-        // Salva anche in localStorage
-        updateFLPanelState(flPanelVisible);
+        // Lo stato del pannello FL è gestito da React (localStorage + DOM event).
+        // Non sovrascriviamo il localStorage dallo shutdown di Phaser.
       } catch (error) {
         console.error("Error in shutdown event handler:", error);
       }
@@ -1657,30 +1247,8 @@ export class WorldMapScene extends BaseScene {
       this.setupSimulationControls();
     });
     
-    // Quando si torna alla scena, ripristina lo stato del pannello FL
-    this.events.once('create', () => {
-      try {
-        // Prova prima a recuperare lo stato dal registry
-        const flState = this.game.registry.get('flPanelState');
-        if (flState) {
-          this.game.registry.set('flPanelVisible', flState.visible);
-          // Emetti sia l'evento Phaser che quello personalizzato
-          this.game.events.emit('toggleFLPanel', { visible: flState.visible });
-          emitFLPanelToggle(flState.visible);
-        } else {
-          // Se non c'è stato nel registry, usa localStorage
-          const isVisible = getFLPanelState();
-          this.game.registry.set('flPanelVisible', isVisible);
-          this.game.events.emit('toggleFLPanel', { visible: isVisible });
-          emitFLPanelToggle(isVisible);
-        }
-      } catch (error) {
-        console.warn('Error restoring FL panel state from registry:', error);
-        // Fallback al localStorage
-        const isVisible = getFLPanelState();
-        emitFLPanelToggle(isVisible);
-      }
-    });
+    // Lo stato del pannello FL è gestito interamente da React.
+    // Non emettiamo eventi dal create di Phaser per evitare sovrascritture.
   }
   
   /**

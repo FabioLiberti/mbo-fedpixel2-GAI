@@ -49,7 +49,12 @@ coverage/
 **/storage/sim_*/
 **/storage/sim[0-9]*/
 **/storage/test-simulation-*/
+**/storage/test-sim-*/
+**/storage/movement/
 **/temp_storage/
+
+# === Local dev screenshots ===
+img_DEVS/
 
 # === Nested git histories (from original forks) ===
 Researcher_World2/agent-laboratory-v2/.git/

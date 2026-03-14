@@ -161,22 +161,16 @@ function App() {
     };
   }, [game]);
 
-  // Callback per quando il gioco Phaser è pronto
+  // Callback per quando il gioco Phaser è pronto (stabile, non dipende da currentLab)
   const handleGameReady = useCallback((gameInstance: Game) => {
     console.log('Phaser game initialized and ready');
-    
+
     // Esegui il debug delle scene
     const debugResult = debugScenes(gameInstance);
     setDebugInfo(debugResult);
-    
+
     setGame(gameInstance);
-    
-    // Se c'è già un laboratorio selezionato, attivalo
-    if (currentLab && gameInstance.startLabScene) {
-      console.log(`Activating initial lab: ${currentLab}`);
-      gameInstance.startLabScene(currentLab);
-    }
-  }, [currentLab]);
+  }, []);
   
   // Funzione per cambiare il laboratorio corrente
   const switchLab = useCallback((labKey: LabType) => {
@@ -427,38 +421,46 @@ function App() {
               
               <div className="controls-group">
                 <h3>Statistiche FL Globali</h3>
-                <div className="stats-container">
-                  <div className="stat-item">
-                    <span className="stat-label">Stato:</span>
-                    <span className={`stat-value fl-state-${flState}`}>{flState.toUpperCase()}</span>
+                {simStatus === 'stopped' ? (
+                  <div className="stats-container">
+                    <p style={{ color: '#888', fontStyle: 'italic', margin: '8px 0' }}>
+                      Avvia la simulazione per visualizzare i dati FL
+                    </p>
                   </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Agenti totali:</span>
-                    <span className="stat-value">{agentCount}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Round:</span>
-                    <span className="stat-value">{flRound}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Accuracy:</span>
-                    <span className="stat-value">{flAccuracy.toFixed(4)}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">Loss:</span>
-                    <span className="stat-value">{flLoss.toFixed(4)}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">FL Progress:</span>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${flProgress}%` }}
-                      ></div>
+                ) : (
+                  <div className="stats-container">
+                    <div className="stat-item">
+                      <span className="stat-label">Stato:</span>
+                      <span className={`stat-value fl-state-${flState}`}>{flState.toUpperCase()}</span>
                     </div>
-                    <span className="stat-value">{flProgress}%</span>
+                    <div className="stat-item">
+                      <span className="stat-label">Agenti totali:</span>
+                      <span className="stat-value">{agentCount}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Round:</span>
+                      <span className="stat-value">{flRound}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Accuracy:</span>
+                      <span className="stat-value">{flAccuracy.toFixed(4)}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Loss:</span>
+                      <span className="stat-value">{flLoss.toFixed(4)}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">FL Progress:</span>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${flProgress}%` }}
+                        ></div>
+                      </div>
+                      <span className="stat-value">{flProgress}%</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               
               {/* Pulsante di debug e info */}
