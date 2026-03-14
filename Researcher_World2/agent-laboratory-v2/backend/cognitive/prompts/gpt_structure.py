@@ -70,11 +70,17 @@ def _load_config():
     _config_loaded = True
 
 
+_ollama_client = None
+
 def _get_ollama():
-    """Lazy import of ollama to avoid import errors when not installed."""
+    """Lazy creation of ollama Client with 30s timeout to prevent hangs."""
+    global _ollama_client
+    if _ollama_client is not None:
+        return _ollama_client
     try:
         import ollama
-        return ollama
+        _ollama_client = ollama.Client(timeout=30)
+        return _ollama_client
     except ImportError:
         logger.error("ollama package not installed. Run: pip install ollama")
         return None
@@ -408,14 +414,29 @@ def get_embedding(text, model=None):
         return EMBEDDING_CACHE[text_hash]
 
     ol = _get_ollama()
-    if ol:
+    if ol and not getattr(get_embedding, '_ollama_embed_failed', False):
         try:
-            response = ol.embeddings(model=EMBEDDING_MODEL, prompt=text)
-            embedding = response.embedding if hasattr(response, 'embedding') else response['embedding']
-            EMBEDDING_CACHE[text_hash] = embedding
-            return embedding
-        except:
-            pass
+            # Check if model is available before calling (avoids pull-hang)
+            model_list = ol.list()
+            if hasattr(model_list, 'models'):
+                # New API: ListResponse with .models attribute
+                available = [
+                    (m.model if hasattr(m, 'model') else m.name).split(':')[0]
+                    for m in model_list.models
+                ]
+            else:
+                # Old API: dict with 'models' key
+                available = [m['name'].split(':')[0] for m in model_list.get('models', [])]
+            if EMBEDDING_MODEL.split(':')[0] in available:
+                response = ol.embeddings(model=EMBEDDING_MODEL, prompt=text)
+                embedding = response.embedding if hasattr(response, 'embedding') else response['embedding']
+                EMBEDDING_CACHE[text_hash] = embedding
+                return embedding
+            else:
+                logger.warning(f"Embedding model '{EMBEDDING_MODEL}' not available, using fallback")
+                get_embedding._ollama_embed_failed = True
+        except Exception:
+            get_embedding._ollama_embed_failed = True
 
     # Deterministic fallback: hash-based pseudo-embedding (1536-dim for compatibility)
     logger.warning(f"Using deterministic embedding fallback. Install '{EMBEDDING_MODEL}' with: ollama pull {EMBEDDING_MODEL}")

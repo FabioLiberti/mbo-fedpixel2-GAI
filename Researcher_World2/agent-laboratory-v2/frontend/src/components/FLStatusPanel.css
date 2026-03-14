@@ -180,3 +180,20 @@
     color: #aaa;
     font-weight: normal;
   }
+
+  .fl-minimize-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #aaa;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1;
+  }
+
+  .fl-minimize-btn:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+  }

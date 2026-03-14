@@ -10,6 +10,7 @@ import random
 import logging
 
 from .prompts.gpt_structure import get_embedding, ChatGPT_single_request
+from .prompts.run_gpt_prompt import is_llm_enabled
 from .prompts.run_gpt_prompt import (
     run_gpt_prompt_wake_up_hour,
     run_gpt_prompt_daily_plan,
@@ -215,6 +216,10 @@ def generate_new_decomp_schedule(persona, inserted_act, inserted_act_dur,
 
 def revise_identity(persona):
     """Revise persona's identity/status at start of new day."""
+    if not is_llm_enabled():
+        # Stub mode: keep current identity unchanged
+        return
+
     p_name = persona.scratch.name
 
     focal_points = [
@@ -352,28 +357,39 @@ def _determine_action(persona, maze):
 
 
 def _choose_retrieved(persona, retrieved):
-    """Choose which perceived event to focus on."""
-    copy_retrieved = retrieved.copy()
-    for event_desc, rel_ctx in copy_retrieved.items():
-        if rel_ctx["curr_event"].subject == persona.name:
-            del retrieved[event_desc]
+    """Choose which perceived event to focus on.
 
-    # Priority: other personas first
-    priority = []
+    Handles both formats:
+      - Original GA: {event_desc: {"curr_event": ConceptNode, ...}}
+      - new_retrieve: {focal_pt: [ConceptNode, ...]}
+    Returns: {"curr_event": ConceptNode} or None
+    """
+    candidates = []
     for event_desc, rel_ctx in retrieved.items():
-        curr_event = rel_ctx["curr_event"]
-        if ":" not in curr_event.subject and curr_event.subject != persona.name:
-            priority.append(rel_ctx)
-    if priority:
-        return random.choice(priority)
+        if isinstance(rel_ctx, list):
+            # new_retrieve format: list of ConceptNode
+            for node in rel_ctx:
+                if hasattr(node, 'subject') and node.subject != persona.name:
+                    candidates.append(node)
+        elif isinstance(rel_ctx, dict) and "curr_event" in rel_ctx:
+            # Original GA format
+            if rel_ctx["curr_event"].subject != persona.name:
+                candidates.append(rel_ctx["curr_event"])
+
+    if not candidates:
+        return None
+
+    # Priority: other personas (subjects without ":" = not objects/places)
+    persona_events = [n for n in candidates if ":" not in n.subject]
+    if persona_events:
+        return {"curr_event": random.choice(persona_events)}
 
     # Then non-idle events
-    for event_desc, rel_ctx in retrieved.items():
-        if "is idle" not in event_desc:
-            priority.append(rel_ctx)
-    if priority:
-        return random.choice(priority)
-    return None
+    non_idle = [n for n in candidates if "is idle" not in n.description]
+    if non_idle:
+        return {"curr_event": random.choice(non_idle)}
+
+    return {"curr_event": random.choice(candidates)}
 
 
 def _should_react(persona, retrieved, personas):

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './FLStatusPanel.css';
 import { FLStatusData } from '../phaser/fl/FLController';
-import { addFLPanelToggleListener, getFLPanelState } from '../utils/customEvents';
+import { addFLPanelToggleListener, getFLPanelState, emitFLPanelToggle, updateFLPanelState } from '../utils/customEvents';
 
 interface FLStatusPanelProps {
   flStatus: FLStatusData | null;
@@ -29,12 +29,19 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
   // Se il pannello non è visibile, non mostrare nulla
   if (!visible) return null;
 
+  // Handler per minimizzare il pannello
+  const handleMinimize = () => {
+    updateFLPanelState(false);
+    emitFLPanelToggle(false);
+  };
+
   // Se non ci sono dati FL (simulazione non avviata), mostra messaggio
   if (!flStatus) {
     return (
       <div className={`fl-status-panel visible`}>
         <div className="fl-status-header">
           <h3>Federated Learning</h3>
+          <button className="fl-minimize-btn" onClick={handleMinimize} title="Minimizza">&#x2715;</button>
         </div>
         <p style={{ color: '#888', fontStyle: 'italic', fontSize: '13px', margin: '8px 0' }}>
           Avvia la simulazione per visualizzare i dati FL
@@ -62,8 +69,9 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
     <div className={`fl-status-panel visible`}>
       <div className="fl-status-header">
         <h3>Federated Learning</h3>
-        <div className="fl-toggle">
-          <input
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="fl-toggle">
+            <input
             type="checkbox"
             id="fl-toggle-switch"
             checked={enabled}
@@ -72,6 +80,8 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
           <label htmlFor="fl-toggle-switch">
             {enabled ? 'Enabled' : 'Disabled'}
           </label>
+          </div>
+          <button className="fl-minimize-btn" onClick={handleMinimize} title="Minimizza">&#x2715;</button>
         </div>
       </div>
 

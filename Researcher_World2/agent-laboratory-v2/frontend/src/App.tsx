@@ -63,6 +63,8 @@ function App() {
   // Stato LLM (Qwen 3.5 via Ollama)
   const [llmEnabled, setLlmEnabled] = useState<boolean>(false);
   const [llmToggling, setLlmToggling] = useState<boolean>(false);
+  // Dati raw dal backend per SimulationContainer (FL + agent states)
+  const [backendSimData, setBackendSimData] = useState<any>(null);
 
   // Handler per aggiornamenti dello stato della simulazione (legacy)
   const handleSimulationStatus = useCallback((data: any) => {
@@ -81,6 +83,9 @@ function App() {
   const handleBackendUpdate = useCallback((message: any) => {
     const d = message.data;
     if (!d) return;
+
+    // Salva i dati raw per SimulationContainer
+    setBackendSimData(d);
 
     // Stato simulazione
     if (d.simulation) {
@@ -148,14 +153,16 @@ function App() {
     const connectionCheckInterval = setInterval(() => {
       if (isMounted) {
         const isConnected = webSocketService.isConnected();
-        if (connected !== isConnected) {
-          setConnected(isConnected);
-          
-          // Se è appena stato riconnesso, richiedi lo stato corrente
-          if (isConnected) {
-            webSocketService.sendMessage('getSimulationStatus');
+        // Usa functional update per evitare dipendenza da connected
+        setConnected(prev => {
+          if (prev !== isConnected) {
+            if (isConnected) {
+              webSocketService.sendMessage('getSimulationStatus');
+            }
+            return isConnected;
           }
-        }
+          return prev;
+        });
       }
     }, 5000);
 
@@ -167,7 +174,8 @@ function App() {
       webSocketService.offMessage('simulation_update', handleBackendUpdate);
       webSocketService.disconnect();
     };
-  }, [connected, handleSimulationStatus, handleBackendUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleSimulationStatus, handleBackendUpdate]);
 
   // Listener per eventi di documentazione dal gioco Phaser
   useEffect(() => {
@@ -409,6 +417,7 @@ function App() {
                 onGameReady={handleGameReady}
                 selectedLab={currentLab}
                 backendConnected={connected}
+                backendSimData={backendSimData}
                 onFLUpdate={(data) => {
                   setFlProgress(data.flProgress);
                   setAgentCount(data.agentCount);
@@ -513,6 +522,15 @@ function App() {
                     {llmEnabled ? 'Ollama attivo' : 'Stub mode'}
                   </span>
                 </div>
+                <button
+                  onClick={() => {
+                    document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: { visible: true } }));
+                  }}
+                  className="secondary"
+                  style={{ marginTop: '6px', width: '100%', fontSize: '13px' }}
+                >
+                  Dialoghi Agenti
+                </button>
               </div>
 
               <div className="controls-group">

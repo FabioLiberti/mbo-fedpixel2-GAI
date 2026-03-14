@@ -170,6 +170,11 @@ class SimulationController:
         self.paused = False
         self.stop_event.clear()
 
+        # Enable FL automatically so data is broadcast from the start
+        if self.fl_system and not self.fl_enabled:
+            self.fl_enabled = True
+            logger.info("FL enabled automatically on simulation start")
+
         self.simulation_thread = Thread(target=self._simulation_loop)
         self.simulation_thread.daemon = True
         self.simulation_thread.start()

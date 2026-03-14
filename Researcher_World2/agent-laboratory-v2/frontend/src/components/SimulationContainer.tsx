@@ -3,6 +3,7 @@ import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
 import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
 import AgentInspectorPanel from './AgentInspectorPanel';
+import LLMDialogPanel from './LLMDialogPanel';
 import { FLStatusData } from '../phaser/fl/FLController';
 import { FLState } from '../phaser/fl/FLState';
 import { CognitiveAgentState } from '../phaser/types/AgentTypes';
@@ -21,6 +22,7 @@ interface SimulationContainerProps {
   selectedLab?: string;
   onFLUpdate?: (data: FLGlobalMetrics) => void;
   backendConnected?: boolean;
+  backendSimData?: any; // Dati raw dal backend (simulation_update)
 }
 
 // Definiamo un tipo per gli agenti FL
@@ -42,13 +44,15 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   onGameReady,
   selectedLab,
   onFLUpdate,
-  backendConnected = false
+  backendConnected = false,
+  backendSimData
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameReadyFiredRef = useRef<boolean>(false);
   const [flEnabled, setFLEnabled] = useState<boolean>(true); // Default a true per mostrare il pannello
   const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CognitiveAgentState | null>(null);
+  const [llmPanelVisible, setLlmPanelVisible] = useState<boolean>(false);
   
   // Timer per simulare aggiornamenti dello stato FL
   const flUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,6 +60,87 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const localSimulationActiveRef = useRef<boolean>(false);
   // Flag per gestire l'avvio iniziale
   const hasInitializedSimRef = useRef<boolean>(false);
+
+  // Toggle LLM Dialog Panel via custom event
+  useEffect(() => {
+    const handler = ((e: CustomEvent) => {
+      const v = e.detail?.visible;
+      setLlmPanelVisible(v !== undefined ? v : (prev: boolean) => !prev);
+    }) as EventListener;
+    document.addEventListener('llm-panel-toggle', handler);
+    return () => document.removeEventListener('llm-panel-toggle', handler);
+  }, []);
+
+  // Converte i dati backend in FLStatusData quando il backend è connesso
+  useEffect(() => {
+    if (!backendConnected || !backendSimData) return;
+
+    const d = backendSimData;
+    const fl = d.fl;
+    const agents = d.agent_states || [];
+
+    // Mappa agenti backend → formato FLAgent
+    const labMap: Record<string, string> = {
+      mercatorum: 'MERCATORUM',
+      blekinge: 'BLEKINGE',
+      opbg: 'OPBG',
+    };
+
+    const mappedAgents = agents.map((a: any) => ({
+      id: a.id?.toString() || a.name || 'unknown',
+      state: fl?.current_phase || FLState.IDLE,
+      labType: labMap[a.lab_id] || labMap[a.lab] || 'MERCATORUM',
+      agentType: a.role || a.agent_type || 'researcher',
+    }));
+
+    // Se non ci sono agenti dal backend, usa i 9 di default
+    const finalAgents = mappedAgents.length > 0 ? mappedAgents : [
+      { id: 'agent1', state: fl?.current_phase || FLState.IDLE, labType: 'MERCATORUM', agentType: 'professor' },
+      { id: 'agent2', state: fl?.current_phase || FLState.IDLE, labType: 'MERCATORUM', agentType: 'researcher' },
+      { id: 'agent3', state: fl?.current_phase || FLState.IDLE, labType: 'MERCATORUM', agentType: 'student' },
+      { id: 'agent4', state: fl?.current_phase || FLState.IDLE, labType: 'BLEKINGE', agentType: 'professor' },
+      { id: 'agent5', state: fl?.current_phase || FLState.IDLE, labType: 'BLEKINGE', agentType: 'researcher' },
+      { id: 'agent6', state: fl?.current_phase || FLState.IDLE, labType: 'BLEKINGE', agentType: 'student' },
+      { id: 'agent7', state: fl?.current_phase || FLState.IDLE, labType: 'OPBG', agentType: 'researcher' },
+      { id: 'agent8', state: fl?.current_phase || FLState.IDLE, labType: 'OPBG', agentType: 'doctor' },
+      { id: 'agent9', state: fl?.current_phase || FLState.IDLE, labType: 'OPBG', agentType: 'student' },
+    ];
+
+    const latestAccuracy = fl ? (
+      Array.isArray(fl.metrics?.accuracy)
+        ? (fl.metrics.accuracy[fl.metrics.accuracy.length - 1] ?? 0)
+        : (fl.metrics?.accuracy ?? 0)
+    ) : 0;
+
+    const latestLoss = fl ? (
+      Array.isArray(fl.metrics?.loss)
+        ? (fl.metrics.loss[fl.metrics.loss.length - 1] ?? 1)
+        : (fl.metrics?.loss ?? 1)
+    ) : 1;
+
+    const phase = fl?.current_phase || 'idle';
+    const isActive = phase !== 'idle' && phase !== null;
+
+    const backendFlStatus: FLStatusData = {
+      enabled: fl?.enabled ?? true,
+      currentState: phase,
+      fromSimulation: false, // Dati reali dal backend
+      activeAgents: finalAgents,
+      metrics: {
+        accuracy: latestAccuracy,
+        loss: latestLoss,
+        round: fl?.round ?? 0,
+        clientFraction: 0.8,
+      },
+      connections: [
+        { source: 'MERCATORUM', target: 'BLEKINGE', active: isActive },
+        { source: 'BLEKINGE', target: 'OPBG', active: isActive },
+        { source: 'OPBG', target: 'MERCATORUM', active: isActive },
+      ],
+    };
+
+    setFLStatus(backendFlStatus);
+  }, [backendSimData, backendConnected]);
 
   // Inizializzazione del gioco
   useEffect(() => {
@@ -437,6 +522,14 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           onToggleFL={handleToggleFL}
         />
       )}
+
+      {/* LLM Dialog Panel - cronologia dialoghi agenti */}
+      <LLMDialogPanel
+        backendSimData={backendSimData}
+        selectedLab={selectedLab}
+        visible={llmPanelVisible}
+        onClose={() => setLlmPanelVisible(false)}
+      />
 
       {/* Agent Inspector Panel - shown when an agent is clicked */}
       <AgentInspectorPanel
