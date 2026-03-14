@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
 import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
+import AgentInspectorPanel from './AgentInspectorPanel';
 import { FLStatusData } from '../phaser/fl/FLController';
 import { FLState } from '../phaser/fl/FLState';
+import { CognitiveAgentState } from '../phaser/types/AgentTypes';
 
 interface SimulationContainerProps {
   onGameReady?: (game: any) => void;
@@ -33,6 +35,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const gameReadyFiredRef = useRef<boolean>(false);
   const [flEnabled, setFLEnabled] = useState<boolean>(true); // Default a true per mostrare il pannello
   const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<CognitiveAgentState | null>(null);
   
   // Timer per simulare aggiornamenti dello stato FL
   const flUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -72,6 +75,12 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           gameInstance.registry.set('flPanelVisible', data.visible);
         });
 
+        // Agent Inspector: listen for agent click events from Phaser
+        gameInstance.events.on('agentSelected', (agentData: CognitiveAgentState) => {
+          console.log('Agent selected:', agentData?.name);
+          setSelectedAgent(agentData);
+        });
+
         // Connetti i pulsanti UI ai metodi Phaser
         setupSimulationControls(gameInstance);
       } catch (error) {
@@ -93,6 +102,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
       if (gameInstance) {
         gameInstance.events.off('updateFLStatus');
         gameInstance.events.off('toggleFLPanel');
+        gameInstance.events.off('agentSelected');
       }
     };
   }, [onGameReady]);
@@ -356,18 +366,24 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
       {/* Pannello di controllo FL - Viene mostrato o nascosto in base agli eventi ricevuti */}
       {flStatus && (
         <>
-          <FLStatusPanel 
-            flStatus={flStatus} 
-            onToggleFL={handleToggleFL} 
+          <FLStatusPanel
+            flStatus={flStatus}
+            onToggleFL={handleToggleFL}
           />
-          
+
           {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
-          <FLStatusConnector 
-            flStatus={flStatus} 
-            onToggleFL={handleToggleFL} 
+          <FLStatusConnector
+            flStatus={flStatus}
+            onToggleFL={handleToggleFL}
           />
         </>
       )}
+
+      {/* Agent Inspector Panel - shown when an agent is clicked */}
+      <AgentInspectorPanel
+        agent={selectedAgent}
+        onClose={() => setSelectedAgent(null)}
+      />
     </div>
   );
 };

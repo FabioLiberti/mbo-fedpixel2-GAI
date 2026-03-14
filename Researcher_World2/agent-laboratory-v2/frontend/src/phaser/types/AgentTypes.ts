@@ -107,3 +107,31 @@ export enum AgentState {
     ethics: number;
     collaboration: number;
   }
+
+  // Cognitive agent state data (from backend get_state_data())
+  export interface CognitiveAgentState {
+    id: number;
+    name: string;
+    role: string;
+    state: string;
+    position: [number, number] | null;
+    lab_id: string;
+    // Cognitive state
+    act_description: string | null;
+    act_pronunciatio: string | null;
+    act_address: string | null;
+    current_schedule_task: string;
+    chatting_with: string | null;
+    reflection_count: number;
+    memory_event_count: number;
+    // FL state
+    specializations: string[];
+    fl_role: string | null;
+    fl_specialization: string | null;
+    fl_task: string | null;
+    fl_progress: number;
+    fl_contributing: boolean;
+    // Dialog
+    dialog: string;
+    dialog_is_llm: boolean;
+  }

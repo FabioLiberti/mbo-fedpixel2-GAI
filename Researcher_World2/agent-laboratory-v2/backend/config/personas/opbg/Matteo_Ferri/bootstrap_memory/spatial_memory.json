@@ -1,0 +1,28 @@
+{
+  "fl_research_center": {
+    "opbg": {
+      "workspace": [
+        "desk_1",
+        "desk_2",
+        "desk_3",
+        "whiteboard",
+        "bookshelf"
+      ],
+      "meeting_room": [
+        "conference_table",
+        "projector",
+        "whiteboard"
+      ],
+      "break_room": [
+        "coffee_machine",
+        "table",
+        "couch"
+      ],
+      "server_room": [
+        "server_rack",
+        "monitor_station",
+        "cooling_unit"
+      ]
+    }
+  }
+}

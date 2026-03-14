@@ -1,152 +1,203 @@
+# Path: backend/models/environment.py
+#
+# LabEnvironment: Mesa Model with 9 persona-based agents and MazeAdapter.
+
+import os
+import datetime
+import random
+import json
+import logging
+from typing import Dict, List, Any, Optional
+
 import mesa
 from mesa import Model
 from mesa.time import RandomActivation
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
-import random
-import json
-import logging
-from typing import Dict, List, Any, Optional
-from .agents.researcher import ResearcherAgent, Specialization, AgentState
 
-# Configurazione logger
+from .agents.researcher import ResearcherAgent, Specialization, AgentState
+from .maze_adapter import MazeAdapter
+
 logger = logging.getLogger(__name__)
 
+# Base path for persona bootstrap data
+PERSONAS_BASE = os.path.join(os.path.dirname(__file__), "..", "config", "personas")
+
+# Persona definitions: lab_id -> list of (persona_name, role, specialization_enum)
+PERSONA_REGISTRY = {
+    "mercatorum": [
+        ("Marco_Rossi",  "phd_student", Specialization.DATA_SCIENCE),
+        ("Elena_Conti",  "researcher",  Specialization.SECURE_AGGREGATION),
+        ("Luca_Bianchi", "phd_student", Specialization.OPTIMIZATION_THEORY),
+    ],
+    "blekinge": [
+        ("Anna_Lindberg",   "professor",   Specialization.FL_ARCHITECTURE),
+        ("Erik_Johansson",  "researcher",  Specialization.COMMUNICATION_EFFICIENCY),
+        ("Sara_Nilsson",    "phd_student", Specialization.NON_IID_DATA),
+    ],
+    "opbg": [
+        ("Giulia_Romano",  "researcher",  Specialization.PRIVACY_ENGINEERING),
+        ("Matteo_Ferri",   "researcher",  Specialization.DATA_SCIENCE),
+        ("Chiara_Mancini", "phd_student", Specialization.DATA_SCIENCE),
+    ],
+}
+
+# Role-based default parameters
+ROLE_DEFAULTS = {
+    "phd_student": {"speed": 1.2, "social_tendency": 0.7, "research_efficiency": 0.5},
+    "researcher":  {"speed": 1.0, "social_tendency": 0.5, "research_efficiency": 0.8},
+    "professor":   {"speed": 0.8, "social_tendency": 0.6, "research_efficiency": 1.0},
+}
+
+
 class LabEnvironment(Model):
-    """Modello dell'ambiente di laboratorio con agenti ricercatori"""
-    
+    """Mesa model with persona-based agents, MazeAdapter, and FL support."""
+
     def __init__(self, config_path: str = None):
         super().__init__()
-        
-        # Carica configurazione
+
+        # Load configuration
         self.config = self.load_config(config_path)
-        
-        # Imposta seed per riproducibilità
+
+        # Reproducibility
         self.random = random.Random(self.config.get("simulation", {}).get("random_seed", 42))
-        
-        # Imposta parametri di simulazione
+
+        # Simulation parameters
         self.tick_rate = self.config.get("simulation", {}).get("tick_rate", 30)
         self.simulation_speed = self.config.get("simulation", {}).get("speed", 1.0)
-        
-        # Crea la griglia dell'ambiente
-        # Per semplicità, usiamo una griglia fissa - in futuro potrebbe essere basata sulla configurazione
+
+        # Grid
         grid_width, grid_height = 20, 20
         self.grid = MultiGrid(grid_width, grid_height, True)
-        
-        # Scheduler per l'attivazione degli agenti
+
+        # Scheduler
         self.schedule = RandomActivation(self)
-        
-        # Crea agenti in base alla configurazione
+
+        # MazeAdapter (GA Maze interface over Mesa grid)
+        self.maze_adapter = MazeAdapter(self.grid)
+
+        # Simulation time (starts at 8:00 AM on day 1)
+        self.sim_time = datetime.datetime(2026, 3, 14, 8, 0, 0)
+
+        # Create persona-based agents
+        self.personas_dict = {}  # name -> ResearcherAgent
         self.create_agents()
-        
-        # Collector per raccogliere dati sulla simulazione
+
+        # Data collector
         self.datacollector = DataCollector(
             agent_reporters={"State": lambda a: a.state.value if hasattr(a, "state") else None},
             model_reporters={"AgentCount": lambda m: m.schedule.get_agent_count()}
         )
-    
+
     def load_config(self, config_path: str) -> Dict:
-        """Carica la configurazione da file JSON"""
         if not config_path:
             logger.warning("No config path provided, using default configuration")
             return {}
-            
         try:
             with open(config_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load config from {config_path}: {e}")
             return {}
-    
+
     def create_agents(self):
-        """Crea gli agenti ricercatori in base alla configurazione"""
-        # Ottieni configurazione ricercatori
-        researchers_config = self.config.get("researchers", {})
-        
-        # Dizionario per mappare stringhe di specializzazione all'enum
-        spec_map = {s.value: s for s in Specialization}
-        
-        # Contatore ID
+        """Create 9 agents from persona bootstrap files, place in lab spawn tiles."""
         next_id = 0
-        
-        # Crea agenti per ogni tipo di ricercatore
-        for role, role_config in researchers_config.items():
-            count = role_config.get("count", 1)
-            
-            for _ in range(count):
-                # Converti stringhe di specializzazione in enum
-                specializations = [
-                    spec_map.get(spec, Specialization.DATA_SCIENCE) 
-                    for spec in role_config.get("specializations", [])
-                    if spec in spec_map
-                ]
-                
-                # Crea agente
+
+        for lab_id, personas in PERSONA_REGISTRY.items():
+            # Check lab is active
+            labs_cfg = self.config.get("labs", {})
+            if lab_id in labs_cfg and not labs_cfg[lab_id].get("active", True):
+                continue
+
+            # Get spawn tiles for this lab
+            spawn_tiles = self.maze_adapter.get_lab_spawn_tiles(lab_id)
+            if not spawn_tiles:
+                logger.warning(f"No spawn tiles for lab {lab_id}, using (0,0)")
+                spawn_tiles = [(0, 0)]
+
+            for persona_name, role, specialization in personas:
+                defaults = ROLE_DEFAULTS.get(role, {})
+
                 agent = ResearcherAgent(
-                    next_id,
-                    self,
+                    unique_id=next_id,
+                    model=self,
                     role=role,
-                    specializations=specializations,
-                    social_tendency=role_config.get("social_tendency", 0.5),
-                    research_efficiency=role_config.get("research_efficiency", 0.5),
-                    movement_speed=role_config.get("speed", 1.0)
+                    specializations=[specialization],
+                    lab_id=lab_id,
+                    persona_name=persona_name,
+                    social_tendency=defaults.get("social_tendency", 0.5),
+                    research_efficiency=defaults.get("research_efficiency", 0.5),
+                    movement_speed=defaults.get("speed", 1.0),
                 )
-                
-                # Piazza agente in una posizione casuale
-                x = self.random.randrange(self.grid.width)
-                y = self.random.randrange(self.grid.height)
-                self.grid.place_agent(agent, (x, y))
-                
-                # Aggiungi agente allo scheduler
+
+                # Place agent on grid in lab workspace
+                tile = spawn_tiles[next_id % len(spawn_tiles)]
+                self.grid.place_agent(agent, tuple(tile))
+                agent.scratch.curr_tile = list(tile)
+
+                # Set initial simulation time
+                agent.set_curr_time(self.sim_time)
+
+                # Register in scheduler and personas dict
                 self.schedule.add(agent)
-                
+                self.personas_dict[agent.name] = agent
+
+                # Add persona event to maze
+                event = agent.scratch.get_curr_event_and_desc()
+                self.maze_adapter.add_event_from_tile(event, tile)
+
                 next_id += 1
-                
-        logger.info(f"Created {self.schedule.get_agent_count()} agents")
-    
+
+        logger.info(
+            f"Created {self.schedule.get_agent_count()} agents across "
+            f"{len(PERSONA_REGISTRY)} labs"
+        )
+
     def step(self):
-        """Esegue uno step della simulazione"""
-        # Raccoglie dati prima dello step
-        self.datacollector.collect(self)
-        
-        # Esegue lo step per tutti gli agenti
-        self.schedule.step()
-        
-        # Esegue logica di simulazione aggiuntiva
-        # ...
-    
-    def get_agent_states(self) -> List[Dict[str, Any]]:
-        """Restituisce stati di tutti gli agenti per visualizzazione/API"""
-        agent_states = []
+        """Execute one simulation step."""
+        # Advance simulation time (each step = 10 simulated minutes)
+        self.sim_time += datetime.timedelta(minutes=10)
 
+        # Update all agents' time
         for agent in self.schedule.agents:
-            if hasattr(agent, 'get_state_data'):
-                agent_states.append(agent.get_state_data())
+            if hasattr(agent, 'set_curr_time'):
+                agent.set_curr_time(self.sim_time)
 
-        return agent_states
+        # Collect data
+        self.datacollector.collect(self)
+
+        # Step all agents
+        self.schedule.step()
+
+    def get_agent_states(self) -> List[Dict[str, Any]]:
+        """Return states of all agents for frontend."""
+        return [
+            agent.get_state_data()
+            for agent in self.schedule.agents
+            if hasattr(agent, 'get_state_data')
+        ]
 
     def get_lab_ids(self) -> List[str]:
-        """Restituisce la lista degli ID dei laboratori dalla configurazione"""
         labs = self.config.get("labs", {})
         return [lab_id for lab_id, lab_cfg in labs.items() if lab_cfg.get("active", True)]
 
     def get_lab_agents(self, lab_id: str) -> List:
-        """Restituisce gli agenti che appartengono a un laboratorio specifico"""
         return [
             agent for agent in self.schedule.agents
             if hasattr(agent, 'lab_id') and agent.lab_id == lab_id
         ]
 
     def get_agent_by_id(self, agent_id: int) -> Optional:
-        """Restituisce un agente dato il suo unique_id, o None se non trovato"""
         for agent in self.schedule.agents:
             if agent.unique_id == agent_id:
                 return agent
         return None
 
     def get_nearby_agents(self, agent, radius: int = 3) -> List:
-        """Restituisce gli agenti entro un dato raggio nella griglia"""
         if not hasattr(agent, 'pos') or agent.pos is None:
             return []
-        neighbors = self.grid.get_neighbors(agent.pos, moore=True, include_center=False, radius=radius)
+        neighbors = self.grid.get_neighbors(
+            agent.pos, moore=True, include_center=False, radius=radius
+        )
         return [n for n in neighbors if n.unique_id != agent.unique_id]
