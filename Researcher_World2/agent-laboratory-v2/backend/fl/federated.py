@@ -22,22 +22,25 @@ class FederatedLearningSystem:
         aggregation_rounds: int = 5,
         client_fraction: float = 0.8,
         model_type: str = "simple_nn",
+        mu: float = 0.01,
         seed: int = 42
     ):
         """
         Inizializza il sistema di Federated Learning
-        
+
         Args:
             algorithm: Algoritmo FL da utilizzare ("fedavg", "fedprox", ecc.)
             aggregation_rounds: Numero di round di aggregazione
             client_fraction: Frazione di client da selezionare per ogni round
             model_type: Tipo di modello da utilizzare
+            mu: Coefficiente del termine prossimale per FedProx
             seed: Seed per riproducibilità
         """
         self.algorithm = algorithm
         self.aggregation_rounds = aggregation_rounds
         self.client_fraction = client_fraction
         self.model_type = model_type
+        self.mu = mu
         
         # Imposta seed per riproducibilità
         self.random = random.Random(seed)
@@ -141,14 +144,55 @@ class FederatedLearningSystem:
             
         client = self.clients[client_id]
         client_model = client["model"]
-        
-        # Addestra il modello
-        history = client_model.fit(
-            data_x, data_y,
-            epochs=5,
-            batch_size=32,
-            verbose=0
-        )
+
+        # Per FedProx, aggiungi il termine prossimale alla loss
+        if self.algorithm == "fedprox":
+            global_weights = self.global_model.get_weights()
+
+            # Custom training con termine prossimale mu/2 * ||w - w_global||^2
+            optimizer = tf.keras.optimizers.Adam()
+            loss_fn = tf.keras.losses.BinaryCrossentropy()
+
+            dataset = tf.data.Dataset.from_tensor_slices((data_x, data_y)).batch(32)
+            history_loss = []
+            history_acc = []
+
+            for epoch in range(5):
+                epoch_loss = []
+                epoch_acc = []
+                for batch_x, batch_y in dataset:
+                    with tf.GradientTape() as tape:
+                        predictions = client_model(batch_x, training=True)
+                        base_loss = loss_fn(batch_y, predictions)
+                        # Termine prossimale: mu/2 * sum(||w_i - w_global_i||^2)
+                        prox_term = 0.0
+                        for w, w_g in zip(client_model.trainable_weights, global_weights):
+                            prox_term += tf.reduce_sum(tf.square(w - w_g))
+                        total_loss = base_loss + (self.mu / 2.0) * prox_term
+
+                    grads = tape.gradient(total_loss, client_model.trainable_weights)
+                    optimizer.apply_gradients(zip(grads, client_model.trainable_weights))
+                    epoch_loss.append(float(total_loss))
+                    epoch_acc.append(float(tf.reduce_mean(
+                        tf.cast(tf.equal(tf.round(predictions), tf.cast(batch_y, tf.float32)), tf.float32)
+                    )))
+
+                history_loss.append(np.mean(epoch_loss))
+                history_acc.append(np.mean(epoch_acc))
+
+            # Costruisci un oggetto history-like
+            class _History:
+                def __init__(self, loss, accuracy):
+                    self.history = {"loss": loss, "accuracy": accuracy}
+            history = _History(history_loss, history_acc)
+        else:
+            # FedAvg: training standard
+            history = client_model.fit(
+                data_x, data_y,
+                epochs=5,
+                batch_size=32,
+                verbose=0
+            )
         
         # Aggiorna le informazioni del client
         client["data_size"] = len(data_x)
@@ -180,32 +224,42 @@ class FederatedLearningSystem:
             logger.warning("No client updates to aggregate")
             return {}
             
-        # Implementa FedAvg come algoritmo di default
-        if self.algorithm == "fedavg" or True:  # Fallback su FedAvg per ora
-            # Recupera pesi e dimensioni dei dati
-            weights = []
-            data_sizes = []
-            
-            for client_id, update in client_updates.items():
-                if client_id in self.clients:
-                    weights.append(update)
-                    data_sizes.append(self.clients[client_id]["data_size"])
-            
-            if not weights:
-                logger.warning("No valid weights for aggregation")
-                return {}
-                
-            # Normalizza i pesi in base alla dimensione dei dati
-            total_size = sum(data_sizes)
-            normalized_weights = [size / total_size for size in data_sizes]
-            
-            # Calcola la media pesata dei pesi
+        # Recupera pesi e dimensioni dei dati
+        weights = []
+        data_sizes = []
+
+        for client_id, update in client_updates.items():
+            if client_id in self.clients:
+                weights.append(update)
+                data_sizes.append(self.clients[client_id]["data_size"])
+
+        if not weights:
+            logger.warning("No valid weights for aggregation")
+            return {}
+
+        # Normalizza i pesi in base alla dimensione dei dati
+        total_size = sum(data_sizes)
+        normalized_weights = [size / total_size for size in data_sizes]
+
+        if self.algorithm == "fedavg":
+            # FedAvg: media pesata standard
             avg_weights = self._weighted_average(weights, normalized_weights)
-            
-            # Aggiorna il modello globale
-            self.global_model.set_weights(avg_weights)
-            
-            logger.info(f"Aggregated models from {len(weights)} clients in round {self.round}")
+
+        elif self.algorithm == "fedprox":
+            # FedProx: media pesata con termine prossimale
+            # Il termine prossimale mu * ||w - w_global||^2 viene applicato
+            # durante il training locale (lato client). L'aggregazione è
+            # identica a FedAvg; la differenza è nella loss del client.
+            avg_weights = self._weighted_average(weights, normalized_weights)
+
+        else:
+            logger.warning(f"Unknown algorithm '{self.algorithm}', falling back to fedavg")
+            avg_weights = self._weighted_average(weights, normalized_weights)
+
+        # Aggiorna il modello globale
+        self.global_model.set_weights(avg_weights)
+
+        logger.info(f"Aggregated models from {len(weights)} clients using {self.algorithm} in round {self.round}")
             
         self.round += 1
         

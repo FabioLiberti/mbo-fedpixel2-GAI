@@ -23,6 +23,7 @@ venv/
 env/
 .env/
 llmgenag/
+mbo_gai/
 *.so
 *.dylib
 
@@ -66,4 +67,4 @@ LLM_Generative_Agents/generative_agents/.git/
 *.bin
 *.onnx
 *.safetensors
-models/
+/models/
