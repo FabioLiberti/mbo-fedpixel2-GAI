@@ -10,6 +10,7 @@ import asyncio
 import logging
 import sys
 import os
+import httpx
 
 # Modifica dell'import per usare percorsi assoluti
 # Ottieni il percorso assoluto delle directory del progetto
@@ -80,30 +81,20 @@ class DialogGenerationResponse(BaseModel):
 async def check_llm_availability():
     """
     Verifica se il servizio LLM è disponibile.
-    Tenta di generare un testo semplice per testare la connessione.
+    Lightweight check: pinga Ollama /api/tags senza generare testo.
     """
     try:
-        connector = await get_llm_connector()
-        # Test semplice per verificare la connessione
-        test_response = await connector.generate_text("Hello.")
-        
-        if test_response and not test_response.startswith("Error"):
-            return {
-                "available": True, 
-                "model": connector.model,
-                "message": "LLM service is available and responding"
-            }
-        else:
-            return {
-                "available": False,
-                "message": test_response
-            }
+        async with httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get("http://localhost:11434/api/tags")
+            if resp.status_code == 200:
+                return {
+                    "available": True,
+                    "model": "qwen3.5:4b",
+                    "message": "Ollama is reachable"
+                }
+            return {"available": False, "message": f"Ollama returned {resp.status_code}"}
     except Exception as e:
-        logger.error(f"Error checking LLM availability: {str(e)}")
-        return {
-            "available": False,
-            "message": f"Error: {str(e)}"
-        }
+        return {"available": False, "message": f"Ollama unreachable: {str(e)}"}
 
 
 @router.post("/generate-dialog", response_model=DialogGenerationResponse)

@@ -27,12 +27,23 @@ _config_loaded = False
 OLLAMA_MODEL = "qwen3.5:4b"
 EMBEDDING_MODEL = "nomic-embed-text"
 OLLAMA_TEMPERATURE = 0.05
-OLLAMA_MAX_TOKENS = 120
-OLLAMA_NUM_CTX = 512
+OLLAMA_MAX_TOKENS = 60
+OLLAMA_NUM_CTX = 256
 
 EMBEDDING_CACHE = {}
 RESPONSE_CACHE = {}
 MAX_CACHE_SIZE = 500
+
+# Tracks whether any LLM call succeeded since last check
+_llm_call_succeeded = False
+
+
+def get_and_reset_llm_success() -> bool:
+    """Return True if at least one LLM call succeeded since last check, then reset."""
+    global _llm_call_succeeded
+    result = _llm_call_succeeded
+    _llm_call_succeeded = False
+    return result
 
 
 def _load_config():
@@ -73,13 +84,13 @@ def _load_config():
 _ollama_client = None
 
 def _get_ollama():
-    """Lazy creation of ollama Client with 30s timeout to prevent hangs."""
+    """Lazy creation of ollama Client with 60s timeout (qwen3.5:4b on CPU needs ~25-40s)."""
     global _ollama_client
     if _ollama_client is not None:
         return _ollama_client
     try:
         import ollama
-        _ollama_client = ollama.Client(timeout=30)
+        _ollama_client = ollama.Client(timeout=60)
         return _ollama_client
     except ImportError:
         logger.error("ollama package not installed. Run: pip install ollama")
@@ -185,9 +196,11 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
         result = clean_ollama_response(content)
         RESPONSE_CACHE[cache_key] = result
         manage_cache()
+        global _llm_call_succeeded
+        _llm_call_succeeded = True
         return result
     except Exception as e:
-        logger.error(f"Ollama chat error: {e}")
+        logger.warning(f"Ollama chat: {e}")
         return "OLLAMA ERROR"
 
 
@@ -224,9 +237,11 @@ def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=Non
         result = clean_ollama_response(raw)
         RESPONSE_CACHE[cache_key] = result
         manage_cache()
+        global _llm_call_succeeded
+        _llm_call_succeeded = True
         return result
     except Exception as e:
-        logger.error(f"Ollama generate error: {e}")
+        logger.warning(f"Ollama generate: {e}")
         return "OLLAMA ERROR"
 
 
@@ -242,13 +257,13 @@ def ChatGPT_single_request(prompt):
 def GPT4_request(prompt):
     """Request using the primary model (replaces GPT-4 calls)."""
     temp_sleep()
-    return ollama_chat_request(prompt, temperature=0.05, max_tokens=200)
+    return ollama_chat_request(prompt, temperature=0.05, max_tokens=80)
 
 
 def ChatGPT_request(prompt):
     """Request with higher temperature for creative output."""
     try:
-        return ollama_chat_request(prompt, temperature=0.7, max_tokens=500)
+        return ollama_chat_request(prompt, temperature=0.7, max_tokens=80)
     except:
         logger.error("Ollama ERROR in ChatGPT_request")
         return "OLLAMA ERROR"
@@ -257,7 +272,7 @@ def ChatGPT_request(prompt):
 def GPT4_safe_generate_response(prompt,
                                 example_output,
                                 special_instruction,
-                                repeat=3,
+                                repeat=1,
                                 fail_safe_response="error",
                                 func_validate=None,
                                 func_clean_up=None,
@@ -301,7 +316,7 @@ def GPT4_safe_generate_response(prompt,
 def ChatGPT_safe_generate_response(prompt,
                                    example_output,
                                    special_instruction,
-                                   repeat=3,
+                                   repeat=1,
                                    fail_safe_response="error",
                                    func_validate=None,
                                    func_clean_up=None,
@@ -377,7 +392,7 @@ def generate_prompt(curr_input, prompt_lib_file):
 
 def safe_generate_response(prompt,
                            gpt_parameter,
-                           repeat=5,
+                           repeat=1,
                            fail_safe_response="error",
                            func_validate=None,
                            func_clean_up=None,

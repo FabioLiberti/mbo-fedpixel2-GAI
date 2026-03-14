@@ -21,6 +21,8 @@ from cognitive.retrieve import new_retrieve
 from cognitive.plan import plan as cognitive_plan
 from cognitive.reflect import reflect
 from cognitive.execute import execute as cognitive_execute
+from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+from cognitive.prompts.gpt_structure import get_and_reset_llm_success
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -143,8 +145,13 @@ class ResearcherAgent(Agent):
         self.state = AgentState.RESTING
 
         # --- Cognitive step tracking ---
-        self.cognitive_step_counter = 0
-        self.cognitive_step_interval = self.scratch.cognitive_step_interval or 5
+        # Stagger agents so not all run their cognitive cycle on the same step.
+        # When LLM is enabled, each cognitive cycle takes ~5 min on CPU (Ollama).
+        # Use a high interval (100) to keep simulation responsive.
+        # When stubs are used, interval 10 is enough.
+        base_interval = self.scratch.cognitive_step_interval or 10
+        self.cognitive_step_interval = max(base_interval, 10)
+        self.cognitive_step_counter = unique_id % self.cognitive_step_interval
         self.new_day_flag = "First day"  # triggers long-term planning on first cycle
 
         # --- Dialog (for frontend ThoughtBubble) ---
@@ -169,18 +176,15 @@ class ResearcherAgent(Agent):
 
     def handle_fl_task(self, task_type: str):
         """Switch agent state to match the FL task."""
-        if task_type == "train" and self.fl_role in [FLRole.MODEL_TRAINER, FLRole.DATA_PREPARER]:
+        self.fl_contributing = True
+        if task_type == "train":
             self.state = AgentState.TRAINING_MODEL
-            self.fl_contributing = True
-        elif task_type == "send_model" and self.fl_role == FLRole.MODEL_TRAINER:
+        elif task_type == "send_model":
             self.state = AgentState.SENDING_MODEL
-            self.fl_contributing = True
-        elif task_type == "aggregate" and self.fl_role == FLRole.MODEL_AGGREGATOR:
+        elif task_type == "aggregate":
             self.state = AgentState.AGGREGATING_MODELS
-            self.fl_contributing = True
         elif task_type == "receive_model":
             self.state = AgentState.RECEIVING_MODEL
-            self.fl_contributing = True
 
     def process_fl_task(self, delta_time: float = 1.0):
         """Progress the current FL task. Returns True if task completed."""
@@ -194,6 +198,9 @@ class ResearcherAgent(Agent):
             self.fl_progress += progress_rate * 1.5 * delta_time
         elif self.state in [AgentState.SENDING_MODEL, AgentState.RECEIVING_MODEL]:
             self.fl_progress += progress_rate * 2.0 * delta_time
+        else:
+            # Fallback: agent has FL task but state didn't match (e.g. aggregator assigned "train")
+            self.fl_progress += progress_rate * delta_time
 
         self.fl_progress = min(1.0, self.fl_progress)
 
@@ -222,6 +229,9 @@ class ResearcherAgent(Agent):
             personas_dict: dict {name: ResearcherAgent} of all agents
         """
         try:
+            # Reset LLM success tracker before this cycle
+            get_and_reset_llm_success()
+
             # 1. PERCEIVE - detect nearby events
             perceived = perceive(self, maze)
 
@@ -242,6 +252,9 @@ class ResearcherAgent(Agent):
             # 4. REFLECT - check trigger, generate insights
             reflect(self)
 
+            # Check if any LLM call actually succeeded during this cycle
+            llm_actually_used = get_and_reset_llm_success()
+
             # 5. EXECUTE - compute movement path
             if act_address:
                 next_tile, pronunciatio, description = cognitive_execute(
@@ -253,13 +266,23 @@ class ResearcherAgent(Agent):
 
                 # Update dialog for frontend
                 self.last_dialog = self.scratch.act_description
-                self.dialog_is_llm = True
+                self.dialog_is_llm = llm_actually_used
 
             # Update state from cognitive action
             self._sync_state_from_scratch()
 
+            # Always update dialog from scratch even if execute didn't set it
+            if not self.last_dialog or self.last_dialog == "idle":
+                desc = self.scratch.act_description
+                if desc and desc != "idle":
+                    self.last_dialog = desc
+                    self.dialog_is_llm = llm_actually_used
+
         except Exception as e:
-            logger.error(f"Cognitive cycle error for '{self.name}': {e}", exc_info=True)
+            logger.error(f"Cognitive cycle error for '{self.name}': {e}")
+            # Fallback dialog so panel always shows something
+            self.last_dialog = f"working on {self.scratch.fl_specialization or 'research'}"
+            self.dialog_is_llm = False
 
     def _move_to_tile(self, next_tile, maze):
         """Move agent to a new tile on the Mesa grid, updating maze events."""
@@ -307,6 +330,16 @@ class ResearcherAgent(Agent):
         # --- Priority 1: FL task processing ---
         if self._is_in_fl_task():
             self.process_fl_task(delta_time=1.0)
+            # Set FL dialog only if current dialog is not LLM-generated
+            # (preserve LLM dialogs so the panel can display them longer)
+            if not self.dialog_is_llm:
+                fl_descriptions = {
+                    AgentState.TRAINING_MODEL: f"Training local model on {self.scratch.fl_specialization or 'FL'} data",
+                    AgentState.SENDING_MODEL: "Sending model updates to aggregator",
+                    AgentState.AGGREGATING_MODELS: "Aggregating federated model updates",
+                    AgentState.RECEIVING_MODEL: "Receiving global model from server",
+                }
+                self.last_dialog = fl_descriptions.get(self.state, f"FL task: {self.fl_task}")
             return  # FL blocks cognitive pipeline
 
         # --- Priority 2: Cognitive pipeline (throttled) ---

@@ -239,6 +239,17 @@ async def toggle_llm(enabled: bool = True):
     """Enable/disable real LLM calls (Ollama). When disabled, stubs are used."""
     from cognitive.prompts.run_gpt_prompt import set_llm_enabled, is_llm_enabled
     set_llm_enabled(enabled)
+
+    # Adjust cognitive step interval for all agents:
+    # LLM on CPU is slow (~25s/call, ~15 calls/cycle), so use high interval
+    # to keep simulation responsive. Stubs are instant → use low interval.
+    new_interval = 100 if enabled else 10
+    if controller.model:
+        for agent in controller.model.schedule.agents:
+            if hasattr(agent, 'cognitive_step_interval'):
+                agent.cognitive_step_interval = new_interval
+        logger.info(f"Cognitive interval set to {new_interval} for all agents")
+
     return {"llm_enabled": is_llm_enabled()}
 
 
