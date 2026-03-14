@@ -22,9 +22,23 @@ from .gpt_structure import (
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Stub flag - set to False to enable real LLM calls
+# Stub flag — runtime-toggleable from API/WebSocket
+# True = returns sensible defaults (fast, no LLM needed)
+# False = calls LLM via gpt_structure.py (requires Ollama)
 # ============================================================================
 USE_STUBS = True
+
+
+def set_llm_enabled(enabled: bool):
+    """Enable/disable real LLM calls at runtime (called from API)."""
+    global USE_STUBS
+    USE_STUBS = not enabled
+    logger.info(f"LLM {'enabled' if enabled else 'disabled'} (USE_STUBS={USE_STUBS})")
+
+
+def is_llm_enabled() -> bool:
+    """Return True if real LLM calls are active."""
+    return not USE_STUBS
 
 
 def _stub_warn(fn_name):

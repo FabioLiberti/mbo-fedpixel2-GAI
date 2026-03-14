@@ -60,6 +60,9 @@ function App() {
   const [showDocumentation, setShowDocumentation] = useState<boolean>(false);
   // Nuovo stato per lo splash screen
   const [showSplash, setShowSplash] = useState<boolean>(true);
+  // Stato LLM (Qwen 3.5 via Ollama)
+  const [llmEnabled, setLlmEnabled] = useState<boolean>(false);
+  const [llmToggling, setLlmToggling] = useState<boolean>(false);
 
   // Handler per aggiornamenti dello stato della simulazione
   const handleSimulationStatus = useCallback((data: any) => {
@@ -294,6 +297,33 @@ function App() {
     setShowSplash(false);
   }, []);
 
+  // Handler per attivare/disattivare LLM (Qwen 3.5 via Ollama)
+  const handleToggleLLM = useCallback(async () => {
+    setLlmToggling(true);
+    const newEnabled = !llmEnabled;
+    try {
+      const resp = await fetch(`http://localhost:8091/llm/toggle?enabled=${newEnabled}`, {
+        method: 'POST'
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setLlmEnabled(data.llm_enabled);
+      }
+    } catch (err) {
+      console.error('Failed to toggle LLM:', err);
+    } finally {
+      setLlmToggling(false);
+    }
+  }, [llmEnabled]);
+
+  // Carica stato LLM iniziale dal backend
+  useEffect(() => {
+    fetch('http://localhost:8091/llm/status')
+      .then(r => r.json())
+      .then(data => setLlmEnabled(data.llm_enabled))
+      .catch(() => {}); // backend potrebbe non essere ancora attivo
+  }, []);
+
   // Funzione per verificare se mostrare lo splash
   const shouldShowSplash = useCallback(() => {
     // Per lo sviluppo puoi disattivare lo splash screen commentando la riga sotto
@@ -419,6 +449,33 @@ function App() {
                 </div>
               </div>
               
+              <div className="controls-group">
+                <h3>LLM (Qwen 3.5)</h3>
+                <div className="llm-toggle-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '8px 0' }}>
+                  <button
+                    onClick={handleToggleLLM}
+                    disabled={llmToggling}
+                    className={llmEnabled ? 'active' : 'secondary'}
+                    style={{ minWidth: '140px' }}
+                  >
+                    {llmToggling ? 'Switching...' : llmEnabled ? 'LLM Attivo' : 'LLM Disattivo'}
+                  </button>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      backgroundColor: llmEnabled ? '#4caf50' : '#888',
+                    }}
+                    title={llmEnabled ? 'Ollama connesso — chiamate LLM reali' : 'Modalità stub — risposte predefinite'}
+                  />
+                  <span style={{ fontSize: '12px', color: '#aaa' }}>
+                    {llmEnabled ? 'Ollama attivo' : 'Stub mode'}
+                  </span>
+                </div>
+              </div>
+
               <div className="controls-group">
                 <h3>Statistiche FL Globali</h3>
                 {simStatus === 'stopped' ? (

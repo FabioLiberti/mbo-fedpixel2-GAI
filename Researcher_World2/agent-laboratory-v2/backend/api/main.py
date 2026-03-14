@@ -220,6 +220,33 @@ async def get_fl_state():
     return fl_state
 
 
+# --- LLM Toggle Routes ---
+
+@app.post("/llm/toggle")
+async def toggle_llm(enabled: bool = True):
+    """Enable/disable real LLM calls (Ollama). When disabled, stubs are used."""
+    from cognitive.prompts.run_gpt_prompt import set_llm_enabled, is_llm_enabled
+    set_llm_enabled(enabled)
+    return {"llm_enabled": is_llm_enabled()}
+
+
+@app.get("/llm/status")
+async def get_llm_status():
+    """Check if LLM calls are enabled and if Ollama is reachable."""
+    from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+    llm_on = is_llm_enabled()
+    ollama_ok = False
+    if llm_on:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get("http://localhost:11434/api/tags")
+                ollama_ok = resp.status_code == 200
+        except Exception:
+            pass
+    return {"llm_enabled": llm_on, "ollama_reachable": ollama_ok}
+
+
 # --- Agent Inspection Route ---
 
 @app.get("/agent/{agent_id}")
@@ -261,6 +288,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     controller.set_speed(params.get("speed", 1.0))
                 elif command == "enable_fl":
                     controller.enable_federated_learning(params.get("enabled", True))
+                elif command == "toggle_llm":
+                    from cognitive.prompts.run_gpt_prompt import set_llm_enabled, is_llm_enabled
+                    set_llm_enabled(params.get("enabled", True))
+                    await websocket.send_json({
+                        "type": "llm_status",
+                        "data": {"llm_enabled": is_llm_enabled()}
+                    })
                 elif command == "get_agent":
                     agent_id = params.get("agent_id")
                     agent = controller.get_agent(agent_id) if agent_id is not None else None
