@@ -339,7 +339,14 @@ function App() {
           
           <main>
             <div className="simulation-section">
-              <SimulationContainer onGameReady={handleGameReady} selectedLab={currentLab} />
+              <SimulationContainer
+                onGameReady={handleGameReady}
+                selectedLab={currentLab}
+                onFLUpdate={(data) => {
+                  setFlProgress(data.flProgress);
+                  setAgentCount(data.agentCount);
+                }}
+              />
             </div>
             
             <div className="controls-section">

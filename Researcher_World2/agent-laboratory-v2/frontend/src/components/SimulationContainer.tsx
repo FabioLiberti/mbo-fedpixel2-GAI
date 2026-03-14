@@ -10,6 +10,7 @@ import { CognitiveAgentState } from '../phaser/types/AgentTypes';
 interface SimulationContainerProps {
   onGameReady?: (game: any) => void;
   selectedLab?: string;
+  onFLUpdate?: (data: { flProgress: number; agentCount: number }) => void;
 }
 
 // Definiamo un tipo per gli agenti FL
@@ -27,9 +28,10 @@ interface FLConnection {
   active: boolean;
 }
 
-const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
-  onGameReady, 
-  selectedLab 
+const SimulationContainer: React.FC<SimulationContainerProps> = ({
+  onGameReady,
+  selectedLab,
+  onFLUpdate
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameReadyFiredRef = useRef<boolean>(false);
@@ -283,7 +285,16 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           connections: activeConnections
         };
       });
-      
+
+      // Notify parent (App.tsx) of FL progress
+      if (onFLUpdate) {
+        const accuracy = Math.min(0.95, round * 0.05);
+        onFLUpdate({
+          flProgress: Math.round(accuracy * 100),
+          agentCount: 9
+        });
+      }
+
     }, 3000); // Aggiorna ogni 3 secondi
   }, [flEnabled]); // La funzione dipende solo da flEnabled
 
