@@ -14,7 +14,7 @@ from threading import Thread, Event
 import time
 
 from models.environment import LabEnvironment
-from backend.fl.federated import FederatedLearningSystem
+from fl.federated import FederatedLearningSystem
 from cognitive.prompts.gpt_structure import get_embedding
 
 logging.basicConfig(level=logging.INFO)

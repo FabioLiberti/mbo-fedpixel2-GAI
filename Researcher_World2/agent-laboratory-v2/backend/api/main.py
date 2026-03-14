@@ -110,10 +110,22 @@ manager = ConnectionManager()
 # Controller instance
 controller = SimulationController()
 
-# Simulation callback -> WebSocket broadcast
-async def simulation_callback(data: Dict[str, Any]):
+# Event loop reference for thread-safe async callback
+_loop = None
+
+@app.on_event("startup")
+async def on_startup():
+    global _loop
+    _loop = asyncio.get_running_loop()
+
+# Simulation callback -> WebSocket broadcast (called from sync thread)
+def simulation_callback(data: Dict[str, Any]):
     try:
-        await manager.broadcast({"type": "simulation_update", "data": data})
+        if _loop and _loop.is_running():
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({"type": "simulation_update", "data": data}),
+                _loop
+            )
     except Exception as e:
         logger.error(f"Error in simulation callback: {e}")
 

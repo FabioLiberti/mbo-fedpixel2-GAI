@@ -20,6 +20,7 @@ interface SimulationContainerProps {
   onGameReady?: (game: any) => void;
   selectedLab?: string;
   onFLUpdate?: (data: FLGlobalMetrics) => void;
+  backendConnected?: boolean;
 }
 
 // Definiamo un tipo per gli agenti FL
@@ -40,7 +41,8 @@ interface FLConnection {
 const SimulationContainer: React.FC<SimulationContainerProps> = ({
   onGameReady,
   selectedLab,
-  onFLUpdate
+  onFLUpdate,
+  backendConnected = false
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameReadyFiredRef = useRef<boolean>(false);
@@ -302,7 +304,8 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   // Ascolta l'evento di avvio simulazione da App.tsx per avviare la simulazione FL locale
   useEffect(() => {
     const handleSimStart = () => {
-      if (!hasInitializedSimRef.current && flEnabled) {
+      // Timer locale solo se backend non connesso (fallback)
+      if (!hasInitializedSimRef.current && flEnabled && !backendConnected) {
         hasInitializedSimRef.current = true;
         startLocalSimulation();
       }
@@ -330,7 +333,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     return () => {
       document.removeEventListener('simulation:control', handleSimControl);
     };
-  }, [flEnabled, startLocalSimulation]);
+  }, [flEnabled, startLocalSimulation, backendConnected]);
 
   // EFFECT SEPARATO PER FERMARE LA SIMULAZIONE (per evitare dipendenze cicliche)
   useEffect(() => {

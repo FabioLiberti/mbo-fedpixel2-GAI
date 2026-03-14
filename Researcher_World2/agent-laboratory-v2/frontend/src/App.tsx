@@ -64,7 +64,7 @@ function App() {
   const [llmEnabled, setLlmEnabled] = useState<boolean>(false);
   const [llmToggling, setLlmToggling] = useState<boolean>(false);
 
-  // Handler per aggiornamenti dello stato della simulazione
+  // Handler per aggiornamenti dello stato della simulazione (legacy)
   const handleSimulationStatus = useCallback((data: any) => {
     if (data.status) {
       setSimStatus(data.status as SimulationStatus);
@@ -74,6 +74,39 @@ function App() {
     }
     if (data.agentCount !== undefined) {
       setAgentCount(data.agentCount);
+    }
+  }, []);
+
+  // Handler per broadcast reali dal backend (simulation_update)
+  const handleBackendUpdate = useCallback((message: any) => {
+    const d = message.data;
+    if (!d) return;
+
+    // Stato simulazione
+    if (d.simulation) {
+      if (d.simulation.running && !d.simulation.paused) setSimStatus('running');
+      else if (d.simulation.running && d.simulation.paused) setSimStatus('paused');
+      else setSimStatus('stopped');
+    }
+
+    // Conteggio agenti
+    if (d.agent_count !== undefined) setAgentCount(d.agent_count);
+
+    // Dati FL reali → sidebar
+    if (d.fl) {
+      const fl = d.fl;
+      const latestAccuracy = Array.isArray(fl.metrics?.accuracy)
+        ? (fl.metrics.accuracy[fl.metrics.accuracy.length - 1] ?? 0)
+        : (fl.metrics?.accuracy ?? 0);
+      const latestLoss = Array.isArray(fl.metrics?.loss)
+        ? (fl.metrics.loss[fl.metrics.loss.length - 1] ?? 1)
+        : (fl.metrics?.loss ?? 1);
+
+      setFlRound(fl.round ?? 0);
+      setFlAccuracy(latestAccuracy);
+      setFlLoss(latestLoss);
+      setFlProgress(Math.round(latestAccuracy * 100));
+      setFlState(fl.current_phase || 'idle');
     }
   }, []);
 
@@ -106,6 +139,7 @@ function App() {
     
     // Registra i listener
     webSocketService.onMessage('simulationStatus', handleSimulationStatus);
+    webSocketService.onMessage('simulation_update', handleBackendUpdate);
     
     // Connettiti al WebSocket
     connectWebSocket();
@@ -130,9 +164,10 @@ function App() {
       isMounted = false;
       clearInterval(connectionCheckInterval);
       webSocketService.offMessage('simulationStatus', handleSimulationStatus);
+      webSocketService.offMessage('simulation_update', handleBackendUpdate);
       webSocketService.disconnect();
     };
-  }, [connected, handleSimulationStatus]);
+  }, [connected, handleSimulationStatus, handleBackendUpdate]);
 
   // Listener per eventi di documentazione dal gioco Phaser
   useEffect(() => {
@@ -246,16 +281,19 @@ function App() {
   
   // Gestisci i controlli della simulazione
   const handleSimulationControl = useCallback((action: string) => {
-    webSocketService.sendMessage('simulationControl', { action });
-    
-    // Invia l'evento anche alla simulazione Phaser
+    // Comando WebSocket nel formato corretto per il backend
+    webSocketService.sendSimulationCommand(action);
+
+    // REST fallback (fire-and-forget)
+    fetch(`http://localhost:8091/simulation/${action}`, { method: 'POST' }).catch(() => {});
+
+    // Evento locale per Phaser e simulazione fallback
     const customEvent = new CustomEvent('simulation:control', {
       detail: { action }
     });
     document.dispatchEvent(customEvent);
 
-    // Aggiorna lo stato locale per una UI reattiva
-    // Il vero stato viene aggiornato quando il server risponde
+    // UI reattiva (stato reale arriva dal backend via simulation_update)
     switch (action) {
       case 'start':
         setSimStatus('running');
@@ -370,6 +408,7 @@ function App() {
               <SimulationContainer
                 onGameReady={handleGameReady}
                 selectedLab={currentLab}
+                backendConnected={connected}
                 onFLUpdate={(data) => {
                   setFlProgress(data.flProgress);
                   setAgentCount(data.agentCount);

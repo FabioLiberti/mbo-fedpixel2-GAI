@@ -181,6 +181,11 @@ class WebSocketService {
     }
   }
 
+  // Invia un comando simulazione nel formato atteso dal backend
+  sendSimulationCommand(command: string, params: Record<string, any> = {}): void {
+    this.sendMessage({ type: 'simulation_command', command, params });
+  }
+
   // Registra un handler per un tipo di messaggio
   onMessage(event: string, handler: (data: any) => void): void {
     if (!this.messageHandlers[event]) {
