@@ -49,8 +49,12 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [currentLab, setCurrentLab] = useState<LabType>(SCENE_KEYS.WORLD_MAP);
   const [simStatus, setSimStatus] = useState<SimulationStatus>('stopped');
-  const [agentCount, setAgentCount] = useState<number>(5);
+  const [agentCount, setAgentCount] = useState<number>(9);
   const [flProgress, setFlProgress] = useState<number>(0);
+  const [flRound, setFlRound] = useState<number>(0);
+  const [flAccuracy, setFlAccuracy] = useState<number>(0);
+  const [flLoss, setFlLoss] = useState<number>(0);
+  const [flState, setFlState] = useState<string>('idle');
   const [debugInfo, setDebugInfo] = useState<any>(null);
   // Nuovo stato per la documentazione
   const [showDocumentation, setShowDocumentation] = useState<boolean>(false);
@@ -345,6 +349,10 @@ function App() {
                 onFLUpdate={(data) => {
                   setFlProgress(data.flProgress);
                   setAgentCount(data.agentCount);
+                  setFlRound(data.round);
+                  setFlAccuracy(data.accuracy);
+                  setFlLoss(data.loss);
+                  setFlState(data.flState);
                 }}
               />
             </div>
@@ -418,17 +426,33 @@ function App() {
               </div>
               
               <div className="controls-group">
-                <h3>Statistiche</h3>
+                <h3>Statistiche FL Globali</h3>
                 <div className="stats-container">
                   <div className="stat-item">
-                    <span className="stat-label">Agenti:</span>
+                    <span className="stat-label">Stato:</span>
+                    <span className={`stat-value fl-state-${flState}`}>{flState.toUpperCase()}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Agenti totali:</span>
                     <span className="stat-value">{agentCount}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Round:</span>
+                    <span className="stat-value">{flRound}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Accuracy:</span>
+                    <span className="stat-value">{flAccuracy.toFixed(4)}</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-label">Loss:</span>
+                    <span className="stat-value">{flLoss.toFixed(4)}</span>
                   </div>
                   <div className="stat-item">
                     <span className="stat-label">FL Progress:</span>
                     <div className="progress-bar">
-                      <div 
-                        className="progress-fill" 
+                      <div
+                        className="progress-fill"
                         style={{ width: `${flProgress}%` }}
                       ></div>
                     </div>

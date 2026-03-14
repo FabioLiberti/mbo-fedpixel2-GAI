@@ -7,10 +7,19 @@ import { FLStatusData } from '../phaser/fl/FLController';
 import { FLState } from '../phaser/fl/FLState';
 import { CognitiveAgentState } from '../phaser/types/AgentTypes';
 
+interface FLGlobalMetrics {
+  flProgress: number;
+  agentCount: number;
+  round: number;
+  accuracy: number;
+  loss: number;
+  flState: string;
+}
+
 interface SimulationContainerProps {
   onGameReady?: (game: any) => void;
   selectedLab?: string;
-  onFLUpdate?: (data: { flProgress: number; agentCount: number }) => void;
+  onFLUpdate?: (data: FLGlobalMetrics) => void;
 }
 
 // Definiamo un tipo per gli agenti FL
@@ -179,15 +188,24 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     console.log("Starting local FL simulation (fallback)");
     localSimulationActiveRef.current = true;
     
-    // Inizializzazione dello stato FL
+    // Inizializzazione dello stato FL con 9 agenti (3 per lab)
     const initialState: FLStatusData = {
       enabled: true,
       currentState: FLState.IDLE,
-      fromSimulation: true, // Flag per indicare che è una simulazione locale
+      fromSimulation: true,
       activeAgents: [
-        { id: 'agent1', state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'researcher' },
-        { id: 'agent2', state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'phd_student' },
-        { id: 'agent3', state: FLState.IDLE, labType: 'OPBG', agentType: 'medical_doctor' }
+        // Mercatorum (3)
+        { id: 'prof1', state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'professor' },
+        { id: 'res1',  state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'researcher' },
+        { id: 'stu1',  state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'student' },
+        // Blekinge (3)
+        { id: 'prof2', state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'professor' },
+        { id: 'res2',  state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'researcher' },
+        { id: 'stu2',  state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'student' },
+        // OPBG (3)
+        { id: 'res3',  state: FLState.IDLE, labType: 'OPBG', agentType: 'researcher' },
+        { id: 'doc1',  state: FLState.IDLE, labType: 'OPBG', agentType: 'doctor' },
+        { id: 'stu3',  state: FLState.IDLE, labType: 'OPBG', agentType: 'student' },
       ],
       metrics: {
         accuracy: 0,
@@ -286,12 +304,17 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         };
       });
 
-      // Notify parent (App.tsx) of FL progress
+      // Notify parent (App.tsx) of global FL metrics
       if (onFLUpdate) {
-        const accuracy = Math.min(0.95, round * 0.05);
+        const accuracy = Math.min(0.95, (round + 1) * 0.05);
+        const loss = Math.max(0.05, 1 - (round + 1) * 0.05);
         onFLUpdate({
           flProgress: Math.round(accuracy * 100),
-          agentCount: 9
+          agentCount: 9,
+          round: round,
+          accuracy: accuracy,
+          loss: loss,
+          flState: newState
         });
       }
 
@@ -365,26 +388,54 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     }
   };
 
+  // Mappa sceneKey -> labType per filtrare agenti
+  const sceneToLabType: Record<string, string> = {
+    [SCENE_KEYS.MERCATORUM]: 'MERCATORUM',
+    [SCENE_KEYS.BLEKINGE]: 'BLEKINGE',
+    [SCENE_KEYS.OPBG]: 'OPBG',
+  };
+
+  // Calcola flStatus contestuale: filtra agenti se siamo in un lab singolo
+  const isWorldMap = !selectedLab || selectedLab === SCENE_KEYS.WORLD_MAP;
+  const contextualFlStatus: FLStatusData | null = flStatus ? (
+    isWorldMap ? flStatus : {
+      ...flStatus,
+      activeAgents: flStatus.activeAgents.filter(
+        (agent: FLAgent) => agent.labType === sceneToLabType[selectedLab || '']
+      )
+    }
+  ) : null;
+
+  // Nome leggibile del lab corrente
+  const labDisplayName: Record<string, string> = {
+    [SCENE_KEYS.MERCATORUM]: 'Mercatorum',
+    [SCENE_KEYS.BLEKINGE]: 'Blekinge',
+    [SCENE_KEYS.OPBG]: 'OPBG',
+  };
+  const currentLabName = selectedLab ? labDisplayName[selectedLab] || null : null;
+
   return (
     <div className="simulation-container" style={{ position: 'relative' }}>
       {/* Container del gioco Phaser */}
-      <div 
-        id="phaser-game" 
-        ref={gameContainerRef} 
-        style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }} 
+      <div
+        id="phaser-game"
+        ref={gameContainerRef}
+        style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }}
       />
-      
-      {/* Pannello di controllo FL - Viene mostrato o nascosto in base agli eventi ricevuti */}
-      {flStatus && (
+
+      {/* Pannello di controllo FL - contestuale alla vista corrente */}
+      {contextualFlStatus && (
         <>
           <FLStatusPanel
-            flStatus={flStatus}
+            flStatus={contextualFlStatus}
             onToggleFL={handleToggleFL}
+            totalAgentCount={flStatus?.activeAgents?.length || 0}
+            currentLabName={isWorldMap ? null : currentLabName}
           />
 
           {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
           <FLStatusConnector
-            flStatus={flStatus}
+            flStatus={flStatus!}
             onToggleFL={handleToggleFL}
           />
         </>

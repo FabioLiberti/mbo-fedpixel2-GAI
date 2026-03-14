@@ -174,3 +174,9 @@
     text-overflow: ellipsis;
     max-width: 120px;
   }
+
+  .fl-lab-context {
+    font-size: 11px;
+    color: #aaa;
+    font-weight: normal;
+  }

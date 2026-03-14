@@ -233,6 +233,23 @@ export class FLController {
   }
 
   /**
+   * Ottiene gli agenti attivi filtrati per laboratorio
+   */
+  public getAgentsByLab(labTypeId: LabTypeId): Map<string, {
+    agent: Agent | null;
+    state: FLState;
+    labTypeId: LabTypeId;
+  }> {
+    const filtered = new Map<string, { agent: Agent | null; state: FLState; labTypeId: LabTypeId }>();
+    this.activeAgents.forEach((data, id) => {
+      if (data.labTypeId === labTypeId) {
+        filtered.set(id, data);
+      }
+    });
+    return filtered;
+  }
+
+  /**
    * Ottiene le informazioni sulle connessioni attive
    */
   public getConnections(): Array<{

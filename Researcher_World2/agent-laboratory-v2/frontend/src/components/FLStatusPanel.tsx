@@ -7,12 +7,14 @@ import { addFLPanelToggleListener, getFLPanelState } from '../utils/customEvents
 interface FLStatusPanelProps {
   flStatus: FLStatusData | null;
   onToggleFL: (enabled: boolean) => void;
+  totalAgentCount?: number;
+  currentLabName?: string | null;
 }
 
 /**
  * Pannello che mostra lo stato del Federated Learning e consente di controllarlo
  */
-const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL }) => {
+const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, totalAgentCount, currentLabName }) => {
   const [visible, setVisible] = useState<boolean>(getFLPanelState());
   const toggleEventRegisteredRef = useRef<boolean>(false);
 
@@ -133,7 +135,11 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL }) =
           </div>
 
           <div className="fl-agents">
-            <h4>Agents ({activeAgents?.length || 0})</h4>
+            <h4>
+              Agents ({activeAgents?.length || 0}
+              {currentLabName && totalAgentCount ? `/${totalAgentCount}` : ''})
+              {currentLabName && <span className="fl-lab-context"> — {currentLabName}</span>}
+            </h4>
             <div className="fl-agent-states">
               {Object.entries(agentStateCount).map(([state, count]) => (
                 <div key={state} className={`fl-agent-state fl-state-${state.toLowerCase()}`}>

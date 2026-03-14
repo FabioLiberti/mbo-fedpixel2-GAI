@@ -265,6 +265,13 @@ button.secondary:hover {
   transition: width 0.3s ease;
 }
 
+/* FL state colors for sidebar */
+.stat-value.fl-state-idle { color: #ccc; }
+.stat-value.fl-state-training { color: #3498db; }
+.stat-value.fl-state-sending { color: #e67e22; }
+.stat-value.fl-state-aggregating { color: #9b59b6; }
+.stat-value.fl-state-receiving { color: #2ecc71; }
+
 /* Responsive layout */
 @media (min-width: 768px) {
   main {
