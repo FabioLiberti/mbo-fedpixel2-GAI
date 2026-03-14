@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% load staticfiles %}
+
+{% block content %}
+<style>
+    .debug-info {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #00ff00;
+        padding: 15px;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+        z-index: 1000;
+    }
+    
+    .control-panel {
+        background: #f0f0f0;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 5px;
+    }
+    
+    .agent-card {
+        background: #fff;
+        border: 2px solid #ddd;
+        margin: 10px;
+        padding: 15px;
+        border-radius: 8px;
+        display: inline-block;
+        width: 300px;
+        vertical-align: top;
+    }
+    
+    .agent-moving {
+        border-color: #4CAF50;
+        background: #f8fff8;
+    }
+    
+    .agent-chatting {
+        border-color: #2196F3;
+        background: #f8f8ff;
+    }
+    
+    .position-indicator {
+        font-weight: bold;
+        color: #666;
+        font-size: 14px;
+    }
+    
+    .action-text {
+        color: #4CAF50;
+        font-style: italic;
+        margin: 8px 0;
+    }
+    
+    .chat-bubble {
+        background: #E3F2FD;
+        padding: 10px;
+        border-radius: 10px;
+        border-left: 4px solid #2196F3;
+        margin: 8px 0;
+    }
+    
+    .time-display {
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+        text-align: center;
+        margin: 20px 0;
+    }
+</style>
+
+<div class="debug-info" id="debug-info">
+    <h4>Debug Info</h4>
+    <div>Status: <span id="status">Starting...</span></div>
+    <div>Step: <span id="current-step">{{step}}</span></div>
+    <div>Sim: <span id="sim-code">{{sim_code}}</span></div>
+    <div>Updates: <span id="update-count">0</span></div>
+    <div>Last: <span id="last-update">Never</span></div>
+</div>
+
+<div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+    <h1>🎮 Generative Agents - Enhanced Simulator</h1>
+    
+    <div class="control-panel">
+        <h3>Simulation Controls</h3>
+        <button onclick="forceUpdate()" class="btn btn-primary">🔄 Force Update</button>
+        <button onclick="nextStep()" class="btn btn-success">⏭️ Next Step</button>
+        <button onclick="toggleAutoUpdate()" class="btn btn-warning">
+            🔄 Auto Update: <span id="auto-status">ON</span>
+        </button>
+        <button onclick="resetStep()" class="btn btn-danger">🔄 Reset to Step 0</button>
+    </div>
+    
+    <div class="time-display" id="current-time">
+        Loading simulation time...
+    </div>
+    
+    <div id="agents-container">
+        <!-- Agents will be populated here -->
+    </div>
+    
+    <div style="margin-top: 30px;">
+        <h3>📊 Raw Data (for debugging)</h3>
+        <pre id="raw-data" style="background: #f5f5f5; padding: 15px; border-radius: 5px; max-height: 400px; overflow-y: auto; font-size: 12px;"></pre>
+    </div>
+</div>
+
+<script>
+let currentStep = {{step}};
+let simCode = "{{sim_code}}";
+let autoUpdate = true;
+let updateCount = 0;
+let updateInterval;
+
+function updateDebugInfo(message, color = '#00ff00') {
+    document.getElementById('status').textContent = message;
+    document.getElementById('status').style.color = color;
+    document.getElementById('current-step').textContent = currentStep;
+    document.getElementById('update-count').textContent = updateCount;
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+}
+
+function forceUpdate() {
+    updateCount++;
+    updateDebugInfo('Fetching...', '#ffff00');
+    
+    console.log(`🔄 Force update - Step: ${currentStep}, Sim: ${simCode}`);
+    
+    fetch('/update_environment/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            step: currentStep,
+            sim_code: simCode
+        })
+    })
+    .then(response => {
+        console.log(`📡 Response status: ${response.status}, size: ${response.headers.get('content-length')} bytes`);
+        return response.json();
+    })
+    .then(data => {
+        console.log('📊 Received data:', data);
+        document.getElementById('raw-data').textContent = JSON.stringify(data, null, 2);
+        
+        if (data['<step>'] !== -1 && data.persona) {
+            updateDebugInfo('✅ Data loaded', '#00ff00');
+            displayAgents(data);
+            
+            if (data.meta && data.meta.curr_time) {
+                document.getElementById('current-time').textContent = `🕒 ${data.meta.curr_time}`;
+            }
+        } else {
+            updateDebugInfo(`⚠️ No data for step ${currentStep}`, '#ff9900');
+            console.warn(`No data available for step ${currentStep}`);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error:', error);
+        updateDebugInfo('❌ Error: ' + error.message, '#ff0000');
+    });
+}
+
+function displayAgents(data) {
+    const container = document.getElementById('agents-container');
+    container.innerHTML = '<h3>👥 Active Agents</h3>';
+    
+    if (!data.persona || Object.keys(data.persona).length === 0) {
+        container.innerHTML += '<p>No agents found in current step.</p>';
+        return;
+    }
+    
+    Object.keys(data.persona).forEach(agentName => {
+        const agent = data.persona[agentName];
+        const agentDiv = document.createElement('div');
+        
+        const isMoving = agent.movement && (agent.movement[0] !== 0 || agent.movement[1] !== 0);
+        const hasChat = agent.chat && agent.chat.length > 1;
+        
+        agentDiv.className = 'agent-card';
+        if (isMoving) agentDiv.classList.add('agent-moving');
+        if (hasChat) agentDiv.classList.add('agent-chatting');
+        
+        const position = agent.movement || [0, 0];
+        const description = agent.description || 'No activity';
+        const emoji = agent.pronunciatio || '🤖';
+        
+        agentDiv.innerHTML = `
+            <h4>${agentName} ${emoji}</h4>
+            <div class="position-indicator">📍 Position: (${position[0]}, ${position[1]})</div>
+            <div class="action-text">🎯 ${description}</div>
+            ${hasChat ? `
+                <div class="chat-bubble">
+                    <strong>💬 ${agent.chat[0]}:</strong><br>
+                    "${agent.chat[1]}"
+                </div>
+            ` : ''}
+        `;
+        
+        container.appendChild(agentDiv);
+    });
+}
+
+function nextStep() {
+    currentStep++;
+    updateDebugInfo('Moving to next step...', '#0088ff');
+    forceUpdate();
+}
+
+function resetStep() {
+    currentStep = 0;
+    updateDebugInfo('Reset to step 0', '#ff8800');
+    forceUpdate();
+}
+
+function toggleAutoUpdate() {
+    autoUpdate = !autoUpdate;
+    document.getElementById('auto-status').textContent = autoUpdate ? 'ON' : 'OFF';
+    
+    if (autoUpdate) {
+        updateInterval = setInterval(() => {
+            forceUpdate();
+        }, 4000);
+        updateDebugInfo('Auto-update enabled', '#00ff00');
+    } else {
+        clearInterval(updateInterval);
+        updateDebugInfo('Auto-update disabled', '#ffaa00');
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Initializing Enhanced Simulator');
+    console.log(`Initial state - Step: ${currentStep}, Sim: ${simCode}`);
+    
+    // Immediate first update
+    setTimeout(() => {
+        forceUpdate();
+    }, 500);
+    
+    // Start auto-update
+    if (autoUpdate) {
+        updateInterval = setInterval(() => {
+            forceUpdate();
+        }, 4000);
+    }
+});
+
+// Add some keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'r' || e.key === 'R') {
+        forceUpdate();
+    } else if (e.key === 'n' || e.key === 'N') {
+        nextStep();
+    } else if (e.key === ' ') {
+        e.preventDefault();
+        toggleAutoUpdate();
+    }
+});
+
+console.log('🎮 Enhanced Simulator loaded. Keyboard shortcuts: R=refresh, N=next step, Space=toggle auto-update');
+</script>
+
+{% endblock content %}

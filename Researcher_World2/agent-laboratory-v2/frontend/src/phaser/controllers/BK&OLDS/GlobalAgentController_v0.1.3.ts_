@@ -1,0 +1,364 @@
+// frontend/src/phaser/controllers/GlobalAgentController.ts
+
+import Phaser from 'phaser';
+import { WorldMapScene } from '../scenes/WorldMapScene';
+import { SCENE_KEYS } from '../game';
+import { LAB_TYPES, LabTypeId } from '../types/LabTypeConstants';
+
+/**
+ * Interfaccia che definisce i dati di un agente per la visualizzazione sulla mappa mondiale
+ */
+interface AgentData {
+  id: string;
+  type: string;
+  labScene: string;
+  x: number;
+  y: number;
+  targetX?: number;
+  targetY?: number;
+  moving?: boolean;
+  state?: string;
+}
+
+/**
+ * Interfaccia per le dimensioni reali di un laboratorio
+ */
+interface LabDimensions {
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * Controller globale per gestire gli agenti nella mappa mondiale.
+ * Coordina le informazioni sugli agenti tra i diversi laboratori e aggiorna le miniature.
+ */
+export class GlobalAgentController {
+  private scene: WorldMapScene;
+  private agents: AgentData[] = [];
+  private agentUpdateInterval: number = 0;
+  private labDimensions: Map<string, LabDimensions> = new Map();
+  
+  constructor(scene: WorldMapScene) {
+    this.scene = scene;
+    
+    // Imposta le dimensioni reali di ogni laboratorio
+    // Queste sono dimensioni approssimative e potrebbero dover essere aggiustate
+    this.labDimensions.set(SCENE_KEYS.MERCATORUM, {
+      width: 960,
+      height: 540,
+      offsetX: 0,
+      offsetY: 0
+    });
+    
+    this.labDimensions.set(SCENE_KEYS.BLEKINGE, {
+      width: 960,
+      height: 540,
+      offsetX: 0,
+      offsetY: 0
+    });
+    
+    this.labDimensions.set(SCENE_KEYS.OPBG, {
+      width: 960,
+      height: 540,
+      offsetX: 0,
+      offsetY: 0
+    });
+  }
+  
+  /**
+   * Inizializza il controller globale degli agenti
+   */
+  initialize(): void {
+    console.log("GlobalAgentController: Initializing");
+    
+    // Carica i dati iniziali degli agenti da tutti i laboratori
+    this.loadAgentsData();
+    
+    // Imposta un intervallo per aggiornare periodicamente la posizione degli agenti
+    this.agentUpdateInterval = window.setInterval(() => {
+      this.updateAgentsData();
+    }, 500); // Aggiorna più frequentemente (ogni 0.5 secondi)
+  }
+  
+  /**
+   * Aggiorna la visualizzazione degli agenti a ogni frame
+   */
+  update(time: number, delta: number): void {
+    // Aggiorna le posizioni degli agenti in movimento fluido
+    this.updateAgentMovement(delta);
+  }
+  
+  /**
+   * Pulisce le risorse quando il controller non è più necessario
+   */
+  destroy(): void {
+    console.log("GlobalAgentController: Cleaning up");
+    
+    // Pulisci le risorse quando il controller non è più necessario
+    if (this.agentUpdateInterval) {
+      clearInterval(this.agentUpdateInterval);
+    }
+  }
+  
+  /**
+   * Carica i dati iniziali degli agenti dai laboratori
+   */
+  private loadAgentsData(): void {
+    console.log("GlobalAgentController: Loading initial agent data");
+    
+    // In una implementazione reale, questi dati potrebbero provenire
+    // da un'API o dallo store React/Redux
+    
+    // Dati di esempio per agenti del laboratorio Mercatorum
+    const mercatorumAgents = [
+      { id: 'prof1', type: 'professor', labScene: SCENE_KEYS.MERCATORUM, x: 200, y: 200 },
+      { id: 'res1', type: 'researcher', labScene: SCENE_KEYS.MERCATORUM, x: 400, y: 250 },
+      { id: 'stu1', type: 'phd_student', labScene: SCENE_KEYS.MERCATORUM, x: 300, y: 350 },
+    ];
+    
+    // Dati di esempio per agenti del laboratorio Blekinge
+    const blekingeAgents = [
+      { id: 'prof2', type: 'professor', labScene: SCENE_KEYS.BLEKINGE, x: 250, y: 200 },
+      { id: 'eng1', type: 'ml_engineer', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 300 },
+      { id: 'res2', type: 'researcher', labScene: SCENE_KEYS.BLEKINGE, x: 500, y: 250 },
+    ];
+    
+    // Dati di esempio per agenti del laboratorio OPBG
+    const opbgAgents = [
+      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 200, y: 250 },
+      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 350, y: 300 },
+      { id: 'eng2', type: 'biomedical', labScene: SCENE_KEYS.OPBG, x: 450, y: 200 },
+    ];
+    
+    // Unisci tutti i dati degli agenti
+    this.agents = [...mercatorumAgents, ...blekingeAgents, ...opbgAgents];
+    
+    // Aggiorna la visualizzazione degli agenti nelle miniature
+    this.updateLabMiniaturesWithAgents();
+  }
+  
+  /**
+   * Aggiorna i dati degli agenti, simulando il movimento
+   */
+  private updateAgentsData(): void {
+    // In una implementazione reale, qui faresti una chiamata API per
+    // ottenere i dati aggiornati degli agenti da tutti i laboratori
+    
+    // Simula decisioni degli agenti - cambia target e stato
+    this.agents.forEach(agent => {
+      // Solo alcuni agenti prendono decisioni per volta (per movimento naturale)
+      if (Math.random() > 0.7) {
+        // Decide se l'agente deve muoversi verso un nuovo punto
+        if (!agent.moving || Math.random() > 0.6) {
+          const labDimensions = this.labDimensions.get(agent.labScene);
+          if (labDimensions) {
+            // Calcola una nuova destinazione entro i confini del laboratorio
+            agent.targetX = Math.max(50, Math.min(labDimensions.width - 50, 
+              agent.x + (Math.random() - 0.5) * 300)); // Movimento più realistico
+              
+            agent.targetY = Math.max(50, Math.min(labDimensions.height - 50, 
+              agent.y + (Math.random() - 0.5) * 200));
+              
+            // Imposta lo stato in movimento
+            agent.moving = true;
+            agent.state = 'walking';
+          }
+        } else if (agent.moving && Math.random() > 0.9) {
+          // Occasionalmente l'agente si ferma anche se non ha raggiunto la destinazione
+          agent.moving = false;
+          agent.state = 'idle';
+        }
+      }
+    });
+    
+    // Aggiorna la visualizzazione degli agenti nelle miniature
+    this.updateLabMiniaturesWithAgents();
+  }
+  
+  /**
+   * Aggiorna la posizione degli agenti in movimento per renderla più fluida
+   */
+  private updateAgentMovement(delta: number): void {
+    let agentsUpdated = false;
+    
+    // Aggiorna tutti gli agenti in movimento
+    this.agents.forEach(agent => {
+      if (agent.moving && agent.targetX !== undefined && agent.targetY !== undefined) {
+        // Calcola la direzione e la distanza verso la destinazione
+        const dx = agent.targetX - agent.x;
+        const dy = agent.targetY - agent.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Se l'agente è abbastanza vicino alla destinazione, consideralo arrivato
+        if (distance < 5) {
+          agent.x = agent.targetX;
+          agent.y = agent.targetY;
+          agent.moving = false;
+          agent.state = 'idle';
+          agentsUpdated = true;
+        } else {
+          // Altrimenti, muovi l'agente verso la destinazione
+          const speed = 80; // Pixel al secondo
+          const speedFactor = speed * (delta / 1000);
+          
+          // Applica il movimento in base alla velocità
+          const normX = dx / distance;
+          const normY = dy / distance;
+          
+          agent.x += normX * speedFactor;
+          agent.y += normY * speedFactor;
+          agentsUpdated = true;
+        }
+      }
+    });
+    
+    // Aggiorna le miniature solo se ci sono stati cambiamenti
+    if (agentsUpdated) {
+      this.updateLabMiniaturesWithAgents();
+    }
+  }
+  
+  /**
+   * Converte le coordinate di un laboratorio in coordinate per la miniatura
+   */
+  private convertLabCoordsToMiniature(
+    x: number, 
+    y: number, 
+    labScene: string
+  ): { miniX: number, miniY: number } {
+    // Ottieni le dimensioni del laboratorio
+    const labDimensions = this.labDimensions.get(labScene);
+    
+    if (!labDimensions) {
+      console.warn(`No dimensions found for lab ${labScene}`);
+      return { miniX: 0, miniY: 0 };
+    }
+    
+    // Calcola la posizione proporzionale all'interno del laboratorio (valori da 0 a 1)
+    const relativeX = (x - labDimensions.offsetX) / labDimensions.width;
+    const relativeY = (y - labDimensions.offsetY) / labDimensions.height;
+    
+    // Mappa questa posizione relativa sulla miniatura
+    // Le dimensioni 150x120 sono quelle della miniatura specificate in LabMiniature.ts
+    // Usiamo un fattore di scala più piccolo per mantenere gli agenti entro i bordi
+    const miniatureWidth = 130;
+    const miniatureHeight = 100;
+    
+    // Mappa le coordinate centrandole nella miniatura
+    const miniX = (relativeX - 0.5) * miniatureWidth;
+    const miniY = (relativeY - 0.5) * miniatureHeight;
+    
+    return { miniX, miniY };
+  }
+  
+  /**
+   * Aggiorna le miniature dei laboratori con i dati degli agenti
+   */
+  private updateLabMiniaturesWithAgents(): void {
+    // Raggruppa gli agenti per laboratorio
+    const mercatorumAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.MERCATORUM);
+    const blekingeAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.BLEKINGE);
+    const opbgAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.OPBG);
+    
+    // Converti le coordinate del laboratorio in coordinate per la miniatura
+    const mercatorumAgentsWithMiniCoords = mercatorumAgents.map(agent => {
+      const { miniX, miniY } = this.convertLabCoordsToMiniature(agent.x, agent.y, agent.labScene);
+      return {
+        ...agent,
+        miniX,
+        miniY,
+        state: agent.state || 'idle'
+      };
+    });
+    
+    const blekingeAgentsWithMiniCoords = blekingeAgents.map(agent => {
+      const { miniX, miniY } = this.convertLabCoordsToMiniature(agent.x, agent.y, agent.labScene);
+      return {
+        ...agent,
+        miniX,
+        miniY,
+        state: agent.state || 'idle'
+      };
+    });
+    
+    const opbgAgentsWithMiniCoords = opbgAgents.map(agent => {
+      const { miniX, miniY } = this.convertLabCoordsToMiniature(agent.x, agent.y, agent.labScene);
+      return {
+        ...agent,
+        miniX,
+        miniY,
+        state: agent.state || 'idle'
+      };
+    });
+    
+    try {
+      // Funzione di supporto per ottenere la miniatura con varie chiavi di fallback
+      const getMiniature = (labTypeId: LabTypeId | string) => {
+        // Prova diverse varianti della chiave
+        const variations = [
+          labTypeId,                   // Es. "MERCATORUM"
+          labTypeId.toLowerCase(),     // Es. "mercatorum"
+          String(labTypeId).toUpperCase(), // Es. "MERCATORUM" (da stringa)
+          String(labTypeId).toLowerCase()  // Es. "mercatorum" (da stringa)
+        ];
+        
+        // Controlla se la mappa labMiniatures esiste
+        if (!this.scene['labMiniatures'] || typeof this.scene['labMiniatures'].get !== 'function') {
+          console.warn("labMiniatures map is not available in the scene");
+          return null;
+        }
+        
+        // Prova ogni variazione fino a trovare una miniatura
+        for (const key of variations) {
+          const miniature = this.scene['labMiniatures'].get(key);
+          if (miniature) return miniature;
+        }
+        
+        console.warn(`No miniature found for lab ${labTypeId} with any key variation`);
+        return null;
+      };
+      
+      // Ottieni riferimenti alle miniature dei laboratori
+      const mercatorumMiniature = getMiniature(LAB_TYPES.MERCATORUM);
+      const blekingeMiniature = getMiniature(LAB_TYPES.BLEKINGE);
+      const opbgMiniature = getMiniature(LAB_TYPES.OPBG);
+      
+      // Debug dei valori delle chiavi
+      console.debug("Lab type keys:", {
+        mercatorum: LAB_TYPES.MERCATORUM,
+        blekinge: LAB_TYPES.BLEKINGE,
+        opbg: LAB_TYPES.OPBG
+      });
+      
+      // Debug delle miniature trovate
+      console.debug("Miniatures found:", {
+        mercatorum: !!mercatorumMiniature,
+        blekinge: !!blekingeMiniature,
+        opbg: !!opbgMiniature
+      });
+      
+      // Aggiorna le miniature solo se sono disponibili e hanno il metodo richiesto
+      if (mercatorumMiniature && typeof mercatorumMiniature.updateAgentPositions === 'function') {
+        mercatorumMiniature.updateAgentPositions(mercatorumAgentsWithMiniCoords);
+      } else {
+        console.warn("mercatorumMiniature is not available or doesn't have updateAgentPositions method");
+      }
+      
+      if (blekingeMiniature && typeof blekingeMiniature.updateAgentPositions === 'function') {
+        blekingeMiniature.updateAgentPositions(blekingeAgentsWithMiniCoords);
+      } else {
+        console.warn("blekingeMiniature is not available or doesn't have updateAgentPositions method");
+      }
+      
+      if (opbgMiniature && typeof opbgMiniature.updateAgentPositions === 'function') {
+        opbgMiniature.updateAgentPositions(opbgAgentsWithMiniCoords);
+      } else {
+        console.warn("opbgMiniature is not available or doesn't have updateAgentPositions method");
+      }
+    } catch (error) {
+      console.error("Error updating lab miniatures:", error);
+    }
+  }
+}

@@ -1,0 +1,326 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import './App.css';
+import SimulationContainer from './components/SimulationContainer';
+import { Game } from './phaser/game';
+import { webSocketService } from './services/api';
+import { debugScenes } from './utils/debugScenes';
+import { testBlekingeScene } from './utils/testBlekingeScene';
+
+// Definizione type-safe delle scene del laboratorio
+type LabType = 'MercatorumLab' | 'BlekingeLabScene' | 'OPBGLabScene';
+type SimulationStatus = 'stopped' | 'running' | 'paused';
+
+function App() {
+  const [game, setGame] = useState<Game | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [currentLab, setCurrentLab] = useState<LabType>('MercatorumLab');
+  const [simStatus, setSimStatus] = useState<SimulationStatus>('stopped');
+  const [agentCount, setAgentCount] = useState<number>(5);
+  const [flProgress, setFlProgress] = useState<number>(0);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  // Handler per aggiornamenti dello stato della simulazione
+  const handleSimulationStatus = useCallback((data: any) => {
+    if (data.status) {
+      setSimStatus(data.status as SimulationStatus);
+    }
+    if (data.flProgress !== undefined) {
+      setFlProgress(data.flProgress);
+    }
+    if (data.agentCount !== undefined) {
+      setAgentCount(data.agentCount);
+    }
+  }, []);
+
+  // Inizializza WebSocket quando il componente viene montato
+  useEffect(() => {
+    let isMounted = true;
+    
+    const connectWebSocket = async () => {
+      try {
+        await webSocketService.connect();
+        
+        if (isMounted) {
+          setConnected(true);
+          
+          // Richiedi lo stato iniziale
+          webSocketService.sendMessage('getSimulationStatus');
+        }
+      } catch (error) {
+        console.error('WebSocket connection failed:', error);
+        if (isMounted) {
+          setConnected(false);
+        }
+      }
+    };
+    
+    // Registra i listener
+    webSocketService.onMessage('simulationStatus', handleSimulationStatus);
+    
+    // Connettiti al WebSocket
+    connectWebSocket();
+
+    // Verifica periodicamente lo stato della connessione
+    const connectionCheckInterval = setInterval(() => {
+      if (isMounted) {
+        const isConnected = webSocketService.isConnected();
+        if (connected !== isConnected) {
+          setConnected(isConnected);
+          
+          // Se è appena stato riconnesso, richiedi lo stato corrente
+          if (isConnected) {
+            webSocketService.sendMessage('getSimulationStatus');
+          }
+        }
+      }
+    }, 5000);
+
+    // Cleanup
+    return () => {
+      isMounted = false;
+      clearInterval(connectionCheckInterval);
+      webSocketService.offMessage('simulationStatus', handleSimulationStatus);
+      webSocketService.disconnect();
+    };
+  }, [connected, handleSimulationStatus]);
+
+  // Callback per quando il gioco Phaser è pronto
+  const handleGameReady = useCallback((gameInstance: Game) => {
+    console.log('Phaser game initialized and ready');
+    
+    // Esegui il debug delle scene
+    const debugResult = debugScenes(gameInstance);
+    setDebugInfo(debugResult);
+    
+    setGame(gameInstance);
+  }, []);
+  
+  // Funzione per cambiare il laboratorio corrente
+  const switchLab = useCallback((labKey: LabType) => {
+    if (game && game.scene) {
+      try {
+        console.log(`Switching to lab: ${labKey}`);
+        
+        // Debug per verificare le scene disponibili
+        const sceneInfo = debugScenes(game);
+        console.log('Available scenes before switching:', sceneInfo);
+        
+        // Verifica se la scena esiste
+        if (!game.scene.scenes.some(scene => scene.scene.key === labKey)) {
+          console.error(`Scene "${labKey}" does not exist in the game`, game.scene.scenes.map(s => s.scene.key));
+          
+          // Se la scena non esiste, prova a diagnosticare il problema
+          if (labKey === 'BlekingeLabScene') {
+            console.log('Attempting to diagnose BlekingeLabScene issue...');
+            const testResult = testBlekingeScene();
+            setDebugInfo(testResult);
+          }
+          
+          return;
+        }
+        
+        // Disattiva tutte le scene
+        game.scene.scenes.forEach(scene => {
+          if (scene.scene.isActive()) {
+            console.log(`Stopping scene: ${scene.scene.key}`);
+            scene.scene.stop();
+          }
+        });
+        
+        // Attiva la scena selezionata con controllo di errore
+        try {
+          console.log(`Starting scene: ${labKey}`);
+          game.scene.start(labKey);
+          setCurrentLab(labKey);
+          
+          // Informa il backend del cambio di laboratorio
+          webSocketService.sendMessage('switchLab', { lab: labKey });
+        } catch (error) {
+          console.error(`Error starting scene ${labKey}:`, error);
+        }
+      } catch (error) {
+        console.error('Error in switchLab:', error);
+      }
+    } else {
+      console.warn('Game is not initialized yet, cannot switch lab');
+    }
+  }, [game]);
+  
+  // Gestisci i controlli della simulazione
+  const handleSimulationControl = useCallback((action: string) => {
+    webSocketService.sendMessage('simulationControl', { action });
+    
+    // Aggiorna lo stato locale per una UI reattiva
+    // Il vero stato viene aggiornato quando il server risponde
+    switch (action) {
+      case 'start':
+        setSimStatus('running');
+        break;
+      case 'pause':
+        setSimStatus('paused');
+        break;
+      case 'stop':
+        setSimStatus('stopped');
+        break;
+      case 'reset':
+        setSimStatus('stopped');
+        setFlProgress(0);
+        break;
+    }
+  }, []);
+
+  // Handler per il pulsante di debug
+  const handleDebugClick = useCallback(() => {
+    if (game) {
+      const debugResult = debugScenes(game);
+      setDebugInfo(debugResult);
+      
+      // Test della scena Blekinge
+      const testResult = testBlekingeScene();
+      console.log('Blekinge test result:', testResult);
+    } else {
+      console.warn('No game instance available for debugging');
+    }
+  }, [game]);
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <div className="header-left">
+          <h1>Agent Laboratory</h1>
+          <p>Simulatore di Federated Learning</p>
+        </div>
+        <div className="header-right">
+          <div className="simulation-status">
+            <span className={`status-badge ${simStatus}`}>
+              {simStatus === 'running' && 'In esecuzione'}
+              {simStatus === 'paused' && 'In pausa'}
+              {simStatus === 'stopped' && 'Arrestato'}
+            </span>
+          </div>
+          <div className="connection-status">
+            <span className={connected ? 'connected' : 'disconnected'}>
+              <span className="status-indicator"></span>
+              {connected ? 'Backend connesso' : 'Backend disconnesso'}
+            </span>
+          </div>
+        </div>
+      </header>
+      
+      <main>
+        <div className="simulation-section">
+          <SimulationContainer onGameReady={handleGameReady} />
+        </div>
+        
+        <div className="controls-section">
+          <h2>Controlli Simulazione</h2>
+          
+          <div className="controls-group">
+            <h3>Laboratorio</h3>
+            <div className="button-group">
+              <button 
+                onClick={() => switchLab('MercatorumLab')}
+                className={currentLab === 'MercatorumLab' ? 'active' : 'secondary'}
+                disabled={!game}
+              >
+                Università Mercatorum
+              </button>
+              <button 
+                onClick={() => switchLab('BlekingeLabScene')}
+                className={currentLab === 'BlekingeLabScene' ? 'active' : 'secondary'}
+                disabled={!game}
+              >
+                Blekinge Lab
+              </button>
+              <button 
+                onClick={() => switchLab('OPBGLabScene')}
+                className={currentLab === 'OPBGLabScene' ? 'active' : 'secondary'}
+                disabled={!game}
+              >
+                OPBG IRCCS Lab
+              </button>
+            </div>
+          </div>
+          
+          <div className="controls-group">
+            <h3>Simulazione</h3>
+            <div className="button-group">
+              <button 
+                onClick={() => handleSimulationControl('start')}
+                disabled={simStatus === 'running' || !connected}
+              >
+                Avvia Simulazione
+              </button>
+              <button 
+                onClick={() => handleSimulationControl('pause')}
+                disabled={simStatus !== 'running' || !connected}
+              >
+                Pausa
+              </button>
+              <button 
+                onClick={() => handleSimulationControl('stop')}
+                disabled={simStatus === 'stopped' || !connected}
+              >
+                Arresta
+              </button>
+              <button 
+                onClick={() => handleSimulationControl('reset')}
+                className="secondary"
+                disabled={!connected}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          
+          <div className="controls-group">
+            <h3>Statistiche</h3>
+            <div className="stats-container">
+              <div className="stat-item">
+                <span className="stat-label">Agenti:</span>
+                <span className="stat-value">{agentCount}</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-label">FL Progress:</span>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ width: `${flProgress}%` }}
+                  ></div>
+                </div>
+                <span className="stat-value">{flProgress}%</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Pulsante di debug e info */}
+          <div className="controls-group">
+            <h3>Debug</h3>
+            <button 
+              onClick={handleDebugClick}
+              className="secondary"
+            >
+              Debug Scenes
+            </button>
+            
+            {debugInfo && (
+              <div className="debug-info">
+                <h4>Scene registrate:</h4>
+                <pre>
+                  {JSON.stringify(debugInfo.scenes || [], null, 2)}
+                </pre>
+                
+                <h4>Scene attive:</h4>
+                <pre>
+                  {JSON.stringify(debugInfo.activeScenes || [], null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default App;

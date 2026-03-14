@@ -1,0 +1,100 @@
+import axios from 'axios';
+import { io, Socket } from 'socket.io-client';
+
+// Configura l'URL base dall'ambiente o usa un default
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8050';
+export const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8050/ws';
+
+// Client API per richieste HTTP
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Classe per gestire la connessione WebSocket
+export class WebSocketService {
+  private socket: WebSocket | null = null;
+  private messageHandlers: Array<(data: any) => void> = [];
+
+  connect(): void {
+    if (this.socket) {
+      this.socket.close();
+    }
+
+    this.socket = new WebSocket(WS_URL);
+
+    this.socket.onopen = () => {
+      console.log('WebSocket connection established');
+    };
+
+    this.socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.messageHandlers.forEach(handler => handler(data));
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    this.socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    this.socket.onclose = () => {
+      console.log('WebSocket connection closed');
+      // Riconnetti dopo un breve ritardo
+      setTimeout(() => this.connect(), 5000);
+    };
+  }
+
+  disconnect(): void {
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+  }
+
+  sendMessage(message: any): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(message));
+    } else {
+      console.warn('WebSocket not connected, message not sent');
+    }
+  }
+
+  addMessageHandler(handler: (data: any) => void): void {
+    this.messageHandlers.push(handler);
+  }
+
+  removeMessageHandler(handler: (data: any) => void): void {
+    this.messageHandlers = this.messageHandlers.filter(h => h !== handler);
+  }
+}
+
+// Istanza singleton del servizio WebSocket
+export const webSocketService = new WebSocketService();
+
+// API per interagire con il backend
+export const simulationApi = {
+  getConfig: async () => {
+    const response = await apiClient.get('/config');
+    return response.data;
+  },
+  
+  startSimulation: async () => {
+    const response = await apiClient.post('/simulation/start');
+    return response.data;
+  },
+  
+  stopSimulation: async () => {
+    const response = await apiClient.post('/simulation/stop');
+    return response.data;
+  },
+  
+  getSimulationState: async () => {
+    const response = await apiClient.get('/simulation/state');
+    return response.data;
+  }
+};

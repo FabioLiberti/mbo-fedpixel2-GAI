@@ -1,0 +1,125 @@
+import Phaser from 'phaser';
+
+export class LabMiniature extends Phaser.GameObjects.Container {
+  private readonly backgroundImage: Phaser.GameObjects.Image;
+  private readonly nameText: Phaser.GameObjects.Text;
+  private readonly targetScene: string;
+  private readonly hitArea: Phaser.GameObjects.Rectangle;
+  private agentDots: Phaser.GameObjects.Sprite[] = [];
+  
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    texture: string,
+    name: string,
+    targetScene: string
+  ) {
+    // Cast della scena a any per aggirare il controllo dei tipi
+    super(scene as any, x, y);
+    this.targetScene = targetScene;
+    
+    // Aggiunta dell'immagine del laboratorio
+    this.backgroundImage = scene.add.image(0, 0, texture)
+      .setDisplaySize(200, 150);
+    
+    // Aggiunta del nome del laboratorio
+    this.nameText = scene.add.text(0, 85, name, {
+      fontFamily: 'Arial',
+      fontSize: '14px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3
+    }).setOrigin(0.5);
+    
+    // Creazione dell'area cliccabile
+    this.hitArea = scene.add.rectangle(0, 0, 200, 150, 0xffffff, 0)
+      .setInteractive({ useHandCursor: true });
+    
+    // Aggiunta di una cornice per evidenziare quando si passa il mouse
+    const border = scene.add.rectangle(0, 0, 208, 158, 0xffffff, 0)
+      .setStrokeStyle(4, 0x3a86ff, 0);
+    
+    // Aggiunta di tutti gli elementi al container
+    this.add([this.backgroundImage, border, this.nameText, this.hitArea]);
+    
+    // Aggiunta del container alla scena
+    scene.add.existing(this);
+    
+    // Configurazione degli eventi di interazione
+    this.setupInteraction();
+  }
+  
+  getPosition(): Phaser.Math.Vector2 {
+    return new Phaser.Math.Vector2(this.x, this.y);
+  }
+  
+  addAgentDot(x: number, y: number, agentType: string): void {
+    // Crea un punto molto più piccolo e con opacità ridotta
+    const color = this.getAgentColor(agentType);
+    const phaserScene = this.scene as any;
+    
+    const dot = phaserScene.add.sprite(x, y, 'agent-dot')
+      .setScale(0.05)  // Ridotto drasticamente (1/20 della dimensione originale)
+      .setAlpha(0.2)   // Molto trasparente
+      .setTint(color);
+    
+    this.agentDots.push(dot);
+    this.add(dot);
+  }
+  
+  updateAgentPositions(agents: Array<{id: string, x: number, y: number, type: string}>): void {
+    // Rimuovi tutti i punti degli agenti esistenti
+    this.agentDots.forEach(dot => dot.destroy());
+    this.agentDots = [];
+    
+    // Aggiungi i nuovi punti
+    agents.forEach(agent => {
+      // Converti le coordinate dello spazio reale del laboratorio in coordinate della miniatura
+      const miniX = (agent.x / 1024) * 180 - 90; // Assumendo una mappa di laboratorio 1024x1024
+      const miniY = (agent.y / 1024) * 130 - 65;
+      this.addAgentDot(miniX, miniY, agent.type);
+    });
+  }
+  
+  update(time: number, delta: number): void {
+    // Aggiorna animazioni o effetti visivi se necessario
+  }
+  
+  private setupInteraction(): void {
+    const border = this.getAt(1) as Phaser.GameObjects.Rectangle;
+    
+    this.hitArea.on('pointerover', () => {
+      border.setStrokeStyle(4, 0x3a86ff, 1);
+      this.setScale(1.05);
+    });
+    
+    this.hitArea.on('pointerout', () => {
+      border.setStrokeStyle(4, 0x3a86ff, 0);
+      this.setScale(1);
+    });
+    
+    this.hitArea.on('pointerdown', () => {
+      // Emetti un evento quando il laboratorio viene selezionato
+      this.emit('labSelected', this.targetScene);
+    });
+  }
+  
+  private getAgentColor(agentType: string): number {
+    // Colori più tenui e meno invadenti
+    switch (agentType) {
+      case 'professor':
+        return 0xff8080; // Rosso più chiaro
+      case 'researcher':
+        return 0x80ff80; // Verde più chiaro
+      case 'student':
+        return 0x8080ff; // Blu più chiaro
+      case 'engineer':
+        return 0xffff80; // Giallo più chiaro
+      case 'doctor':
+        return 0xff80ff; // Magenta più chiaro
+      default:
+        return 0xdddddd; // Grigio chiaro
+    }
+  }
+}

@@ -1,0 +1,433 @@
+// DocumentationController.ts
+// Gestisce il caricamento e la gestione dei documenti di progetto
+
+import { EventEmitter } from 'events';
+
+// Definizione dei tipi di documento supportati
+export type DocumentType = 'pdf' | 'md';
+
+// Interfaccia per i documenti
+export interface DocumentMetadata {
+  id: string;
+  title: string;
+  type: DocumentType;
+  path: string;
+  category: string;
+  description?: string;
+  dateAdded?: string;
+  version?: string;
+}
+
+// Interface per le opzioni di configurazione
+export interface DocumentationOptions {
+  baseUrl?: string;
+  enableCaching?: boolean;
+  defaultCategory?: string;
+}
+
+/**
+ * Controller per la gestione della documentazione del progetto
+ * Fornisce metodi per caricare, filtrare e visualizzare documenti
+ */
+export class DocumentationController extends EventEmitter {
+  private documents: DocumentMetadata[] = [];
+  private documentsMap: Map<string, DocumentMetadata> = new Map();
+  private categories: Set<string> = new Set();
+  private options: DocumentationOptions;
+  private isInitialized: boolean = false;
+  private loadingPromise: Promise<void> | null = null;
+
+  constructor(options: DocumentationOptions = {}) {
+    super();
+    this.options = {
+      baseUrl: options.baseUrl || '/docs',
+      enableCaching: options.enableCaching !== undefined ? options.enableCaching : true,
+      defaultCategory: options.defaultCategory || 'Tutti'
+    };
+  }
+
+  /**
+   * Inizializza il controller caricando l'indice dei documenti
+   */
+  async initialize(): Promise<void> {
+    if (this.isInitialized) return;
+    
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
+    
+    this.loadingPromise = new Promise<void>(async (resolve, reject) => {
+      try {
+        // Normalmente faremmo una richiesta fetch per caricare l'indice dei documenti
+        // ma per questo esempio useremo un indice statico
+        await this.simulateLoadingDelay();
+        
+        // Documenti di esempio
+        const docsIndex = [
+          {
+            id: 'architecture',
+            title: 'Architettura di Sistema',
+            type: 'pdf' as DocumentType,
+            path: `${this.options.baseUrl}/agent-laboratory-architecture.pdf`,
+            category: 'Tecnico',
+            description: 'Panoramica dell\'architettura del sistema e dei componenti principali',
+            version: '1.0.0',
+            dateAdded: '2025-04-30'
+          },
+          {
+            id: 'user-guide',
+            title: 'Guida Utente',
+            type: 'md' as DocumentType,
+            path: `${this.options.baseUrl}/user-guide.md`,
+            category: 'Guida',
+            description: 'Istruzioni complete per l\'utilizzo dell\'applicazione Agent Laboratory',
+            version: '1.1.0',
+            dateAdded: '2025-04-29'
+          },
+          {
+            id: 'fl-explanation',
+            title: 'Federated Learning',
+            type: 'md' as DocumentType,
+            path: `${this.options.baseUrl}/federated-learning.md`,
+            category: 'Tecnico',
+            description: 'Spiegazione dettagliata del federated learning e dell\'implementazione nel progetto',
+            version: '1.0.1',
+            dateAdded: '2025-04-28'
+          },
+          {
+            id: 'labs-description',
+            title: 'Laboratori Virtuali',
+            type: 'pdf' as DocumentType,
+            path: `${this.options.baseUrl}/virtual-labs.pdf`,
+            category: 'Descrizione',
+            description: 'Descrizione dei tre laboratori virtuali e delle loro specializzazioni',
+            version: '1.0.0',
+            dateAdded: '2025-04-27'
+          },
+          {
+            id: 'agents-system',
+            title: 'Sistema Agenti',
+            type: 'md' as DocumentType,
+            path: `${this.options.baseUrl}/agent-system.md`,
+            category: 'Tecnico',
+            description: 'Documentazione del sistema di agenti autonomi e loro comportamenti',
+            version: '1.0.2',
+            dateAdded: '2025-04-26'
+          },
+          {
+            id: 'roadmap',
+            title: 'Roadmap di Sviluppo',
+            type: 'md' as DocumentType,
+            path: `${this.options.baseUrl}/development-roadmap.md`,
+            category: 'Pianificazione',
+            description: 'Piano di sviluppo futuro e milestone del progetto',
+            version: '1.0.0',
+            dateAdded: '2025-04-25'
+          },
+          {
+            id: 'pixel-art-guidelines',
+            title: 'Linee Guida Pixel Art',
+            type: 'pdf' as DocumentType,
+            path: `${this.options.baseUrl}/pixel-art-guidelines.pdf`,
+            category: 'Design',
+            description: 'Linee guida per la creazione e l\'implementazione della grafica pixel art',
+            version: '1.0.0',
+            dateAdded: '2025-04-24'
+          }
+        ];
+        
+        // Aggiorna la lista documenti e le categorie
+        this.documents = docsIndex;
+        
+        // Popola la mappa documenti per accesso rapido
+        this.documentsMap.clear();
+        for (const doc of this.documents) {
+          this.documentsMap.set(doc.id, doc);
+          this.categories.add(doc.category);
+        }
+        
+        this.isInitialized = true;
+        this.emit('initialized', this.getStats());
+        resolve();
+      } catch (error) {
+        console.error('Errore durante l\'inizializzazione della documentazione:', error);
+        this.emit('error', error);
+        reject(error);
+      } finally {
+        this.loadingPromise = null;
+      }
+    });
+    
+    return this.loadingPromise;
+  }
+  
+  /**
+   * Simula un ritardo di caricamento per i test
+   */
+  private async simulateLoadingDelay(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 300));
+  }
+  
+  /**
+   * Ottieni tutti i documenti disponibili
+   */
+  getAllDocuments(): DocumentMetadata[] {
+    return [...this.documents];
+  }
+  
+  /**
+   * Ottieni un documento specifico tramite ID
+   */
+  getDocumentById(id: string): DocumentMetadata | undefined {
+    return this.documentsMap.get(id);
+  }
+  
+  /**
+   * Filtra i documenti per categoria
+   */
+  getDocumentsByCategory(category: string): DocumentMetadata[] {
+    if (category === this.options.defaultCategory) {
+      return this.getAllDocuments();
+    }
+    return this.documents.filter(doc => doc.category === category);
+  }
+  
+  /**
+   * Ottieni tutte le categorie disponibili
+   */
+  getCategories(): string[] {
+    return [this.options.defaultCategory as string, ...Array.from(this.categories)];
+  }
+  
+  /**
+   * Carica il contenuto di un documento markdown
+   * In un ambiente reale, questo farebbe una richiesta fetch al server
+   */
+  async loadMarkdownContent(documentId: string): Promise<string> {
+    const document = this.getDocumentById(documentId);
+    
+    if (!document) {
+      throw new Error(`Documento non trovato: ${documentId}`);
+    }
+    
+    if (document.type !== 'md') {
+      throw new Error(`Il documento ${documentId} non è un file markdown`);
+    }
+    
+    // Simula una richiesta di rete
+    await this.simulateLoadingDelay();
+    
+    // Contenuto Markdown di esempio basato sull'ID del documento
+    const contentMap: Record<string, string> = {
+      'user-guide': `# Guida Utente - Agent Laboratory
+
+## Introduzione
+
+Agent Laboratory è un simulatore interattivo che modella un ecosistema di ricerca sul federated learning attraverso tre laboratori virtuali rappresentati in grafica pixel art 2D.
+
+## Laboratori Virtuali
+
+* **Università Mercatorum**: Specializzato in business intelligence e analisi finanziaria federata
+* **Blekinge University**: Specializzato in algoritmi di aggregazione avanzati e edge computing
+* **OPBG IRCCS**: Specializzato in federated learning per dati medici altamente sensibili
+
+## Controlli di Base
+
+1. **Navigazione**: Clicca su un laboratorio nella mappa mondiale per visitarlo
+2. **Informazioni**: Usa il pulsante "Info" per visualizzare dettagli su ciascun ambiente
+3. **Simulazione**: Usa i controlli nella barra laterale per avviare, mettere in pausa o resettare la simulazione
+
+## Visualizzazione FL Process
+
+Attiva la visualizzazione del processo Federated Learning tramite il pulsante "FL Process" nel menu.`,
+
+      'fl-explanation': `# Federated Learning in Agent Laboratory
+
+## Cos'è il Federated Learning?
+
+Il Federated Learning (FL) è un approccio di machine learning che addestra un algoritmo attraverso più dispositivi o server decentralizzati che contengono campioni di dati locali, senza scambiare direttamente tali dati.
+
+## Implementazione in Agent Laboratory
+
+Nel nostro simulatore, il FL è implementato come:
+
+1. **Oggetto di ricerca**: Gli agenti virtuali studiano e migliorano gli algoritmi FL
+2. **Meccanismo strutturale**: La conoscenza viene condivisa tra laboratori senza centralizzazione
+
+## Algoritmi principali
+
+\`\`\`typescript
+// Esempio semplificato di FedAvg (Federated Averaging)
+function fedAvg(localModels) {
+  const globalModel = initializeModel();
+  
+  // Aggregazione dei pesi dei modelli locali
+  for (const model of localModels) {
+    for (let i = 0; i < globalModel.weights.length; i++) {
+      globalModel.weights[i] += model.weights[i] / localModels.length;
+    }
+  }
+  
+  return globalModel;
+}
+\`\`\`
+
+## Vantaggi del Federated Learning
+
+* Privacy dei dati migliorata
+* Riduzione dei costi di trasmissione
+* Possibilità di sfruttare dati eterogenei
+* Conformità alle normative (es. GDPR)`,
+
+      'agents-system': `# Sistema degli Agenti in Agent Laboratory
+
+## Tipologie di Agenti
+
+Agent Laboratory implementa diverse categorie di agenti autonomi:
+
+### Ruoli Accademici
+- PhD Student
+- Researcher (Post-Doc)
+- Professor
+
+### Ruoli Tecnici
+- ML Engineer
+- Data Engineer
+- Privacy Specialist
+
+### Ruoli Medici
+- Medical Doctor
+- Biomedical Engineer
+
+## Comportamenti Autonomi
+
+Ogni agente opera secondo un sistema di stati:
+
+\`\`\`typescript
+enum AgentState {
+    WORKING,
+    MEETING,
+    RESTING,
+    MOVING,
+    DISCUSSING,
+    PRESENTING
+}
+\`\`\`
+
+Gli agenti prendono decisioni autonome in base a:
+- Necessità (riposo, socializzazione, focus)
+- Stati emotivi (concentrazione, frustrazione, entusiasmo)
+- Obiettivi di ricerca
+- Relazioni con altri agenti
+
+## Personalità degli Agenti
+
+Ogni istanza di agente ha caratteristiche uniche:
+- Livello di competenza nella specializzazione
+- Estroversione/introversione
+- Preferenze di collaborazione
+- Velocità di apprendimento
+
+## Implementazione Tecnica
+
+Gli agenti sono implementati utilizzando un sistema a stati finiti con comportamenti emergenti. La classe base di implementazione è:
+
+\`\`\`typescript
+class ResearcherAgent {
+  private state: AgentState;
+  private needs: NeedsMap;
+  private personality: PersonalityTraits;
+  private expertise: ExpertiseAreas;
+  private relationships: Map<string, number>;
+  
+  update(deltaTime: number): void {
+    // Aggiorna bisogni e stato
+    this.updateNeeds(deltaTime);
+    // Decide se cambiare stato
+    if (this.shouldChangeState()) {
+      this.selectNewState();
+    }
+    // Esegue comportamento basato su stato
+    this.executeCurrentBehavior(deltaTime);
+    // Muove l'agente nell'ambiente
+    this.updateMovement(deltaTime);
+    // Cerca interazioni possibili
+    this.checkForInteractions();
+  }
+}
+\`\`\``,
+
+      'roadmap': `# Roadmap di Sviluppo - Agent Laboratory
+
+## Fase Attuale (Aprile 2025)
+- ✅ Implementazione base dei tre laboratori virtuali
+- ✅ Sistema di movimento degli agenti autonomi
+- ✅ Visualizzazione della mappa mondiale
+- ✅ Rendering grafica pixel art
+- ✅ Controller base per federated learning
+
+## Fase 2 - Miglioramento dell'Interfaccia (Maggio 2025)
+- 🔄 Dashboard più informativo con metriche in tempo reale
+- 🔄 Rappresentazione visiva avanzata delle connessioni FL
+- 🔄 Timeline interattiva per l'evoluzione della simulazione
+- 🔄 Modalità focus per singoli laboratori
+- 🔄 Sistema di documentazione integrato
+
+## Fase 3 - Arricchimento della Simulazione (Giugno 2025)
+- ⏳ Indicatori di stato avanzati per gli agenti
+- ⏳ Eventi casuali che influenzano la dinamica della simulazione
+- ⏳ Visualizzazione del progresso scientifico
+- ⏳ Interattività avanzata con gli agenti
+
+## Fase 4 - Funzionalità Avanzate (Q3 2025)
+- ⏳ Strumenti di configurazione avanzata
+- ⏳ Modalità esportazione dati
+- ⏳ Scenari predefiniti di ricerca
+- ⏳ Modalità comparativa per simulazioni parallele
+
+## Evoluzione Futura (2026+)
+- ⏳ Integrazione di LLM per processi cognitivi avanzati
+- ⏳ Espansione a ulteriori domini applicativi
+- ⏳ Sistema di conferenze e comunità scientifica virtuale
+- ⏳ Modalità multiplayer collaborativa
+
+Legenda:
+✅ Completato
+🔄 In sviluppo attivo
+⏳ Pianificato`
+    };
+    
+    // Restituisci il contenuto corrispondente o un messaggio predefinito
+    return contentMap[documentId] || 
+      `# ${document.title}\n\nContenuto in fase di sviluppo per il documento '${document.title}'.`;
+  }
+  
+  /**
+   * Ottiene statistiche sui documenti disponibili
+   */
+  getStats(): Record<string, any> {
+    return {
+      totalDocuments: this.documents.length,
+      categoriesCount: this.categories.size,
+      typeDistribution: {
+        pdf: this.documents.filter(doc => doc.type === 'pdf').length,
+        md: this.documents.filter(doc => doc.type === 'md').length
+      }
+    };
+  }
+  
+  /**
+   * Cerca documenti in base a una query testuale
+   */
+  searchDocuments(query: string): DocumentMetadata[] {
+    const lowerQuery = query.toLowerCase();
+    return this.documents.filter(doc => 
+      doc.title.toLowerCase().includes(lowerQuery) || 
+      (doc.description && doc.description.toLowerCase().includes(lowerQuery))
+    );
+  }
+}
+
+// Esporta un'istanza singleton del controller
+export const documentationController = new DocumentationController();
+export default documentationController;

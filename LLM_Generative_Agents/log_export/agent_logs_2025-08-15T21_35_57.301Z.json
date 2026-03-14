@@ -1,0 +1,472 @@
+{
+  "isabella": [
+    {
+      "timestamp": "23:34:37",
+      "type": "dialogue",
+      "message": "What can I get for you today?"
+    },
+    {
+      "timestamp": "23:34:43",
+      "type": "dialogue",
+      "message": "What can I get for you today?"
+    },
+    {
+      "timestamp": "23:34:49",
+      "type": "action",
+      "message": "preparing coffee"
+    },
+    {
+      "timestamp": "23:35:03",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:09",
+      "type": "dialogue",
+      "message": "What can I get for you today?"
+    },
+    {
+      "timestamp": "23:35:11",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!"
+    },
+    {
+      "timestamp": "23:35:17",
+      "type": "dialogue",
+      "message": "The weather is lovely today."
+    },
+    {
+      "timestamp": "23:35:25",
+      "type": "dialogue",
+      "message": "What can I get for you today?"
+    },
+    {
+      "timestamp": "23:35:29",
+      "type": "dialogue",
+      "message": "Have a wonderful day!"
+    },
+    {
+      "timestamp": "23:35:35",
+      "type": "action",
+      "message": "walking to the cafe"
+    },
+    {
+      "timestamp": "23:35:41",
+      "type": "thought",
+      "message": "wondering if we have enough supplies"
+    },
+    {
+      "timestamp": "23:35:43",
+      "type": "action",
+      "message": "checking inventory"
+    },
+    {
+      "timestamp": "23:35:49",
+      "type": "dialogue",
+      "message": "Have a wonderful day!"
+    }
+  ],
+  "maria": [
+    {
+      "timestamp": "23:34:33",
+      "type": "thought",
+      "message": "wondering if we have enough supplies"
+    },
+    {
+      "timestamp": "23:34:35",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!"
+    },
+    {
+      "timestamp": "23:34:39",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!"
+    },
+    {
+      "timestamp": "23:34:45",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:34:47",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!"
+    },
+    {
+      "timestamp": "23:34:57",
+      "type": "action",
+      "message": "preparing coffee"
+    },
+    {
+      "timestamp": "23:35:07",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:13",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!"
+    },
+    {
+      "timestamp": "23:35:15",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!"
+    },
+    {
+      "timestamp": "23:35:19",
+      "type": "dialogue",
+      "message": "The weather is lovely today."
+    },
+    {
+      "timestamp": "23:35:21",
+      "type": "thought",
+      "message": "remembering to call the supplier"
+    },
+    {
+      "timestamp": "23:35:23",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:31",
+      "type": "action",
+      "message": "greeting customers"
+    },
+    {
+      "timestamp": "23:35:39",
+      "type": "action",
+      "message": "walking to the cafe"
+    },
+    {
+      "timestamp": "23:35:45",
+      "type": "dialogue",
+      "message": "The weather is lovely today."
+    },
+    {
+      "timestamp": "23:35:51",
+      "type": "thought",
+      "message": "remembering to call the supplier"
+    }
+  ],
+  "klaus": [
+    {
+      "timestamp": "23:34:41",
+      "type": "dialogue",
+      "message": "What can I get for you today?"
+    },
+    {
+      "timestamp": "23:34:51",
+      "type": "thought",
+      "message": "considering new coffee recipes"
+    },
+    {
+      "timestamp": "23:34:53",
+      "type": "action",
+      "message": "checking inventory"
+    },
+    {
+      "timestamp": "23:34:55",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!"
+    },
+    {
+      "timestamp": "23:34:59",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:01",
+      "type": "action",
+      "message": "walking to the cafe"
+    },
+    {
+      "timestamp": "23:35:05",
+      "type": "thought",
+      "message": "considering new coffee recipes"
+    },
+    {
+      "timestamp": "23:35:27",
+      "type": "dialogue",
+      "message": "Have a wonderful day!"
+    },
+    {
+      "timestamp": "23:35:33",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:37",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:47",
+      "type": "action",
+      "message": "cleaning tables"
+    },
+    {
+      "timestamp": "23:35:53",
+      "type": "action",
+      "message": "walking to the cafe"
+    },
+    {
+      "timestamp": "23:35:55",
+      "type": "action",
+      "message": "preparing coffee"
+    }
+  ],
+  "full": [
+    {
+      "timestamp": "23:34:33",
+      "type": "thought",
+      "message": "wondering if we have enough supplies",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:35",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:37",
+      "type": "dialogue",
+      "message": "What can I get for you today?",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:34:39",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:41",
+      "type": "dialogue",
+      "message": "What can I get for you today?",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:34:43",
+      "type": "dialogue",
+      "message": "What can I get for you today?",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:34:45",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:47",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:49",
+      "type": "action",
+      "message": "preparing coffee",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:34:51",
+      "type": "thought",
+      "message": "considering new coffee recipes",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:34:53",
+      "type": "action",
+      "message": "checking inventory",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:34:55",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:34:57",
+      "type": "action",
+      "message": "preparing coffee",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:34:59",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:01",
+      "type": "action",
+      "message": "walking to the cafe",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:03",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:05",
+      "type": "thought",
+      "message": "considering new coffee recipes",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:07",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:09",
+      "type": "dialogue",
+      "message": "What can I get for you today?",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:11",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:13",
+      "type": "dialogue",
+      "message": "Don't forget about the Valentine's party!",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:15",
+      "type": "dialogue",
+      "message": "Hello! Welcome to Hobbs Cafe!",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:17",
+      "type": "dialogue",
+      "message": "The weather is lovely today.",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:19",
+      "type": "dialogue",
+      "message": "The weather is lovely today.",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:21",
+      "type": "thought",
+      "message": "remembering to call the supplier",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:23",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:25",
+      "type": "dialogue",
+      "message": "What can I get for you today?",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:27",
+      "type": "dialogue",
+      "message": "Have a wonderful day!",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:29",
+      "type": "dialogue",
+      "message": "Have a wonderful day!",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:31",
+      "type": "action",
+      "message": "greeting customers",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:33",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:35",
+      "type": "action",
+      "message": "walking to the cafe",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:37",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:39",
+      "type": "action",
+      "message": "walking to the cafe",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:41",
+      "type": "thought",
+      "message": "wondering if we have enough supplies",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:43",
+      "type": "action",
+      "message": "checking inventory",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:45",
+      "type": "dialogue",
+      "message": "The weather is lovely today.",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:47",
+      "type": "action",
+      "message": "cleaning tables",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:49",
+      "type": "dialogue",
+      "message": "Have a wonderful day!",
+      "agent": "Isabella"
+    },
+    {
+      "timestamp": "23:35:51",
+      "type": "thought",
+      "message": "remembering to call the supplier",
+      "agent": "Maria"
+    },
+    {
+      "timestamp": "23:35:53",
+      "type": "action",
+      "message": "walking to the cafe",
+      "agent": "Klaus"
+    },
+    {
+      "timestamp": "23:35:55",
+      "type": "action",
+      "message": "preparing coffee",
+      "agent": "Klaus"
+    }
+  ]
+}

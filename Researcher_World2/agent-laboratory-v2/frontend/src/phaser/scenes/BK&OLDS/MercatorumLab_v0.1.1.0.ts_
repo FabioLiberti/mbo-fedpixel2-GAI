@@ -1,0 +1,425 @@
+// frontend/src/phaser/scenes/MercatorumLab.ts
+
+import { BaseScene } from './BaseScene';
+import { ASSETS } from '../assetConfig';
+import { webSocketService } from '../../services/api';
+
+export class MercatorumLab extends BaseScene {
+  private tilemap: Phaser.Tilemaps.Tilemap | null = null;
+  private agents: Phaser.GameObjects.Sprite[] = [];
+  private agentsInfo: { [id: string]: any } = {};
+  private background: Phaser.GameObjects.TileSprite | null = null;
+  private lastUpdate: number = 0;
+  
+  constructor() {
+    super('MercatorumLab');
+  }
+
+  preload(): void {
+    // Carica asset base dalla classe genitore
+    super.preload();
+    
+    // Carica asset specifici del laboratorio Mercatorum
+    console.log('[MercatorumLab] Loading Mercatorum specific assets');
+    
+    // Carica tilemap
+    this.assetLoader.loadTilemapJSON('mercatorum-map', ASSETS.tilemaps.mercatorum);
+    
+    // Carica tileset specifico
+    this.assetLoader.loadImage('mercatorum-tiles', ASSETS.tilesets.mercatorum);
+    
+    // Carica logo
+    this.assetLoader.loadImage('mercatorum-logo', ASSETS.ui.mercatorumLogo);
+    
+    // Registra listener per errori di caricamento
+    this.load.on('fileerror', (file: any) => {
+      console.error(`[MercatorumLab] Failed to load file: ${file.key}`, file);
+      
+      // Gestisci specificamente i tipi di file
+      if (file.type === 'tilemapJSON') {
+        // Crea una mappa base se quella originale non può essere caricata
+        this.createFallbackMap();
+      }
+    });
+  }
+
+  create(): void {
+    console.log('[MercatorumLab] Creating scene');
+    
+    try {
+      // Verifica se gli asset richiesti sono disponibili
+      const requiredAssets = ['tiles', 'researcher', 'professor'];
+      this.createPlaceholdersForMissingAssets(requiredAssets);
+      
+      // Crea animazioni per i personaggi
+      this.createAnimations();
+      
+      // Carica la mappa del laboratorio
+      this.createLabMap();
+      
+      // Aggiunge i personaggi iniziali
+      this.createInitialAgents();
+      
+      // Configura la camera
+      this.setupCamera();
+      
+      // Inizia ad ascoltare gli aggiornamenti dal server
+      this.setupWebSocketListeners();
+      
+      // Notifica che la scena è pronta
+      webSocketService.sendMessage('sceneReady', { lab: 'MercatorumLab' });
+      
+      console.log('[MercatorumLab] Scene created successfully');
+    } catch (error) {
+      console.error('[MercatorumLab] Error creating scene:', error);
+      
+      // Implementa un fallback in caso di errore
+      this.createFallbackScene();
+    }
+  }
+
+  update(time: number, delta: number): void {
+    // Limita gli aggiornamenti per evitare problemi di performance
+    if (time - this.lastUpdate < 100) {
+      return;
+    }
+    
+    this.lastUpdate = time;
+    
+    // Aggiorna posizione e stato degli agenti
+    this.updateAgents(delta);
+  }
+  
+  /**
+   * Crea la mappa del laboratorio
+   */
+  private createLabMap(): void {
+    try {
+      // Controlla se la tilemap è stata caricata
+      if (this.cache.tilemap.exists('mercatorum-map')) {
+        this.tilemap = this.make.tilemap({ key: 'mercatorum-map' });
+        
+        // Aggiungi i tileset
+        if (this.textures.exists('mercatorum-tiles')) {
+          const tiles = this.tilemap.addTilesetImage('mercatorum-tileset', 'mercatorum-tiles');
+          
+          if (tiles) {
+            // Crea i layer della mappa
+            const floorLayer = this.tilemap.createLayer('floor', tiles);
+            const wallsLayer = this.tilemap.createLayer('walls', tiles);
+            const furnitureLayer = this.tilemap.createLayer('furniture', tiles);
+            
+            // Imposta la collisione per i muri e il mobilio
+            if (wallsLayer) wallsLayer.setCollisionByProperty({ collides: true });
+            if (furnitureLayer) furnitureLayer.setCollisionByProperty({ collides: true });
+            
+            console.log('[MercatorumLab] Tilemap created successfully');
+          } else {
+            throw new Error('Failed to add tileset to map');
+          }
+        } else {
+          throw new Error('Mercatorum tiles texture not found');
+        }
+      } else {
+        throw new Error('Mercatorum map not found in cache');
+      }
+    } catch (error) {
+      console.error('[MercatorumLab] Error creating tilemap:', error);
+      this.createFallbackMap();
+    }
+  }
+  
+  /**
+   * Crea una mappa di fallback in caso di errore nel caricamento della mappa originale
+   */
+  private createFallbackMap(): void {
+    console.log('[MercatorumLab] Creating fallback map');
+    
+    // Sfondo base
+    this.background = this.add.tileSprite(0, 0, 800, 600, 'placeholder');
+    this.background.setOrigin(0, 0);
+    
+    // Aggiungi testo per indicare che è una mappa di fallback
+    this.add.text(400, 300, 'Mercatorum Lab\n(Fallback Map)', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      color: '#ffffff',
+      align: 'center'
+    }).setOrigin(0.5);
+    
+    // Crea una griglia di base
+    const gridGraphics = this.add.graphics();
+    gridGraphics.lineStyle(1, 0xaaaaaa, 0.3);
+    
+    // Disegna linee orizzontali
+    for (let y = 0; y < 600; y += 32) {
+      gridGraphics.moveTo(0, y);
+      gridGraphics.lineTo(800, y);
+    }
+    
+    // Disegna linee verticali
+    for (let x = 0; x < 800; x += 32) {
+      gridGraphics.moveTo(x, 0);
+      gridGraphics.lineTo(x, 600);
+    }
+    
+    gridGraphics.strokePath();
+  }
+  
+  /**
+   * Crea una scena di fallback in caso di errori gravi
+   */
+  private createFallbackScene(): void {
+    // Pulisci la scena
+    this.children.removeAll();
+    
+    // Aggiungi uno sfondo base
+    this.add.rectangle(0, 0, 800, 600, 0x222222).setOrigin(0, 0);
+    
+    // Aggiungi messaggio di errore
+    this.add.text(400, 250, 'Error loading Mercatorum Lab', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      color: '#ff0000'
+    }).setOrigin(0.5);
+    
+    this.add.text(400, 300, 'Please check console for details', {
+      fontFamily: 'Arial',
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    // Aggiungi pulsante per ricaricare
+    const reloadButton = this.add.rectangle(400, 350, 200, 40, 0x444444).setInteractive();
+    this.add.text(400, 350, 'Reload Scene', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    reloadButton.on('pointerup', () => {
+      this.scene.restart();
+    });
+  }
+  
+  /**
+   * Crea gli agenti iniziali nel laboratorio
+   */
+  private createInitialAgents(): void {
+    // Crea alcuni agenti placeholder per test
+    for (let i = 0; i < 3; i++) {
+      const x = 100 + i * 80;
+      const y = 200;
+      const type = i % 2 === 0 ? 'professor' : 'researcher';
+      
+      this.createAgent(`agent-${i}`, type, x, y);
+    }
+  }
+  
+  /**
+   * Crea un nuovo agente nella scena
+   */
+  private createAgent(id: string, type: string, x: number, y: number): Phaser.GameObjects.Sprite {
+    const sprite = this.add.sprite(x, y, type);
+    
+    // Controllo se la texture esiste realmente
+    if (!this.textures.exists(type)) {
+      console.warn(`[MercatorumLab] Texture ${type} not found, using placeholder`);
+      this.assetLoader.loadPlaceholder(type, 'spritesheet', 32, 48);
+    }
+    
+    // Imposta animazione idle
+    try {
+      const animKey = type === 'professor' ? 
+        ASSETS.animations.professor.idle.key : 
+        ASSETS.animations.researcher.idle.key;
+      
+      if (this.anims.exists(animKey)) {
+        sprite.play(animKey);
+      }
+    } catch (error) {
+      console.error(`[MercatorumLab] Error playing animation for ${type}:`, error);
+    }
+    
+    // Memorizza l'agente
+    this.agents.push(sprite);
+    this.agentsInfo[id] = {
+      sprite,
+      type,
+      state: 'idle',
+      target: { x, y }
+    };
+    
+    return sprite;
+  }
+  
+  /**
+   * Configura la camera di gioco
+   */
+  private setupCamera(): void {
+    // Imposta i limiti della camera se c'è una tilemap
+    if (this.tilemap) {
+      this.cameras.main.setBounds(0, 0, this.tilemap.widthInPixels, this.tilemap.heightInPixels);
+    } else {
+      // Altrimenti usa dimensioni di default
+      this.cameras.main.setBounds(0, 0, 800, 600);
+    }
+    
+    // Imposta zoom
+    this.cameras.main.setZoom(1);
+  }
+  
+  /**
+   * Configura i listener WebSocket per gli aggiornamenti degli agenti
+   */
+  private setupWebSocketListeners(): void {
+    // Ascolta aggiornamenti degli agenti
+    webSocketService.onMessage('agentUpdate', (data) => {
+      this.handleAgentUpdate(data);
+    });
+    
+    // Ascolta creazione di nuovi agenti
+    webSocketService.onMessage('agentCreated', (data) => {
+      this.handleAgentCreated(data);
+    });
+    
+    // Ascolta rimozione di agenti
+    webSocketService.onMessage('agentRemoved', (data) => {
+      this.handleAgentRemoved(data);
+    });
+  }
+  
+  /**
+   * Gestisce l'aggiornamento di un agente
+   */
+  private handleAgentUpdate(data: any): void {
+    const { id, position, state } = data;
+    
+    if (this.agentsInfo[id]) {
+      // Aggiorna il target dell'agente
+      this.agentsInfo[id].target = position;
+      
+      // Aggiorna lo stato se necessario
+      if (state && this.agentsInfo[id].state !== state) {
+        this.agentsInfo[id].state = state;
+        this.updateAgentAnimation(id);
+      }
+    }
+  }
+  
+  /**
+   * Gestisce la creazione di un nuovo agente
+   */
+  private handleAgentCreated(data: any): void {
+    const { id, type, position } = data;
+    
+    if (!this.agentsInfo[id]) {
+      this.createAgent(id, type, position.x, position.y);
+    }
+  }
+  
+  /**
+   * Gestisce la rimozione di un agente
+   */
+  private handleAgentRemoved(data: any): void {
+    const { id } = data;
+    
+    if (this.agentsInfo[id]) {
+      // Rimuovi lo sprite
+      this.agentsInfo[id].sprite.destroy();
+      
+      // Rimuovi dai riferimenti
+      this.agents = this.agents.filter(sprite => sprite !== this.agentsInfo[id].sprite);
+      delete this.agentsInfo[id];
+    }
+  }
+  
+  /**
+   * Aggiorna l'animazione di un agente in base al suo stato
+   */
+  private updateAgentAnimation(id: string): void {
+    const agent = this.agentsInfo[id];
+    if (!agent) return;
+    
+    const { sprite, type, state } = agent;
+    
+    try {
+      let animKey = '';
+      
+      if (type === 'professor') {
+        switch (state) {
+          case 'idle': animKey = ASSETS.animations.professor.idle.key; break;
+          case 'walking': animKey = ASSETS.animations.professor.walk.key; break;
+          case 'discussing': animKey = ASSETS.animations.professor.discuss.key; break;
+          default: animKey = ASSETS.animations.professor.idle.key;
+        }
+      } else if (type === 'researcher') {
+        switch (state) {
+          case 'idle': animKey = ASSETS.animations.researcher.idle.key; break;
+          case 'walking': animKey = ASSETS.animations.researcher.walk.key; break;
+          case 'discussing': animKey = ASSETS.animations.researcher.discuss.key; break;
+          default: animKey = ASSETS.animations.researcher.idle.key;
+        }
+      }
+      
+      if (animKey && this.anims.exists(animKey)) {
+        sprite.play(animKey, true);
+      }
+    } catch (error) {
+      console.error(`[MercatorumLab] Error updating animation for ${type}:`, error);
+    }
+  }
+  
+  /**
+   * Aggiorna la posizione e lo stato degli agenti
+   */
+  private updateAgents(delta: number): void {
+    // Velocità di movimento (pixel al secondo)
+    const speed = 100 / 1000; // pixel per millisecondo
+    
+    // Aggiorna ogni agente
+    Object.keys(this.agentsInfo).forEach(id => {
+      const agent = this.agentsInfo[id];
+      const { sprite, target } = agent;
+      
+      // Calcola distanza dal target
+      const dx = target.x - sprite.x;
+      const dy = target.y - sprite.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Se l'agente deve muoversi
+      if (distance > 1) {
+        // Normalizza la direzione
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        
+        // Calcola il movimento
+        const moveX = dirX * speed * delta;
+        const moveY = dirY * speed * delta;
+        
+        // Limita il movimento alla distanza rimanente
+        const actualMoveX = Math.abs(moveX) > Math.abs(dx) ? dx : moveX;
+        const actualMoveY = Math.abs(moveY) > Math.abs(dy) ? dy : moveY;
+        
+        // Aggiorna la posizione
+        sprite.x += actualMoveX;
+        sprite.y += actualMoveY;
+        
+        // Cambia lo stato a 'walking' se non lo è già
+        if (agent.state !== 'walking') {
+          agent.state = 'walking';
+          this.updateAgentAnimation(id);
+        }
+        
+        // Imposta il flip in base alla direzione
+        if (dx !== 0) {
+          sprite.setFlipX(dx < 0);
+        }
+      } else if (agent.state === 'walking') {
+        // L'agente ha raggiunto il target, torna a idle
+        agent.state = 'idle';
+        this.updateAgentAnimation(id);
+      }
+    });
+  }
+}

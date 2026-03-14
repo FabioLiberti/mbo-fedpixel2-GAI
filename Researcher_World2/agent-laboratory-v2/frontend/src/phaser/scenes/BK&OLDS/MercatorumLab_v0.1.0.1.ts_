@@ -1,0 +1,285 @@
+import Phaser from 'phaser';
+import { Agent } from '../sprites/Agent';
+import { ResearcherAgent } from '../sprites/ResearcherAgent';
+//import { webSocketService } from '../../services/api';
+
+export class MercatorumLab extends Phaser.Scene {
+  private tilemap?: Phaser.Tilemaps.Tilemap;
+  private agents: Agent[] = [];
+  private statusText?: Phaser.GameObjects.Text;
+  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
+  private player?: Phaser.Physics.Arcade.Sprite;
+  
+  // Tema colori per Mercatorum
+  private readonly theme = {
+    primaryColor: 0xd9713d,  // Terracotta
+    secondaryColor: 0x192a56, // Blu navy
+    backgroundColor: 0xf5f0e3, // Crema
+    accentColor: 0x9b4f28     // Marrone caldo
+  };
+
+  constructor() {
+    super({ key: 'MercatorumLab' });
+  }
+
+  preload() {
+    try {
+      // Caricamento tileset e sprites
+      this.load.image('tiles', 'assets/tilesets/mercatorum-tileset.png');
+      this.load.tilemapTiledJSON('mercatorum-map', 'assets/maps/mercatorum-lab.json');
+      
+      // Caricamento sprites personaggi
+      this.load.spritesheet('researcher', 'assets/sprites/researcher.png', { 
+        frameWidth: 32, 
+        frameHeight: 32 
+      });
+      
+      this.load.spritesheet('professor', 'assets/sprites/professor.png', { 
+        frameWidth: 32, 
+        frameHeight: 32 
+      });
+      
+      // Caricamento logo
+      this.load.image('mercatorum-logo', 'assets/ui/mercatorum-logo.png');
+      
+      // Fallback per assets mancanti (per debugging)
+      this.load.image('placeholder', 'assets/sprites/placeholder.png');
+    } catch (error) {
+      console.error("Error in preload:", error);
+    }
+  }
+
+  create() {
+    // Imposta sfondo
+    this.cameras.main.setBackgroundColor('#' + this.theme.backgroundColor.toString(16));
+    
+    try {
+      // Crea ambiente di base
+      this.createDebugEnvironment();
+
+      // Crea agenti ricercatori
+      this.createResearchers();
+      
+      // Crea il player controllabile
+      this.createPlayer();
+      
+      // Crea animazioni
+      this.createAnimations();
+      
+      // Inizializza input
+      this.cursors = this.input.keyboard?.createCursorKeys();
+      
+      // Status text
+      this.statusText = this.add.text(16, 16, 'Università Mercatorum Lab', { 
+        fontSize: '18px', 
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+        fontFamily: 'Arial'
+      });
+      this.statusText.setScrollFactor(0);
+    } catch (error) {
+      console.error('Error in MercatorumLab create():', error);
+    }
+  }
+
+  update(time: number, delta: number) {
+    // Aggiorna agenti
+    this.agents.forEach(agent => {
+      agent.update(time, delta);
+    });
+    
+    // Movimento del player
+    this.updatePlayerMovement();
+  }
+
+  private createDebugEnvironment() {
+    // Crea un ambiente di base per debugging/sviluppo
+    const graphics = this.add.graphics();
+    
+    // Disegna un pavimento con pattern a colonne italiane
+    graphics.fillStyle(this.theme.backgroundColor);
+    graphics.fillRect(0, 0, 800, 600);
+    
+    // Disegna motivi classici italiani (archi romani)
+    graphics.lineStyle(3, this.theme.primaryColor, 0.8);
+    
+    // Disegna archi romani stilizzati lungo i bordi
+    const archWidth = 80;
+    const archHeight = 40;
+    const baseY = 60;
+    
+    // Archi superiori
+    for (let x = 40; x < 800; x += archWidth) {
+      graphics.beginPath();
+      graphics.arc(x, baseY, archWidth / 2, Math.PI, 0);
+      graphics.strokePath();
+    }
+    
+    // Archi laterali sinistri
+    for (let y = 100; y < 600; y += archHeight * 2) {
+      graphics.beginPath();
+      graphics.arc(20, y, archHeight, Math.PI * 0.5, Math.PI * 1.5);
+      graphics.strokePath();
+    }
+    
+    // Archi laterali destri
+    for (let y = 100; y < 600; y += archHeight * 2) {
+      graphics.beginPath();
+      graphics.arc(780, y, archHeight, Math.PI * 1.5, Math.PI * 0.5);
+      graphics.strokePath();
+    }
+    
+    // Pattern a mosaico sul pavimento
+    graphics.lineStyle(1, this.theme.accentColor, 0.3);
+    
+    for (let x = 0; x < 800; x += 32) {
+      graphics.moveTo(x, 0);
+      graphics.lineTo(x, 600);
+    }
+    
+    for (let y = 0; y < 600; y += 32) {
+      graphics.moveTo(0, y);
+      graphics.lineTo(800, y);
+    }
+    
+    graphics.strokePath();
+    
+    // Area centrale con tavolo per meeting collaborativi
+    const centerX = 400;
+    const centerY = 300;
+    const tableWidth = 180;
+    const tableHeight = 100;
+    
+    // Ombra
+    this.add.ellipse(centerX + 5, centerY + 5, tableWidth + 10, tableHeight + 10, 0x000000, 0.3);
+    
+    // Tavolo ovale
+    this.add.ellipse(centerX, centerY, tableWidth, tableHeight, this.theme.accentColor);
+    
+    // Superficie del tavolo
+    this.add.ellipse(centerX, centerY, tableWidth - 10, tableHeight - 10, this.theme.primaryColor, 0.8);
+    
+    // Aggiungi un testo informativo
+    this.add.text(400, 30, 'Università Mercatorum Laboratory', {
+      fontSize: '24px',
+      color: '#ffffff',
+      backgroundColor: String(this.theme.secondaryColor),
+      padding: { left: 10, right: 10, top: 5, bottom: 5 }
+    }).setOrigin(0.5);
+  }
+
+  private createResearchers() {
+    // Crea ricercatori con vari ruoli
+    const researcherTypes: Array<{
+      type: 'phd-student' | 'researcher' | 'professor' | 'ml-engineer' | 'data-engineer' | 'privacy-specialist',
+      specialization: any,
+      position: { x: number, y: number }
+    }> = [
+      { 
+        type: 'phd-student', 
+        specialization: 'data-science', 
+        position: { x: 300, y: 200 } 
+      },
+      { 
+        type: 'researcher', 
+        specialization: 'secure-aggregation', 
+        position: { x: 450, y: 250 } 
+      },
+      { 
+        type: 'professor', 
+        specialization: 'fl-architecture', 
+        position: { x: 350, y: 300 } 
+      },
+      { 
+        type: 'ml-engineer', 
+        specialization: 'model-optimization', 
+        position: { x: 400, y: 350 } 
+      }
+    ];
+    
+    researcherTypes.forEach(info => {
+      try {
+        const agent = new ResearcherAgent(
+          this, 
+          info.position.x, 
+          info.position.y, 
+          'researcher', 
+          info.type, 
+          info.specialization
+        );
+        
+        this.agents.push(agent);
+      } catch (error) {
+        console.error("Error creating researcher:", error);
+      }
+    });
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(400, 200, 'researcher');
+    this.player.setCollideWorldBounds(true);
+    
+    // Imposta la camera per seguire il player
+    this.cameras.main.startFollow(this.player, true, 0.09, 0.09);
+  }
+  
+  private updatePlayerMovement() {
+    if (this.player && this.cursors) {
+      const speed = 150;
+      
+      if (this.cursors.left?.isDown) {
+        this.player.setVelocityX(-speed);
+        this.player.setVelocityY(0);
+        this.player.anims.play('walk-left', true);
+      } else if (this.cursors.right?.isDown) {
+        this.player.setVelocityX(speed);
+        this.player.setVelocityY(0);
+        this.player.anims.play('walk-right', true);
+      } else if (this.cursors.up?.isDown) {
+        this.player.setVelocityY(-speed);
+        this.player.setVelocityX(0);
+        this.player.anims.play('walk-up', true);
+      } else if (this.cursors.down?.isDown) {
+        this.player.setVelocityY(speed);
+        this.player.setVelocityX(0);
+        this.player.anims.play('walk-down', true);
+      } else {
+        this.player.setVelocityX(0);
+        this.player.setVelocityY(0);
+        this.player.anims.stop();
+      }
+    }
+  }
+
+  private createAnimations() {
+    // Crea animazioni per movimento
+    this.anims.create({
+      key: 'walk-left',
+      frames: this.anims.generateFrameNumbers('researcher', { start: 0, end: 3 }),
+      frameRate: 10,
+      repeat: -1
+    });
+    
+    this.anims.create({
+      key: 'walk-right',
+      frames: this.anims.generateFrameNumbers('researcher', { start: 4, end: 7 }),
+      frameRate: 10,
+      repeat: -1
+    });
+    
+    this.anims.create({
+      key: 'walk-up',
+      frames: this.anims.generateFrameNumbers('researcher', { start: 8, end: 11 }),
+      frameRate: 10,
+      repeat: -1
+    });
+    
+    this.anims.create({
+      key: 'walk-down',
+      frames: this.anims.generateFrameNumbers('researcher', { start: 12, end: 15 }),
+      frameRate: 10,
+      repeat: -1
+    });
+  }
+}

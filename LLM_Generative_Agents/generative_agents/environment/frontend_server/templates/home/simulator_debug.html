@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% load staticfiles %}
+
+{% block content %}
+<style>
+    .debug-panel {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #00ff00;
+        padding: 15px;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+        max-width: 300px;
+        z-index: 1000;
+    }
+    
+    .debug-panel h3 {
+        margin-top: 0;
+        color: #ffff00;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .status-indicator.active {
+        background-color: #00ff00;
+    }
+    
+    .status-indicator.inactive {
+        background-color: #ff0000;
+    }
+    
+    .chat-bubble {
+        position: absolute;
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px solid #333;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 14px;
+        max-width: 200px;
+        z-index: 100;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    
+    .chat-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 20px;
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-top: 10px solid #333;
+    }
+    
+    .movement-trail {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: rgba(255, 0, 0, 0.5);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+</style>
+
+<div class="debug-panel" id="debug-panel">
+    <h3>Debug Info</h3>
+    <div>
+        <span class="status-indicator" id="backend-status"></span>
+        Backend: <span id="backend-status-text">Checking...</span>
+    </div>
+    <div>
+        <span class="status-indicator" id="update-status"></span>
+        Updates: <span id="update-status-text">Waiting...</span>
+    </div>
+    <div>FPS: <span id="fps-counter">0</span></div>
+    <div>Step: <span id="current-step">{{step}}</span></div>
+    <div>Phase: <span id="current-phase">-</span></div>
+    <div>Active Agents: <span id="agent-count">0</span></div>
+    <div>Time: <span id="current-time">--:--</span></div>
+    <div style="margin-top: 10px;">
+        <button onclick="toggleDebugMode()">Toggle Debug Mode</button>
+    </div>
+</div>
+
+<br>
+<br>
+<div>
+    <div id="game-container" style="text-align: center; position: relative;"></div>
+
+    <div style="width:55%; margin: 0 auto; margin-top:4.5em">
+        <h3 style="margin-bottom:-0.5em; font-size:1.5em">Current Time:</h3>
+        <div class="row">
+            <div class="col-md-8" id="game-time" style="">
+                <h2><span id="game-time-content">Loading...</span></h2> 
+            </div>
+            <div class="col-md-4">
+                <h2 style="text-align: right;">
+                    <button id="play_button" type="button" class="btn btn-default">
+                        <strong style=" font-size:1.2em"><i class="glyphicon glyphicon-play"></i> &nbsp;Play</strong>
+                    </button>
+                    
+                    <button id="pause_button" type="button" class="btn btn-default">
+                        <strong style=" font-size:1.2em"><i class="glyphicon glyphicon-pause"></i> &nbsp;Pause</strong>
+                    </button>
+                    
+                    <button id="speed_button" type="button" class="btn btn-default" onclick="toggleSpeed()">
+                        <strong style=" font-size:1.2em"><i class="glyphicon glyphicon-forward"></i> &nbsp;Speed: 1x</strong>
+                    </button>
+                </h2>
+            </div>
+        </div>
+
+        <br>
+        <hr style="border-color:#999999">
+        <br>
+
+        {% for p_name, p_name_os in persona_names %}
+            <div class="media agent-card" style="background-color:#EEEEEE; padding:1em; padding-left:3.5em; padding-right:2em; border-radius:10px" data-agent="{{p_name_os}}">
+                <div class="media-left media-middle">
+                    <a href="#">
+                        <img class="media-object agent-avatar" src="{% static 'img/atlas.png' %}" style="width:5em">
+                        <div class="agent-status" style="text-align: center; margin-top: 5px;">
+                            <span class="status-indicator active" id="status_{{p_name_os}}"></span>
+                        </div>
+                    </a>
+                </div>
+                <div class="media-body" style='padding-left:3em; padding-top:0.5em; padding-bottom:1em'>
+                    <div class="row">
+                        <h2 class="col-md-8" id="name__{{ p_name_os }}" style="margin-bottom:0.8em; font-size:1.85em; ">
+                            {{p_name}} &nbsp;&nbsp;
+                            <a href="{% url 'replay_persona_state' sim_code step p_name_os %}" style="font-size:0.6em">State Details</a>
+                        </h2>
+                    </div>
+                    <div style="">
+                        <p style="font-size:1.2em"><strong>Current Action:</strong> <br><span id="current_action__{{ p_name_os }}"></span></p>
+                        <p style="font-size:1.2em"><strong>Location:</strong> <br><span id="target_address__{{ p_name_os }}"></span></p>
+                        <p style="font-size:1.2em"><strong>Position:</strong> <br><span id="position__{{ p_name_os }}">-</span></p>
+                        <p style="font-size:1.2em"><strong>Current Conversation:</strong> <br><span id="chat__{{ p_name_os }}"></span></p>
+                        <p style="font-size:1.2em"><strong>Model:</strong> <span id="model__{{ p_name_os }}">qwen3:0.6b</span></p>
+                    </div>
+                </div>
+            </div>  
+            <br>
+        {% endfor %}
+    </div>
+</div>
+
+<div style="padding-bottom:15em"> </div>
+
+<!-- Chat bubbles container -->
+<div id="chat-bubbles-container" style="position: absolute; top: 0; left: 0; pointer-events: none;"></div>
+
+<!-- Movement trails container -->
+<div id="movement-trails-container" style="position: absolute; top: 0; left: 0; pointer-events: none;"></div>
+
+<script src='https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js'></script>
+
+<script type="text/javascript">
+    // Debug variables
+    let debugMode = true;
+    let fpsCounter = 0;
+    let lastTime = 0;
+    let speedMultiplier = 1;
+    let activeChats = {};
+    let movementTrails = {};
+    
+    // Toggle debug mode
+    function toggleDebugMode() {
+        debugMode = !debugMode;
+        document.getElementById('debug-panel').style.display = debugMode ? 'block' : 'none';
+        document.querySelectorAll('.movement-trail').forEach(trail => {
+            trail.style.display = debugMode ? 'block' : 'none';
+        });
+    }
+    
+    // Toggle speed
+    function toggleSpeed() {
+        const speeds = [1, 2, 4, 8];
+        const currentIndex = speeds.indexOf(speedMultiplier);
+        speedMultiplier = speeds[(currentIndex + 1) % speeds.length];
+        document.querySelector('#speed_button strong').innerHTML = 
+            `<i class="glyphicon glyphicon-forward"></i> &nbsp;Speed: ${speedMultiplier}x`;
+    }
+    
+    // FPS counter
+    function updateFPS(time) {
+        if (time > lastTime + 1000) {
+            document.getElementById('fps-counter').textContent = Math.round(fpsCounter);
+            fpsCounter = 0;
+            lastTime = time;
+        }
+        fpsCounter++;
+    }
+    
+    // Backend status checker
+    setInterval(() => {
+        fetch('/api/status')
+            .then(response => {
+                const indicator = document.getElementById('backend-status');
+                const text = document.getElementById('backend-status-text');
+                if (response.ok) {
+                    indicator.classList.add('active');
+                    indicator.classList.remove('inactive');
+                    text.textContent = 'Connected';
+                } else {
+                    indicator.classList.add('inactive');
+                    indicator.classList.remove('active');
+                    text.textContent = 'Disconnected';
+                }
+            })
+            .catch(() => {
+                document.getElementById('backend-status').classList.add('inactive');
+                document.getElementById('backend-status-text').textContent = 'Error';
+            });
+    }, 2000);
+    
+    // Show chat bubble
+    function showChatBubble(agentName, message, x, y) {
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble';
+        bubble.textContent = message;
+        bubble.style.left = x + 'px';
+        bubble.style.top = (y - 60) + 'px';
+        
+        document.getElementById('chat-bubbles-container').appendChild(bubble);
+        
+        // Remove old bubble if exists
+        if (activeChats[agentName]) {
+            activeChats[agentName].remove();
+        }
+        
+        activeChats[agentName] = bubble;
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (activeChats[agentName] === bubble) {
+                bubble.remove();
+                delete activeChats[agentName];
+            }
+        }, 5000);
+    }
+    
+    // Add movement trail
+    function addMovementTrail(agentName, x, y) {
+        if (!debugMode) return;
+        
+        const trail = document.createElement('div');
+        trail.className = 'movement-trail';
+        trail.style.left = x + 'px';
+        trail.style.top = y + 'px';
+        
+        document.getElementById('movement-trails-container').appendChild(trail);
+        
+        // Fade out and remove
+        setTimeout(() => {
+            trail.style.opacity = '0';
+            setTimeout(() => trail.remove(), 1000);
+        }, 3000);
+    }
+</script>
+
+<!-- Include the improved main script -->
+{% include 'home/main_script_improved.html' %}
+
+{% endblock content %}

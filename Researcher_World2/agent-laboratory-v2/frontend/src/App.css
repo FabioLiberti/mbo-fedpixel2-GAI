@@ -1,0 +1,348 @@
+/* Base styling */
+:root {
+  --primary-color: #d9713d;  /* Terracotta */
+  --secondary-color: #192a56; /* Blu navy */
+  --background-color: #f5f5f5;
+  --surface-color: #ffffff;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --success-color: #4caf50;
+  --warning-color: #ffc107;
+  --error-color: #f44336;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header styling */
+.App-header {
+  background-color: var(--secondary-color);
+  color: white;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.App-header h1 {
+  font-size: 1.8rem;
+  margin: 0;
+  color: white;
+}
+
+.App-header p {
+  font-size: 1rem;
+  opacity: 0.8;
+  margin: 0.2rem 0 0 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.app-logo {
+  height: 60px;
+  margin-right: 15px;
+}
+
+.header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-text h1 {
+  margin: 0;
+}
+
+.header-text p {
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.connection-status {
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  margin-left: 1rem;
+}
+
+.connection-status .status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.connected {
+  color: var(--success-color);
+}
+
+.connected .status-indicator {
+  background-color: var(--success-color);
+  box-shadow: 0 0 8px var(--success-color);
+}
+
+.disconnected {
+  color: var(--error-color);
+}
+
+.disconnected .status-indicator {
+  background-color: var(--error-color);
+  box-shadow: 0 0 8px var(--error-color);
+}
+
+/* Main content styling */
+main {
+  display: flex;
+  flex: 1;
+  padding: 1rem;
+  flex-direction: column;
+}
+
+.simulation-section {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.simulation-container {
+  width: 100%;
+  background-color: #000;
+}
+
+/* Controls section */
+.controls-section {
+  width: 100%;
+  background-color: var(--surface-color);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.controls-section h2 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--primary-color);
+}
+
+.controls-group {
+  margin-bottom: 1.5rem;
+}
+
+.controls-group h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Buttons */
+button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 120px;
+}
+
+button:hover {
+  background-color: #c86333;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button.secondary {
+  background-color: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+button.secondary:hover {
+  background-color: rgba(217, 113, 61, 0.1);
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.status-badge.running {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: var(--success-color);
+}
+
+.status-badge.paused {
+  background-color: rgba(255, 193, 7, 0.2);
+  color: var(--warning-color);
+}
+
+.status-badge.stopped {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--error-color);
+}
+
+/* Statistics */
+.stats-container {
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  flex: 1;
+  font-weight: bold;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-weight: bold;
+  color: var(--secondary-color);
+}
+
+.progress-bar {
+  flex: 1;
+  height: 10px;
+  background-color: #e0e0e0;
+  border-radius: 5px;
+  margin: 0 1rem;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+/* Responsive layout */
+@media (min-width: 768px) {
+  main {
+    flex-direction: row;
+  }
+
+  .simulation-section {
+    flex: 3;
+    margin-right: 1rem;
+    margin-bottom: 0;
+  }
+
+  .controls-section {
+    flex: 1;
+  }
+}
+
+/* Animazioni */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+.pulse {
+  animation: pulse 2s infinite ease-in-out;
+}
+
+/* Phaser game container */
+#phaser-game {
+  width: 100%;
+  height: 600px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Stili per l'overlay della documentazione */
+.documentation-overlay {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+z-index: 1000;
+background-color: rgba(0, 0, 0, 0.7);
+display: flex;
+justify-content: center;
+align-items: center;
+backdrop-filter: blur(3px);
+-webkit-backdrop-filter: blur(3px);
+}
+
+.documentation-overlay .documentation-viewer {
+width: 90%;
+height: 90%;
+border: 5px solid #ffd32a;
+box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+border-radius: 10px;
+overflow: hidden;
+animation: doc-fade-in 0.3s ease-out;
+}
+
+@keyframes doc-fade-in {
+from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+to {
+  opacity: 1;
+  transform: scale(1);
+}
+}

@@ -1,0 +1,176 @@
+.fl-status-panel {
+    background-color: rgba(30, 30, 40, 0.9);
+    border-radius: 6px;
+    padding: 12px;
+    color: #eee;
+    font-family: monospace;
+    width: 280px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    font-size: 13px;
+    /* Aggiunti per animazione */
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 1;
+    transform: translateX(0);
+  }
+  
+  /* Classi per animazione */
+  .fl-status-panel.hidden {
+    opacity: 0;
+    transform: translateX(20px);
+    pointer-events: none;
+  }
+  
+  .fl-status-panel.visible {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  
+  .fl-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+  }
+  
+  .fl-status-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  
+  .fl-toggle {
+    display: flex;
+    align-items: center;
+  }
+  
+  .fl-toggle input[type="checkbox"] {
+    margin-right: 6px;
+  }
+  
+  .fl-current-state {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 6px 8px;
+    border-radius: 4px;
+  }
+  
+  .fl-state-idle {
+    color: #ccc;
+  }
+  
+  .fl-state-training {
+    color: #3498db;
+  }
+  
+  .fl-state-sending {
+    color: #e67e22;
+  }
+  
+  .fl-state-aggregating {
+    color: #9b59b6;
+  }
+  
+  .fl-state-receiving {
+    color: #2ecc71;
+  }
+  
+  .fl-metrics, .fl-agents, .fl-connections {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+  
+  .fl-metrics h4, .fl-agents h4, .fl-connections h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ddd;
+  }
+  
+  .fl-metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 8px;
+  }
+  
+  .fl-metric {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+  
+  .fl-metric-label {
+    color: #aaa;
+  }
+  
+  .fl-metric-value {
+    font-weight: bold;
+  }
+  
+  .fl-agent-states {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  
+  .fl-agent-state {
+    padding: 4px 8px;
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .fl-agent-state-label {
+    margin-right: 4px;
+  }
+  
+  .fl-agent-state-count {
+    font-weight: bold;
+  }
+  
+  .fl-connection-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .fl-connection {
+    padding: 4px 8px;
+    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    opacity: 0.7;
+  }
+  
+  .fl-connection-active {
+    opacity: 1;
+    border-left: 3px solid #3498db;
+  }
+  
+  .fl-connection-arrow {
+    margin: 0 4px;
+    color: #aaa;
+  }
+  
+  .fl-connection-source, .fl-connection-target {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }

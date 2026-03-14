@@ -1,0 +1,44 @@
+import React, { useState } from 'react';
+import './App.css';
+import SimulationContainer from './components/SimulationContainer';
+import { Game } from './phaser/game';
+
+function App() {
+  const [game, setGame] = useState<Game | null>(null);
+
+  const handleGameReady = (gameInstance: Game) => {
+    setGame(gameInstance);
+    console.log('Phaser game initialized and ready');
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Agent Laboratory</h1>
+        <p>Simulatore di Federated Learning</p>
+      </header>
+      
+      <main>
+        <div className="simulation-section">
+          <SimulationContainer onGameReady={handleGameReady} />
+        </div>
+        
+        <div className="controls-section">
+          <h2>Controlli</h2>
+          <button 
+            onClick={() => {
+              // Esempio di interazione con il gioco
+              if (game) {
+                game.scene.start('MercatorumLab');
+              }
+            }}
+          >
+            Avvia Lab Mercatorum
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default App;

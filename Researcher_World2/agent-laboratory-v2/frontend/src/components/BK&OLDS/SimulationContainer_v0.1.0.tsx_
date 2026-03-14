@@ -1,0 +1,43 @@
+import React, { useEffect, useRef } from 'react';
+import { initGame, Game } from '../phaser/game';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: Game) => void;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ onGameReady }) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameInstanceRef = useRef<Game | null>(null);
+
+  useEffect(() => {
+    if (gameContainerRef.current && !gameInstanceRef.current) {
+      try {
+        // Inizializza il gioco nel container
+        const containerId = 'phaser-game';
+        gameInstanceRef.current = initGame(containerId);
+        
+        if (onGameReady && gameInstanceRef.current) {
+          onGameReady(gameInstanceRef.current);
+        }
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+      }
+    }
+
+    // Cleanup al momento dell'unmount
+    return () => {
+      if (gameInstanceRef.current) {
+        gameInstanceRef.current.destroy(true);
+        gameInstanceRef.current = null;
+      }
+    };
+  }, [onGameReady]);
+
+  return (
+    <div className="simulation-container">
+      <div id="phaser-game" ref={gameContainerRef} style={{ width: '100%', height: '600px' }} />
+    </div>
+  );
+};
+
+export default SimulationContainer;

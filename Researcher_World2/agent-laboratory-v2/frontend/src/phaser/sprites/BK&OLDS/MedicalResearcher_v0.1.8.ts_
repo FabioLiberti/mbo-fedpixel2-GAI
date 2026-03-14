@@ -1,0 +1,476 @@
+import Phaser from 'phaser';
+import { ResearcherAgent } from './ResearcherAgent';
+import { 
+  ResearcherState
+} from '../types/AgentTypes';
+
+// Import corretti mantenendo compatibilità con ResearcherAgent
+// Assumiamo che questi tipi esistano nel file ResearcherAgent.ts
+import { ResearcherType, Specialization } from './ResearcherAgent';
+
+// Interfaccia per le competenze mediche
+interface MedicalSkills {
+  diagnostics: number;
+  'patient-care': number;
+  'medical-analytics': number;
+  research: number;
+  ethics: number;
+  collaboration: number;
+}
+
+// Stato esteso per i ricercatori medici
+type MedicalState = ResearcherState | 'diagnostics' | 'patient-review' | 'medical-analysis';
+
+export class MedicalResearcher extends ResearcherAgent {
+  // Competenze mediche specifiche
+  protected medicalSkills: MedicalSkills = {
+    diagnostics: 0,
+    'patient-care': 0,
+    'medical-analytics': 0,
+    research: 0,
+    ethics: 0,
+    collaboration: 0
+  };
+  
+  // Stato corrente del ricercatore medico
+  protected medicalState: MedicalState = 'idle';
+  
+  // Statistiche di attività medica
+  protected diagnosticsRun: number = 0;
+  protected patientsAnalyzed: number = 0;
+  protected publicationsCount: number = 0;
+  
+  // Indicatore di progresso visivo
+  protected progressBar?: Phaser.GameObjects.Graphics;
+  protected progressLabel?: Phaser.GameObjects.Text;
+  protected progress: number = 0;
+  
+  constructor(
+    scene: Phaser.Scene, 
+    x: number, 
+    y: number, 
+    texture: string,
+    type: ResearcherType,
+    specialization: Specialization
+  ) {
+    super(scene, x, y, texture, type, specialization);
+    
+    // Inizializza competenze mediche in base al tipo
+    this.initializeMedicalSkills();
+    
+    // Crea indicatori di progresso
+    this.createProgressIndicators();
+  }
+  
+  /**
+   * Inizializza le competenze mediche in base al tipo di ricercatore
+   */
+  protected initializeMedicalSkills(): void {
+    // Valori base inizializzati con valori di default
+    const baseSkills: MedicalSkills = {
+      diagnostics: 10,
+      'patient-care': 10,
+      'medical-analytics': 10,
+      research: 10,
+      ethics: 10,
+      collaboration: 10
+    };
+    
+    // Specializzazioni in base al tipo
+    if (this.type === 'medical-doctor') {
+      baseSkills.diagnostics += 30;
+      baseSkills['patient-care'] += 40;
+      this.addKnowledge('clinical-data', 30);
+    }
+    else if (this.type === 'biomedical-engineer') {
+      baseSkills['medical-analytics'] += 40;
+      baseSkills.diagnostics += 20;
+      this.addKnowledge('medical-imaging', 30);
+    }
+    
+    // Applica i valori
+    Object.assign(this.medicalSkills, baseSkills);
+  }
+  
+  /**
+   * Aggiunge conoscenza in un'area specifica
+   * (Metodo helper per evitare problemi con gainKnowledge)
+   */
+  protected addKnowledge(area: string, amount: number): void {
+    // Accediamo alla mappa delle conoscenze dalla classe base
+    const currentValue = this.getKnowledgeValue(area);
+    this.setKnowledgeValue(area, Math.min(100, currentValue + amount));
+  }
+  
+  /**
+   * Ottiene il valore di conoscenza per un'area
+   */
+  protected getKnowledgeValue(area: string): number {
+    // Simuliamo l'accesso alla mappa delle conoscenze che è privata nella classe base
+    // In una implementazione reale, questo dovrebbe essere gestito tramite metodi pubblici
+    return 30; // Valore fittizio di base
+  }
+  
+  /**
+   * Imposta il valore di conoscenza per un'area
+   */
+  protected setKnowledgeValue(area: string, value: number): void {
+    // In una implementazione reale, questo dovrebbe aggiornare 
+    // la mappa delle conoscenze nella classe base
+    console.log(`Setting knowledge for ${area} to ${value}`);
+  }
+  
+  /**
+   * Crea gli indicatori di progresso
+   */
+  private createProgressIndicators(): void {
+    // Crea una barra di progresso sopra l'agente
+    this.progressBar = this.scene.add.graphics();
+    this.progressLabel = this.scene.add.text(this.x, this.y - 35, '', {
+      fontSize: '8px',
+      color: '#ffffff',
+      align: 'center'
+    });
+    this.progressLabel.setOrigin(0.5);
+    
+    // Nascondi inizialmente
+    this.hideProgress();
+  }
+  
+  /**
+   * Avvia una diagnostica medica
+   */
+  public startDiagnostics(): void {
+    // Imposta lo stato
+    this.setState('idle'); // Assumiamo che setState esista nella classe base
+    this.medicalState = 'diagnostics';
+    
+    // Mostra la barra di progresso
+    this.showProgress('Diagnostics');
+    this.setProgress(0);
+  }
+  
+  /**
+   * Avvia una revisione paziente
+   */
+  public startPatientReview(): void {
+    // Imposta lo stato
+    this.setState('idle'); // Assumiamo che setState esista nella classe base
+    this.medicalState = 'patient-review';
+    
+    // Mostra la barra di progresso
+    this.showProgress('Patient Review');
+    this.setProgress(0);
+  }
+  
+  /**
+   * Avvia un'analisi medica
+   */
+  public startMedicalAnalysis(): void {
+    // Imposta lo stato
+    this.setState('idle'); // Assumiamo che setState esista nella classe base
+    this.medicalState = 'medical-analysis';
+    
+    // Mostra la barra di progresso
+    this.showProgress('Medical Analysis');
+    this.setProgress(0);
+  }
+  
+  /**
+   * Aggiorna lo stato di diagnostica
+   */
+  protected updateDiagnostics(delta: number): void {
+    // Incrementa il progresso
+    this.setProgress(this.progress + 0.06 * delta / 16);
+    
+    // Se la diagnostica è completata
+    if (this.progress >= 100) {
+      // Incrementa le statistiche
+      this.diagnosticsRun++;
+      
+      // Migliora le competenze mediche
+      this.gainMedicalSkill('diagnostics', Phaser.Math.Between(1, 2));
+      
+      // Possibilità di guadagnare anche in patient-care
+      if (Phaser.Math.Between(0, 10) < 3) {
+        this.gainMedicalSkill('patient-care', 0.5);
+      }
+      
+      // Rare possibilità di guadagnare in etica e privacy
+      if (Phaser.Math.Between(0, 1000) < 5) { // 0.5% probabilità ogni secondo
+        this.gainMedicalSkill('ethics', 0.1);
+        this.addKnowledge('privacy', 0.1);
+      }
+      
+      // Ripristina lo stato e nasconde il progresso
+      this.setState('idle');
+      this.medicalState = 'idle';
+      this.hideProgress();
+    }
+  }
+  
+  /**
+   * Aggiorna lo stato di revisione paziente
+   */
+  protected updatePatientReview(delta: number): void {
+    // Incrementa il progresso
+    this.setProgress(this.progress + 0.04 * delta / 16);
+    
+    // Se la revisione è completata
+    if (this.progress >= 100) {
+      // Incrementa pazienti analizzati
+      this.patientsAnalyzed++;
+      
+      // Migliora le competenze mediche
+      this.gainMedicalSkill('patient-care', Phaser.Math.Between(1, 3));
+      
+      // Ripristina lo stato e nasconde il progresso
+      this.setState('idle');
+      this.medicalState = 'idle';
+      this.hideProgress();
+    }
+  }
+  
+  /**
+   * Aggiorna lo stato di analisi medica
+   */
+  protected updateMedicalAnalysis(delta: number): void {
+    // Incrementa il progresso
+    this.setProgress(this.progress + 0.05 * delta / 16);
+    
+    // Se l'analisi è completata
+    if (this.progress >= 100) {
+      // Guadagna competenza in medical-analytics
+      this.gainMedicalSkill('medical-analytics', Phaser.Math.Between(1, 3));
+      
+      // Possibilità di pubblicazione
+      if (Phaser.Math.Between(0, 100) < 10) {
+        this.addPublication();
+      }
+      
+      // Ripristina lo stato e nasconde il progresso
+      this.setState('idle');
+      this.medicalState = 'idle';
+      this.hideProgress();
+    }
+  }
+  
+  /**
+   * Sceglie uno stato casuale specifico per medici
+   */
+  protected chooseRandomMedicalState(): void {
+    const medicalStates = [
+      'idle', 'moving', 'working', 'resting', 
+      'researching', 'diagnostics', 'patient-review', 'medical-analysis'
+    ];
+    
+    // Seleziona stato casuale
+    const randomStateIndex = Phaser.Math.Between(0, medicalStates.length - 1);
+    const randomState = medicalStates[randomStateIndex];
+    
+    // Se è scelto moving, trova una posizione casuale
+    if (randomState === 'moving') {
+      this.moveToRandomLocation();
+    } 
+    // Se è diagnostics, avvia diagnostica
+    else if (randomState === 'diagnostics') {
+      this.startDiagnostics();
+    }
+    // Se è patient-review, avvia revisione paziente
+    else if (randomState === 'patient-review') {
+      this.startPatientReview();
+    }
+    // Se è medical-analysis, avvia analisi medica
+    else if (randomState === 'medical-analysis') {
+      this.startMedicalAnalysis();
+    }
+    else {
+      // Per altri stati, usiamo il metodo della classe base
+      this.setState(randomState as ResearcherState);
+    }
+  }
+  
+  /**
+   * Override del metodo della classe base per la selezione di stato casuale
+   */
+  protected chooseRandomState(): void {
+    this.chooseRandomMedicalState();
+  }
+  
+  /**
+   * Imposta lo stato dell'agente
+   * Adattato per chiamare il metodo setState che assumiamo esista nella classe base
+   */
+  public setState(newState: ResearcherState): void {
+    // Assumiamo che questo metodo sia presente nella classe base
+    super.setState(newState);
+  }
+  
+  /**
+   * Sposta l'agente in una posizione casuale
+   */
+  protected moveToRandomLocation(): void {
+    const x = Phaser.Math.Between(50, this.scene.cameras.main.width - 50);
+    const y = Phaser.Math.Between(50, this.scene.cameras.main.height - 50);
+    
+    // Assumiamo che questo metodo sia presente nella classe base
+    this.moveTo(x, y);
+  }
+  
+  /**
+   * Metodo per spostare l'agente verso una posizione
+   * (implementazione per evitare l'errore di metodo mancante)
+   */
+  protected moveTo(x: number, y: number): void {
+    // Questa è un'implementazione temporanea
+    // In una implementazione reale, dovrebbe essere definito nella classe base o qui
+    console.log(`Moving to ${x}, ${y}`);
+    this.x = x;
+    this.y = y;
+  }
+  
+  /**
+   * Migliora una competenza medica
+   */
+  protected gainMedicalSkill(skill: keyof MedicalSkills, amount: number): void {
+    this.medicalSkills[skill] = Math.min(100, this.medicalSkills[skill] + amount);
+  }
+  
+  /**
+   * Aggiunge una pubblicazione al ricercatore
+   */
+  protected addPublication(): void {
+    this.publicationsCount++;
+    
+    // Crea un effetto visivo temporaneo
+    const text = this.scene.add.text(this.x, this.y - 30, 'Publication! 📝', {
+      fontSize: '10px',
+      color: '#ffff00',
+      stroke: '#000000',
+      strokeThickness: 2
+    });
+    text.setOrigin(0.5);
+    
+    // Anima il testo
+    this.scene.tweens.add({
+      targets: text,
+      y: this.y - 60,
+      alpha: 0,
+      duration: 1500,
+      onComplete: () => {
+        text.destroy();
+      }
+    });
+  }
+  
+  /**
+   * Mostra la barra di progresso
+   */
+  protected showProgress(label: string): void {
+    if (this.progressLabel) {
+      this.progressLabel.setText(label);
+      this.progressLabel.setVisible(true);
+    }
+    if (this.progressBar) {
+      this.progressBar.setVisible(true);
+    }
+  }
+  
+  /**
+   * Nasconde la barra di progresso
+   */
+  protected hideProgress(): void {
+    if (this.progressLabel) {
+      this.progressLabel.setVisible(false);
+    }
+    if (this.progressBar) {
+      this.progressBar.setVisible(false);
+    }
+  }
+  
+  /**
+   * Imposta il valore della barra di progresso
+   */
+  protected setProgress(value: number): void {
+    this.progress = Phaser.Math.Clamp(value, 0, 100);
+    
+    // Aggiorna la barra grafica
+    if (this.progressBar) {
+      this.progressBar.clear();
+      
+      // Sfondo della barra
+      this.progressBar.fillStyle(0x000000, 0.5);
+      this.progressBar.fillRect(this.x - 15, this.y - 25, 30, 5);
+      
+      // Barra di progresso
+      this.progressBar.fillStyle(0x00ff00, 0.8);
+      this.progressBar.fillRect(this.x - 15, this.y - 25, 30 * (this.progress / 100), 5);
+    }
+  }
+  
+  // Override dell'update per gestire stati specifici dei medici
+  update(time: number, delta: number): void {
+    super.update(time, delta);
+    
+    // Aggiorna la posizione degli indicatori di progresso
+    if (this.progressBar && this.progressLabel) {
+      this.setProgress(this.progress);
+      this.progressLabel.setPosition(this.x, this.y - 35);
+    }
+    
+    // Gestisci comportamenti specifici per stati medici
+    if (this.medicalState === 'diagnostics') {
+      this.updateDiagnostics(delta);
+    } else if (this.medicalState === 'patient-review') {
+      this.updatePatientReview(delta);
+    } else if (this.medicalState === 'medical-analysis') {
+      this.updateMedicalAnalysis(delta);
+    }
+  }
+  
+  /**
+   * Ottiene la specializzazione del ricercatore
+   */
+  public getSpecialization(): string {
+    // Assumiamo che specialization sia una proprietà accessibile
+    return this.specialization.toString();
+  }
+  
+  // Implementazione del metodo handleClick (assumiamo che esista nella classe base)
+  handleClick(): void {
+    console.log('Medical Researcher clicked:', {
+      type: this.type,
+      specialization: this.getSpecialization(),
+      medicalSkills: this.medicalSkills,
+      diagnosticsRun: this.diagnosticsRun,
+      patientsAnalyzed: this.patientsAnalyzed,
+      publications: this.publicationsCount
+    });
+    
+    // Crea un popup informativo
+    const info = this.scene.add.text(this.x, this.y - 50, 
+      `${this.type} - ${this.getSpecialization()}\n` +
+      `Diagnostics: ${this.diagnosticsRun} | Patients: ${this.patientsAnalyzed}\n` +
+      `Publications: ${this.publicationsCount}`,
+      {
+        fontSize: '10px',
+        backgroundColor: '#333333',
+        padding: { x: 5, y: 5 },
+        color: '#ffffff'
+      }
+    );
+    info.setOrigin(0.5);
+    
+    // Autodissolve dopo 3 secondi
+    this.scene.time.delayedCall(3000, () => {
+      this.scene.tweens.add({
+        targets: info,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          info.destroy();
+        }
+      });
+    });
+  }
+}

@@ -1,0 +1,656 @@
+import * as Phaser from 'phaser';
+import { BaseScene } from './BaseScene';
+import LabMiniature from '../entities/LabMiniature';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { SCENE_KEYS } from '../game';
+
+export class WorldMapScene extends BaseScene {
+  private labMiniatures: Map<string, LabMiniature> = new Map();
+  // Inizializzazione delle proprietà per risolvere gli errori TS2564
+  private globalAgentController!: GlobalAgentController;
+  private navigationButtons!: Phaser.GameObjects.Container;
+  private infoPanel!: Phaser.GameObjects.Container;
+  private connectionGraphics!: Phaser.GameObjects.Graphics;
+  private mercatorumMiniature!: LabMiniature;
+  private blekingeMiniature!: LabMiniature;
+  private opbgMiniature!: LabMiniature;
+  
+  // Debug properties
+  private debugGraphics!: Phaser.GameObjects.Graphics;
+  private debugText!: Phaser.GameObjects.Text;
+  private debugMode: boolean = true;
+
+  constructor() {
+    super('WorldMapScene');
+  }
+
+  init(): void {
+    this.cameras.main.setBackgroundColor('#1a1a2e');
+  }
+
+  preload(): void {
+    console.log("WorldMapScene: Preloading assets...");
+    
+    // Debug: log all available textures
+    console.log("Available textures:", Object.keys(this.textures.list));
+    
+    // Precaricare assets specifici della mappa mondiale
+    this.load.image('world-map-background', 'assets/ui/world-map-background.png');
+    this.load.image('lab-connection', 'assets/ui/lab-connection-line.png');
+    this.load.image('data-exchange-icon', 'assets/ui/data-exchange-icon.png');
+    this.load.image('agent-dot', 'assets/ui/agent-dot.png');
+    
+    // Pulsanti UI
+    this.load.image('info-button', 'assets/ui/info-button.png');
+    this.load.image('settings-button', 'assets/ui/settings-button.png');
+    this.load.image('close-button', 'assets/ui/close-button.png');
+    
+    // Texture miniature dei laboratori (check per compatibilità con LabMiniature)
+    this.load.image('mercatorum-miniature', 'assets/ui/mercatorum-miniature.png');
+    this.load.image('blekinge-miniature', 'assets/ui/blekinge-miniature.png');
+    this.load.image('opbg-miniature', 'assets/ui/opbg-miniature.png');
+    
+    // Debug: Try to load different formats for backward compatibility
+    this.load.image('lab_mercatorum_miniature', 'assets/ui/mercatorum-miniature.png');
+    this.load.image('lab_blekinge_miniature', 'assets/ui/blekinge-miniature.png');
+    this.load.image('lab_opbg_miniature', 'assets/ui/opbg-miniature.png');
+  }
+
+  create(): void {
+    console.log("WorldMapScene: Creating scene...");
+    
+    // Initialize debug mode
+    this.setupDebugMode();
+    
+    // Log all textures available after loading
+    console.log("Create: Available textures:", Object.keys(this.textures.list));
+    
+    // Creazione dello sfondo della mappa mondiale
+    const background = this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'world-map-background')
+      .setOrigin(0.5)
+      .setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+    
+    // Debug: Log the background dimensions
+    console.log(`Background dimensions: ${background.width}x${background.height}`);
+    console.log(`Display dimensions: ${background.displayWidth}x${background.displayHeight}`);
+    
+    // Creazione delle grafiche per le connessioni
+    this.connectionGraphics = this.add.graphics();
+    
+    // Posizionamento delle miniature dei laboratori
+    this.createLabMiniatures();
+    
+    // Creazione delle connessioni tra laboratori
+    this.createLabConnections();
+    
+    // Inizializzazione del controller degli agenti globali
+    this.globalAgentController = new GlobalAgentController(this);
+    this.globalAgentController.initialize();
+    
+    // Creazione dei pulsanti di navigazione
+    this.createNavigationUI();
+    
+    // Creazione del pannello informativo
+    this.createInfoPanel();
+    
+    // Registrazione degli eventi
+    this.registerEvents();
+    
+    // Aggiungi effetti alle connessioni
+    this.addConnectionGlow();
+    
+    // Update debug info
+    this.updateDebugInfo();
+  }
+
+  update(time: number, delta: number): void {
+    // Aggiorna le connessioni per mantenerle fluide
+    this.updateConnections();
+    
+    // Correzione dell'errore TS2802 usando Array.from
+    Array.from(this.labMiniatures.values()).forEach(miniature => {
+      if (typeof miniature.update === 'function') {
+        miniature.update(time, delta);
+      }
+    });
+    
+    // Aggiornamento degli agenti sulla mappa
+    if (this.globalAgentController) {
+      this.globalAgentController.update(time, delta);
+    }
+  }
+
+  private setupDebugMode(): void {
+    // Create debug graphics
+    this.debugGraphics = this.add.graphics();
+    
+    // Add debug text
+    this.debugText = this.add.text(10, 10, 'Debug Info', {
+      fontSize: '14px',
+      color: '#FFFFFF',
+      backgroundColor: '#000000',
+      padding: { x: 10, y: 5 }
+    });
+    this.debugText.setDepth(1000);
+    
+    // Add toggle debug button
+    const toggleButton = this.add.text(this.cameras.main.width - 150, 10, 'Toggle Debug', {
+      fontSize: '14px',
+      color: '#FFFFFF',
+      backgroundColor: '#AA0000',
+      padding: { x: 10, y: 5 }
+    });
+    toggleButton.setInteractive();
+    toggleButton.on('pointerdown', () => this.toggleDebug());
+    toggleButton.setDepth(1000);
+  }
+
+  private updateDebugInfo(): void {
+    // Count textures
+    const textureCount = Object.keys(this.textures.list).length;
+    
+    // Update debug text
+    this.debugText.setText(
+      `Debug Info:\n` +
+      `Resolution: ${this.cameras.main.width}x${this.cameras.main.height}\n` +
+      `Textures loaded: ${textureCount}\n` +
+      `Labs: ${this.labMiniatures.size}`
+    );
+  }
+  
+  private toggleDebug(): void {
+    this.debugMode = !this.debugMode;
+    
+    // Toggle debug visuals
+    this.debugGraphics.setVisible(this.debugMode);
+    this.debugText.setVisible(this.debugMode);
+    
+    // Toggle debug on lab miniatures if they have a toggleDebug method
+    this.labMiniatures.forEach(miniature => {
+      if (miniature.toggleDebug && typeof miniature.toggleDebug === 'function') {
+        miniature.toggleDebug(this.debugMode);
+      }
+    });
+    
+    console.log(`Debug mode: ${this.debugMode ? 'ON' : 'OFF'}`);
+  }
+
+  private createLabMiniatures(): void {
+    // Nuovo posizionamento dei laboratori in base al layout richiesto
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    // Parametri di posizionamento
+    const topMargin = height * 0.15;
+    const sideMargin = width * 0.15;
+    const bottomMargin = height * 0.2;
+    
+    // Debug: Draw grid points for positioning
+    if (this.debugMode) {
+      this.debugLabPositions(width, height, topMargin, sideMargin, bottomMargin);
+    }
+    
+    const mercatorumX = sideMargin + 50;
+    const mercatorumY = topMargin + 50;
+    const blekingeX = width - sideMargin - 350;
+    const blekingeY = topMargin + 50;
+    const opbgX = width / 2 - 150;
+    const opbgY = height - bottomMargin - 250;
+    
+    // Creare le miniature dei laboratori usando i parametri corretti
+    // Verifichiamo quanti parametri accetta il costruttore di LabMiniature
+    try {
+      // Mercatorum Lab (in alto a sinistra)
+      this.mercatorumMiniature = new LabMiniature(
+        this as any, // Cast to any to avoid type conflicts
+        mercatorumX,
+        mercatorumY,
+        'mercatorum-miniature'
+      );
+      
+      // Aggiungi dati aggiuntivi come proprietà se necessario
+      this.mercatorumMiniature.name = 'Università Mercatorum';
+      this.mercatorumMiniature.targetScene = SCENE_KEYS.MERCATORUM;
+      
+      this.labMiniatures.set('mercatorum', this.mercatorumMiniature);
+      
+      // Blekinge Lab (in alto a destra)
+      this.blekingeMiniature = new LabMiniature(
+        this as any, // Cast to any to avoid type conflicts
+        blekingeX,
+        blekingeY,
+        'blekinge-miniature'
+      );
+      
+      // Aggiungi dati aggiuntivi come proprietà se necessario
+      this.blekingeMiniature.name = 'Blekinge University';
+      this.blekingeMiniature.targetScene = SCENE_KEYS.BLEKINGE;
+      
+      this.labMiniatures.set('blekinge', this.blekingeMiniature);
+      
+      // OPBG Lab (in basso centro)
+      this.opbgMiniature = new LabMiniature(
+        this as any, // Cast to any to avoid type conflicts
+        opbgX,
+        opbgY,
+        'opbg-miniature'
+      );
+      
+      // Aggiungi dati aggiuntivi come proprietà se necessario
+      this.opbgMiniature.name = 'OPBG IRCCS';
+      this.opbgMiniature.targetScene = SCENE_KEYS.OPBG;
+      
+      this.labMiniatures.set('opbg', this.opbgMiniature);
+      
+      console.log("Miniature created successfully with 4 parameters");
+    } catch (e) {
+      console.error("Error creating miniatures with 4 parameters:", e);
+      
+      // Fallback: prova con un'implementazione diversa o parametri alternativi
+      console.warn("Falling back to alternative implementation...");
+    }
+    
+    // Imposta l'interattività su ciascuna miniatura
+    this.mercatorumMiniature.setInteractive(() => {
+      this.scene.start(SCENE_KEYS.MERCATORUM);
+    });
+    
+    this.blekingeMiniature.setInteractive(() => {
+      this.scene.start(SCENE_KEYS.BLEKINGE);
+    });
+    
+    this.opbgMiniature.setInteractive(() => {
+      this.scene.start(SCENE_KEYS.OPBG);
+    });
+    
+    // Debug: Log miniature dimensions
+    console.log("Lab miniature dimensions:");
+    console.log(`Mercatorum: ${this.mercatorumMiniature.width}x${this.mercatorumMiniature.height}`);
+    console.log(`Blekinge: ${this.blekingeMiniature.width}x${this.blekingeMiniature.height}`);
+    console.log(`OPBG: ${this.opbgMiniature.width}x${this.opbgMiniature.height}`);
+  }
+  
+  private debugLabPositions(
+    width: number, 
+    height: number, 
+    topMargin: number, 
+    sideMargin: number, 
+    bottomMargin: number
+  ): void {
+    // Draw reference points for lab positions
+    this.debugGraphics.fillStyle(0xFF0000, 1);
+    
+    // Mercatorum position
+    const mercatorumX = sideMargin + 50;
+    const mercatorumY = topMargin + 50;
+    this.debugGraphics.fillCircle(mercatorumX, mercatorumY, 5);
+    this.add.text(mercatorumX, mercatorumY - 20, `Mercatorum (${mercatorumX}, ${mercatorumY})`, {
+      fontSize: '10px',
+      color: '#FFFF00'
+    }).setOrigin(0.5).setDepth(1000);
+    
+    // Blekinge position
+    const blekingeX = width - sideMargin - 350;
+    const blekingeY = topMargin + 50;
+    this.debugGraphics.fillCircle(blekingeX, blekingeY, 5);
+    this.add.text(blekingeX, blekingeY - 20, `Blekinge (${blekingeX}, ${blekingeY})`, {
+      fontSize: '10px',
+      color: '#FFFF00'
+    }).setOrigin(0.5).setDepth(1000);
+    
+    // OPBG position
+    const opbgX = width / 2 - 150;
+    const opbgY = height - bottomMargin - 250;
+    this.debugGraphics.fillCircle(opbgX, opbgY, 5);
+    this.add.text(opbgX, opbgY - 20, `OPBG (${opbgX}, ${opbgY})`, {
+      fontSize: '10px',
+      color: '#FFFF00'
+    }).setOrigin(0.5).setDepth(1000);
+  }
+
+  private createLabConnections(): void {
+    // Pulisci le grafiche precedenti
+    this.connectionGraphics.clear();
+    
+    if (!this.mercatorumMiniature || !this.blekingeMiniature || !this.opbgMiniature) {
+      console.warn("One or more lab miniatures are not initialized!");
+      return;
+    }
+    
+    // Ottieni le posizioni dalle miniature
+    // Poiché getPosition() non esiste, usiamo direttamente le proprietà x e y
+    const mercatorumPos = new Phaser.Math.Vector2(
+      this.mercatorumMiniature.x,
+      this.mercatorumMiniature.y
+    );
+    
+    const blekingePos = new Phaser.Math.Vector2(
+      this.blekingeMiniature.x,
+      this.blekingeMiniature.y
+    );
+    
+    const opbgPos = new Phaser.Math.Vector2(
+      this.opbgMiniature.x,
+      this.opbgMiniature.y
+    );
+    
+    // Debug: Log positions
+    console.log("Lab positions for connections:");
+    console.log(`Mercatorum: (${mercatorumPos.x}, ${mercatorumPos.y})`);
+    console.log(`Blekinge: (${blekingePos.x}, ${blekingePos.y})`);
+    console.log(`OPBG: (${opbgPos.x}, ${opbgPos.y})`);
+    
+    // Disegna le connessioni aggiornate con linee tratteggiate
+    this.drawDashedLine(this.connectionGraphics, mercatorumPos.x, mercatorumPos.y, blekingePos.x, blekingePos.y);
+    this.drawDashedLine(this.connectionGraphics, blekingePos.x, blekingePos.y, opbgPos.x, opbgPos.y);
+    this.drawDashedLine(this.connectionGraphics, opbgPos.x, opbgPos.y, mercatorumPos.x, mercatorumPos.y);
+    
+    // Aggiunta di icone di "data exchange" lungo le connessioni
+    this.createDataExchangeVisuals(mercatorumPos, blekingePos);
+    this.createDataExchangeVisuals(blekingePos, opbgPos);
+    this.createDataExchangeVisuals(opbgPos, mercatorumPos);
+  }
+
+  /**
+   * Disegna una linea tratteggiata tra due punti
+   */
+  private drawDashedLine(
+    graphics: Phaser.GameObjects.Graphics,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    lineColor: number = 0x2080ff,  // Blu più chiaro
+    dashSize: number = 10,
+    gapSize: number = 5,
+    lineWidth: number = 2          // Linea più sottile
+  ): void {
+    // Imposta lo stile della linea
+    graphics.lineStyle(lineWidth, lineColor, 0.7);  // Ridotta l'opacità a 0.7
+    
+    // Calcola la lunghezza totale della linea
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Calcola la direzione normalizzata
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    
+    // Disegna segmenti di linea tratteggiati
+    let currentDist = 0;
+    let drawing = true;
+    
+    while (currentDist < distance) {
+      const segmentLength = drawing ? dashSize : gapSize;
+      const nextDist = Math.min(currentDist + segmentLength, distance);
+      
+      const startSegX = startX + dirX * currentDist;
+      const startSegY = startY + dirY * currentDist;
+      const endSegX = startX + dirX * nextDist;
+      const endSegY = startY + dirY * nextDist;
+      
+      if (drawing) {
+        graphics.beginPath();
+        graphics.moveTo(startSegX, startSegY);
+        graphics.lineTo(endSegX, endSegY);
+        graphics.strokePath();
+      }
+      
+      currentDist = nextDist;
+      drawing = !drawing;
+    }
+  }
+
+  /**
+   * Crea gli elementi visuali per rappresentare lo scambio di dati tra i laboratori
+   */
+  private createDataExchangeVisuals(start: Phaser.Math.Vector2, end: Phaser.Math.Vector2): void {
+    // Calcola il punto centrale tra i due punti
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+    
+    // Debug: Mark data exchange position
+    if (this.debugMode) {
+      this.debugGraphics.fillStyle(0xFFAA00, 1);
+      this.debugGraphics.fillCircle(midX, midY, 8);
+    }
+    
+    // Check if data exchange icon texture exists
+    let dataExchange: Phaser.GameObjects.Sprite;
+    
+    if (this.textures.exists('data-exchange-icon')) {
+      // Crea un elemento visivo di scambio dati nel punto centrale
+      dataExchange = this.add.sprite(midX, midY, 'data-exchange-icon');
+      
+      // Imposta scala e opacità per renderlo meno invasivo
+      dataExchange.setScale(0.5);
+      dataExchange.setAlpha(0.7);
+    } else {
+      console.warn("Data exchange icon texture does NOT exist! Using fallback circle.");
+      // Create a fallback circle
+      const graphics = this.add.graphics();
+      graphics.fillStyle(0xFFAA00, 0.7);
+      graphics.fillCircle(midX, midY, 10);
+      
+      // Create an empty sprite as placeholder
+      dataExchange = this.add.sprite(midX, midY, '__DEFAULT');
+      dataExchange.setAlpha(0);
+    }
+    
+    // Aggiungi un effetto di pulsazione per dare l'idea di scambio dati attivo
+    this.tweens.add({
+      targets: dataExchange,
+      alpha: { from: 0.7, to: 0.4 },
+      duration: 1000,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  /**
+   * Aggiunge un effetto di brillantezza alle connessioni attive
+   */
+  private addConnectionGlow(): void {
+    if (this.connectionGraphics && this.mercatorumMiniature && this.blekingeMiniature && this.opbgMiniature) {
+      // Aggiungi un leggero effetto pulsante alle connessioni
+      this.tweens.add({
+        targets: this.connectionGraphics,
+        alpha: { from: 0.7, to: 0.4 },
+        duration: 3000,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1
+      });
+    }
+  }
+
+  /**
+   * Aggiorna le connessioni tra i laboratori
+   */
+  private updateConnections(): void {
+    if (this.connectionGraphics && this.mercatorumMiniature && this.blekingeMiniature && this.opbgMiniature) {
+      // Pulisci le grafiche precedenti
+      this.connectionGraphics.clear();
+      
+      // Ottieni le posizioni aggiornate usando x e y direttamente
+      const mercatorumPos = new Phaser.Math.Vector2(
+        this.mercatorumMiniature.x,
+        this.mercatorumMiniature.y
+      );
+      
+      const blekingePos = new Phaser.Math.Vector2(
+        this.blekingeMiniature.x,
+        this.blekingeMiniature.y
+      );
+      
+      const opbgPos = new Phaser.Math.Vector2(
+        this.opbgMiniature.x,
+        this.opbgMiniature.y
+      );
+      
+      // Disegna le connessioni aggiornate
+      this.drawDashedLine(this.connectionGraphics, mercatorumPos.x, mercatorumPos.y, blekingePos.x, blekingePos.y);
+      this.drawDashedLine(this.connectionGraphics, blekingePos.x, blekingePos.y, opbgPos.x, opbgPos.y);
+      this.drawDashedLine(this.connectionGraphics, opbgPos.x, opbgPos.y, mercatorumPos.x, mercatorumPos.y);
+    }
+  }
+
+  private createNavigationUI(): void {
+    // Creazione dei pulsanti di navigazione (zoom in/out, settings, etc.)
+    this.navigationButtons = this.add.container(
+      this.cameras.main.width - 50,
+      this.cameras.main.height - 150
+    );
+    
+    // Check if button textures exist
+    const infoButtonExists = this.textures.exists('info-button');
+    const settingsButtonExists = this.textures.exists('settings-button');
+    
+    // Debug: Log button texture status
+    console.log(`Info button texture exists: ${infoButtonExists}`);
+    console.log(`Settings button texture exists: ${settingsButtonExists}`);
+    
+    // Pulsante Info
+    let infoButton: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
+    
+    if (infoButtonExists) {
+      infoButton = this.add.image(0, 0, 'info-button')
+        .setInteractive()
+        .on('pointerdown', () => this.toggleInfoPanel());
+    } else {
+      // Fallback to colored rectangle with text
+      infoButton = this.add.rectangle(0, 0, 40, 40, 0x3366FF, 0.8);
+      const infoText = this.add.text(0, 0, 'i', { 
+        fontSize: '24px', 
+        color: '#FFFFFF' 
+      }).setOrigin(0.5);
+      
+      // Make the rectangle interactive
+      infoButton.setInteractive();
+      infoButton.on('pointerdown', () => this.toggleInfoPanel());
+      
+      // Create a container for the button and text
+      const infoContainer = this.add.container(0, 0, [infoButton, infoText]);
+      this.navigationButtons.add(infoContainer);
+    }
+    
+    // Pulsante Settings
+    let settingsButton: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
+    
+    if (settingsButtonExists) {
+      settingsButton = this.add.image(0, 50, 'settings-button')
+        .setInteractive()
+        .on('pointerdown', () => console.log('Settings clicked'));
+      
+      this.navigationButtons.add(settingsButton);
+    } else {
+      // Fallback to colored rectangle with text
+      settingsButton = this.add.rectangle(0, 50, 40, 40, 0x33AA66, 0.8);
+      const settingsText = this.add.text(0, 50, '⚙', { 
+        fontSize: '24px', 
+        color: '#FFFFFF' 
+      }).setOrigin(0.5);
+      
+      // Make the rectangle interactive
+      settingsButton.setInteractive();
+      settingsButton.on('pointerdown', () => console.log('Settings clicked'));
+      
+      // Create a container for the button and text
+      const settingsContainer = this.add.container(0, 0, [settingsButton, settingsText]);
+      this.navigationButtons.add(settingsContainer);
+    }
+    
+    if (infoButtonExists) {
+      this.navigationButtons.add(infoButton);
+    }
+  }
+
+  private createInfoPanel(): void {
+    // Creazione del pannello informativo (nascosto all'inizio)
+    this.infoPanel = this.add.container(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY
+    ).setVisible(false);
+    
+    // Sfondo del pannello
+    const panelBg = this.add.rectangle(0, 0, 500, 400, 0x000000, 0.8)
+      .setOrigin(0.5);
+    
+    // Titolo del pannello
+    const title = this.add.text(0, -150, 'Federated Learning Network', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    // Descrizione
+    const description = this.add.text(0, -80, 
+      'This map shows the three research laboratories participating in the\n' +
+      'federated learning network. Each lab specializes in different aspects\n' +
+      'of privacy-preserving collaborative machine learning.', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffffff',
+      align: 'center'
+    }).setOrigin(0.5);
+    
+    // Check if close button texture exists
+    let closeButton: Phaser.GameObjects.Image | Phaser.GameObjects.Text;
+    
+    if (this.textures.exists('close-button')) {
+      closeButton = this.add.image(220, -170, 'close-button')
+        .setScale(0.5)
+        .setInteractive()
+        .on('pointerdown', () => this.toggleInfoPanel());
+    } else {
+      // Fallback to text button
+      closeButton = this.add.text(220, -170, 'X', {
+        fontSize: '24px',
+        color: '#FF0000',
+        backgroundColor: '#000000',
+        padding: { x: 10, y: 5 }
+      })
+      .setInteractive()
+      .on('pointerdown', () => this.toggleInfoPanel());
+    }
+    
+    this.infoPanel.add([panelBg, title, description, closeButton]);
+  }
+
+  private toggleInfoPanel(): void {
+    this.infoPanel.setVisible(!this.infoPanel.visible);
+  }
+
+  private registerEvents(): void {
+    // Registrazione degli eventi per gestire la navigazione tra le scene
+    this.events.on('shutdown', () => {
+      // Pulizia quando la scena viene chiusa
+      this.events.off('shutdown');
+      
+      // Rimuovi il controller degli agenti
+      if (this.globalAgentController) {
+        this.globalAgentController.destroy();
+      }
+    });
+    
+    // Correzione dell'errore TS2802 usando Array.from
+    Array.from(this.labMiniatures.values()).forEach(miniature => {
+      if (miniature.on && typeof miniature.on === 'function') {
+        miniature.on('labSelected', (targetScene: string) => {
+          if (this.scene.manager && typeof this.scene.manager.start === 'function') {
+            // Usa il game instance per navigare correttamente
+            const game = this.game as any;
+            if (game.startLabScene && typeof game.startLabScene === 'function') {
+              game.startLabScene(targetScene);
+            } else {
+              console.log(`Starting scene: ${targetScene} (fallback method)`);
+              this.scene.start(targetScene);
+            }
+          }
+        });
+      }
+    });
+  }
+}

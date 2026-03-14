@@ -1,0 +1,228 @@
+import { BaseLabScene, LabTheme } from './BaseLabScene';
+import { Agent } from '../sprites/Agent';
+import { ResearcherAgent } from '../sprites/ResearcherAgent';
+
+export class BlekingeLabScene extends BaseLabScene {
+  // Tema specifico per il laboratorio di Blekinge
+  protected theme: LabTheme = {
+    name: 'Blekinge University Lab',
+    backgroundColor: 0xf0f5f9, // Azzurro ghiaccio chiaro
+    tilesetKey: 'blekinge-tileset',
+    colorPalette: {
+      primary: 0xc9d6df,   // Bianco azzurrino
+      secondary: 0x52616b, // Grigio chiaro
+      accent: 0xf9d342,    // Giallo accento
+      background: 0xf0f5f9 // Azzurro ghiaccio
+    }
+  };
+  
+  constructor() {
+    super('BlekingeLabScene');
+  }
+  
+  preload(): void {
+    // Carica il tileset specifico per Blekinge
+    this.load.image(this.theme.tilesetKey, 'assets/tilesets/blekinge-tileset.png');
+    
+    // Carica la mappa Tilemap in formato JSON
+    this.load.tilemapTiledJSON('blekinge-map', 'assets/maps/blekinge-lab.json');
+    
+    // Carica gli sprite degli agenti
+    this.load.spritesheet('researcher-blekinge', 'assets/sprites/researchers-blekinge.png', {
+      frameWidth: 16,
+      frameHeight: 24
+    });
+    
+    // Altri asset specifici per il laboratorio Blekinge
+    this.load.image('blekinge-logo', 'assets/ui/blekinge-logo.png');
+    this.load.image('screen-effect', 'assets/effects/screen-glow.png');
+  }
+  
+  protected createMap(): void {
+    // Crea la mappa dal JSON di Tiled
+    this.map = this.make.tilemap({ key: 'blekinge-map' });
+    
+    // Aggiunge il tileset alla mappa
+    this.tileset = this.map.addTilesetImage('blekinge-tileset', this.theme.tilesetKey);
+    
+    // Crea i diversi layer della mappa
+    this.floorLayer = this.map.createLayer('Floor', this.tileset);
+    this.wallsLayer = this.map.createLayer('Walls', this.tileset);
+    this.furnitureLayer = this.map.createLayer('Furniture', this.tileset);
+    
+    // Imposta le collisioni per i muri e i mobili
+    this.wallsLayer.setCollisionByProperty({ collides: true });
+    this.furnitureLayer.setCollisionByProperty({ collides: true });
+  }
+  
+  protected createInteractionZones(): void {
+    // Definisce le zone di interazione specifiche per il laboratorio Blekinge
+    
+    // Innovation corner con lavagne digitali
+    const innovationCorner = this.add.zone(200, 150, 100, 80);
+    innovationCorner.setName('innovation-corner');
+    innovationCorner.setData('type', 'collaboration');
+    this.interactionZones.push(innovationCorner);
+    
+    // Parete di schermi per visualizzazione algoritmi
+    const screenWall = this.add.zone(400, 100, 150, 50);
+    screenWall.setName('screen-wall');
+    screenWall.setData('type', 'visualization');
+    this.interactionZones.push(screenWall);
+    
+    // Area relax con vista sul Mar Baltico
+    const relaxArea = this.add.zone(500, 300, 120, 80);
+    relaxArea.setName('relax-area');
+    relaxArea.setData('type', 'rest');
+    this.interactionZones.push(relaxArea);
+    
+    // Isole di lavoro collaborative
+    const workIsland1 = this.add.zone(250, 250, 60, 60);
+    workIsland1.setName('work-island-1');
+    workIsland1.setData('type', 'work');
+    this.interactionZones.push(workIsland1);
+    
+    const workIsland2 = this.add.zone(350, 250, 60, 60);
+    workIsland2.setName('work-island-2');
+    workIsland2.setData('type', 'work');
+    this.interactionZones.push(workIsland2);
+    
+    // Visualizza le zone in debug solo in modalità di sviluppo
+    if (process.env.NODE_ENV === 'development') {
+      this.interactionZones.forEach(zone => {
+        const rect = this.add.rectangle(zone.x, zone.y, zone.width, zone.height);
+        rect.setStrokeStyle(1, 0x00ff00, 0.5);
+        rect.setFillStyle(0x00ff00, 0.2);
+      });
+    }
+  }
+  
+  protected createAgents(): void {
+    // Crea i ricercatori specifici per il laboratorio Blekinge
+    
+    // Definisce posizioni iniziali sparse per i ricercatori
+    const startPositions = [
+      { x: 250, y: 200 },
+      { x: 300, y: 150 },
+      { x: 350, y: 250 },
+      { x: 400, y: 300 },
+      { x: 200, y: 300 },
+      { x: 450, y: 200 }
+    ];
+    
+    // Crea diversi tipi di ricercatori
+    const researcherTypes = [
+      { type: 'phd-student', specialization: 'data-science' },
+      { type: 'researcher', specialization: 'secure-aggregation' },
+      { type: 'professor', specialization: 'fl-architecture' },
+      { type: 'ml-engineer', specialization: 'model-optimization' },
+      { type: 'data-engineer', specialization: 'data-pipeline' },
+      { type: 'privacy-specialist', specialization: 'differential-privacy' }
+    ];
+    
+    // Crea gli agenti e li aggiungi alla scena
+    for (let i = 0; i < Math.min(startPositions.length, researcherTypes.length); i++) {
+      const pos = startPositions[i];
+      const type = researcherTypes[i];
+      
+      const researcher = new ResearcherAgent(
+        this,
+        pos.x,
+        pos.y,
+        'researcher-blekinge',
+        type.type,
+        type.specialization
+      );
+      
+      this.agents.push(researcher);
+    }
+  }
+  
+  protected setupLabSpecificEvents(): void {
+    // Eventi specifici per il laboratorio Blekinge
+    
+    // Effetto luce per la parete di schermi
+    const screenWallZone = this.interactionZones.find(zone => zone.name === 'screen-wall');
+    if (screenWallZone) {
+      const glowEffect = this.add.image(screenWallZone.x, screenWallZone.y, 'screen-effect');
+      glowEffect.setAlpha(0.3);
+      glowEffect.setBlendMode(Phaser.BlendModes.ADD);
+      
+      // Animazione pulsante per l'effetto glow
+      this.tweens.add({
+        targets: glowEffect,
+        alpha: { from: 0.3, to: 0.5 },
+        duration: 2000,
+        yoyo: true,
+        repeat: -1
+      });
+    }
+    
+    // Aggiunge il logo dell'università
+    const logo = this.add.image(50, 50, 'blekinge-logo');
+    logo.setScale(0.5);
+    logo.setScrollFactor(0); // Fisso sullo schermo
+  }
+  
+  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
+    super.handleZoneInteraction(agent, zone);
+    
+    // Gestisce interazioni specifiche per le zone del laboratorio Blekinge
+    if (agent instanceof ResearcherAgent) {
+      const zoneType = zone.getData('type');
+      
+      switch (zoneType) {
+        case 'collaboration':
+          // L'agente entra in modalità di collaborazione quando è nell'innovation corner
+          agent.setState('collaborating');
+          break;
+          
+        case 'visualization':
+          // L'agente analizza dati quando è vicino alla parete di schermi
+          agent.setState('analyzing');
+          break;
+          
+        case 'rest':
+          // L'agente si riposa nell'area relax
+          agent.setState('resting');
+          break;
+          
+        case 'work':
+          // L'agente lavora nelle isole di lavoro
+          agent.setState('working');
+          break;
+      }
+    }
+  }
+  
+  protected updateLabSpecific(time: number, delta: number): void {
+    // Aggiornamenti specifici per il laboratorio Blekinge
+    
+    // Esempio: effetto particelle per le workstation attive
+    this.agents.forEach(agent => {
+      if (agent instanceof ResearcherAgent && agent.getState() === 'working') {
+        // Potrebbe aggiungere un piccolo effetto particella sopra l'agente
+        // che sta lavorando per mostrare attività
+        if (Phaser.Math.Between(0, 100) < 5) { // 5% di probabilità per frame
+          this.createWorkParticle(agent.x, agent.y);
+        }
+      }
+    });
+  }
+  
+  private createWorkParticle(x: number, y: number): void {
+    // Crea un piccolo effetto particella per indicare lavoro intenso
+    const particle = this.add.circle(x, y - 15, 2, this.theme.colorPalette.accent);
+    
+    this.tweens.add({
+      targets: particle,
+      y: y - 30,
+      alpha: { from: 1, to: 0 },
+      scale: { from: 1, to: 0.5 },
+      duration: 800,
+      onComplete: () => {
+        particle.destroy();
+      }
+    });
+  }
+}

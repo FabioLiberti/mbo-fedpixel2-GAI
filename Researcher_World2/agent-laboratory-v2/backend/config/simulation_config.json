@@ -1,0 +1,91 @@
+{
+    "simulation": {
+      "speed": 1.0,
+      "tick_rate": 30,
+      "random_seed": 42
+    },
+    "labs": {
+      "mercatorum": {
+        "name": "Università Mercatorum Lab",
+        "dimensions": {
+          "width": 800,
+          "height": 600
+        },
+        "specialization": "business_intelligence",
+        "active": true
+      },
+      "blekinge": {
+        "name": "Blekinge University Lab",
+        "dimensions": {
+          "width": 800,
+          "height": 600
+        },
+        "specialization": "edge_computing",
+        "active": true
+      },
+      "opbg": {
+        "name": "OPBG IRCCS Lab",
+        "dimensions": {
+          "width": 800,
+          "height": 600
+        },
+        "specialization": "medical_data",
+        "active": true
+      }
+    },
+    "researchers": {
+      "phd_student": {
+        "count": 5,
+        "speed": 1.2,
+        "social_tendency": 0.7,
+        "research_efficiency": 0.5,
+        "specializations": [
+          "data_science",
+          "privacy_engineering",
+          "optimization_theory"
+        ]
+      },
+      "researcher": {
+        "count": 3,
+        "speed": 1.0,
+        "social_tendency": 0.5,
+        "research_efficiency": 0.8,
+        "specializations": [
+          "secure_aggregation",
+          "non_iid_data",
+          "communication_efficiency"
+        ]
+      },
+      "professor": {
+        "count": 2,
+        "speed": 0.8,
+        "social_tendency": 0.6,
+        "research_efficiency": 1.0,
+        "specializations": [
+          "fl_architecture",
+          "theoretical_guarantees",
+          "privacy_economics"
+        ]
+      }
+    },
+    "fl": {
+      "algorithms": {
+        "fedavg": {
+          "enabled": true,
+          "aggregation_rounds": 5,
+          "client_fraction": 0.8
+        },
+        "fedprox": {
+          "enabled": false,
+          "aggregation_rounds": 10,
+          "client_fraction": 0.6,
+          "mu": 0.01
+        }
+      },
+      "privacy": {
+        "differential_privacy": false,
+        "epsilon": 1.0,
+        "secure_aggregation": true
+      }
+    }
+  }

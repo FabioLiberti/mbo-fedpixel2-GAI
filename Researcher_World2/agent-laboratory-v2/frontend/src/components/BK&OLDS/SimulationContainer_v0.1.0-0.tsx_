@@ -1,0 +1,87 @@
+import React, { useEffect, useRef } from 'react';
+import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: any) => void;
+  selectedLab?: string;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
+  onGameReady, 
+  selectedLab 
+}) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameReadyFiredRef = useRef<boolean>(false);
+
+  // Inizializzazione del gioco
+  useEffect(() => {
+    if (gameContainerRef.current) {
+      try {
+        const containerId = 'phaser-game';
+        console.log('Initializing Phaser game in container:', containerId);
+        
+        // Inizializza o recupera l'istanza di gioco esistente
+        const gameInstance = initGame(containerId);
+        
+        // Evita chiamate multiple a onGameReady
+        if (onGameReady && !gameReadyFiredRef.current) {
+          gameReadyFiredRef.current = true;
+          onGameReady(gameInstance);
+        }
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+      }
+    }
+
+    // Non distruggiamo il gioco all'unmount perché potrebbe causare problemi
+    // con le scene. Se c'è bisogno di distruggerlo, dovrebbe essere fatto
+    // in un punto più alto dell'app.
+    return () => {};
+  }, [onGameReady]);
+
+  // Gestione del cambio di laboratorio
+  useEffect(() => {
+    if (selectedLab) {
+      const game = getGameInstance();
+      
+      if (!game) {
+        console.error('Game instance not available');
+        return;
+      }
+      
+      let sceneKey = '';
+      switch (selectedLab) {
+        case 'BlekingeLabScene':
+          sceneKey = SCENE_KEYS.BLEKINGE;
+          break;
+        case 'OPBGLabScene':
+          sceneKey = SCENE_KEYS.OPBG;
+          break;
+        case 'MercatorumLabScene':
+        default:
+          sceneKey = SCENE_KEYS.MERCATORUM;
+      }
+      
+      console.log(`SimulationContainer: Switching to scene ${sceneKey}`);
+      
+      try {
+        if (typeof game.startLabScene === 'function') {
+          // Usa l'API di gestione delle scene definita in game.ts
+          game.startLabScene(sceneKey);
+        } else {
+          console.error('startLabScene method not available on game instance');
+        }
+      } catch (error) {
+        console.error(`Error switching to lab ${sceneKey}:`, error);
+      }
+    }
+  }, [selectedLab]);
+
+  return (
+    <div className="simulation-container">
+      <div id="phaser-game" ref={gameContainerRef} style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }} />
+    </div>
+  );
+};
+
+export default SimulationContainer;

@@ -1,0 +1,119 @@
+"""
+Test di integrazione per il sistema LLM di Agent Laboratory.
+Verifica la pipeline completa dall'API al connettore LLM.
+"""
+
+import os
+import asyncio
+import logging
+import json
+from typing import Dict, Any
+
+# Importazioni assolute invece di relative
+from ai.llm_connector import LLMConnector
+from simulation.controller import SimulationController
+
+# Configurazione logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("llm_integration_test")
+
+async def test_llm_connector():
+    """Test base del connettore LLM."""
+    logger.info("=== Test LLM Connector ===")
+    connector = LLMConnector()
+    
+    try:
+        # Test di generazione semplice
+        prompt = "Hello, who are you?"
+        logger.info(f"Testing basic generation with prompt: '{prompt}'")
+        response = await connector.generate_text(prompt)
+        logger.info(f"Response: {response[:100]}...")
+        
+        # Test di generazione dialogo ricercatore
+        logger.info("Testing researcher dialog generation")
+        dialog = await connector.generate_researcher_dialog(
+            researcher_type="PhD Student",
+            specialization="Privacy Engineering",
+            context={
+                "lab_state": "attivo",
+                "nearby_agents": ["Professor di FL Systems Architecture", "ML Engineer"],
+                "fl_progress": "fase intermedia",
+                "knowledge_base": "Differential Privacy, Secure Aggregation"
+            },
+            current_situation="Hai appena scoperto un miglioramento nell'algoritmo di secure aggregation"
+        )
+        logger.info(f"Researcher dialog: '{dialog}'")
+        
+        if not dialog or dialog.startswith("Error"):
+            logger.error("LLM dialog generation failed")
+            return False
+            
+        logger.info("LLM connector test successful")
+        return True
+    except Exception as e:
+        logger.error(f"LLM connector test failed: {str(e)}")
+        return False
+    finally:
+        await connector.close()
+
+async def test_controller_integration():
+    """Test dell'integrazione con il controller di simulazione."""
+    logger.info("=== Test Controller Integration ===")
+    controller = SimulationController()
+    
+    try:
+        # Inizializza il modello
+        if not controller.initialize_model():
+            logger.error("Failed to initialize simulation model")
+            return False
+            
+        # Verifica che il LLM sia abilitato
+        if not controller.llm_enabled:
+            logger.warning("LLM not enabled in controller")
+            controller.enable_llm(True)
+            
+        # Test di generazione dialogo
+        agent_id = "test_agent_id"  # Questo dovrebbe essere un ID agente valido
+        situation = "Discussing federated learning research with colleagues"
+        
+        logger.info(f"Testing dialog generation for agent {agent_id}")
+        dialog = await controller.generate_agent_dialog(agent_id, situation)
+        
+        if dialog == "No comment." or dialog == "I need to focus on my research now.":
+            logger.warning("Dialog generation returned default fallback")
+            # Questo potrebbe essere legittimo se l'agente non esiste
+            
+        logger.info(f"Generated dialog: '{dialog}'")
+        logger.info("Controller integration test completed")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Controller integration test failed: {str(e)}")
+        return False
+
+async def run_tests():
+    """Esegue tutti i test di integrazione."""
+    logger.info("Starting LLM integration tests")
+    
+    # Test del connettore LLM
+    llm_test_result = await test_llm_connector()
+    
+    if not llm_test_result:
+        logger.error("LLM connector test failed, stopping further tests")
+        return False
+    
+    # Test dell'integrazione controller
+    controller_test_result = await test_controller_integration()
+    
+    # Riepilogo risultati
+    logger.info("=== Test Results ===")
+    logger.info(f"LLM Connector Test: {'PASS' if llm_test_result else 'FAIL'}")
+    logger.info(f"Controller Integration Test: {'PASS' if controller_test_result else 'FAIL'}")
+    
+    return llm_test_result and controller_test_result
+
+if __name__ == "__main__":
+    asyncio.run(run_tests())

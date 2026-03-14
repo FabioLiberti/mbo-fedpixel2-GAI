@@ -1,0 +1,9 @@
+// src/reportWebVitals.ts
+import { ReportHandler } from 'web-vitals';
+
+const reportWebVitals = (onPerfEntry?: ReportHandler) => {
+  // Funzione semplificata che non fa nulla, ma mantiene l'interfaccia
+  console.log('Web Vitals reporting disabled');
+};
+
+export default reportWebVitals;

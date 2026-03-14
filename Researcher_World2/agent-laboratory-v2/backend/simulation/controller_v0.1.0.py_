@@ -1,0 +1,212 @@
+import os
+import asyncio
+import logging
+import json
+from typing import Dict, List, Any, Optional, Callable
+from threading import Thread, Event
+import time
+from ..models.environment import LabEnvironment
+
+# Configurazione logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class SimulationController:
+    """Controller per la simulazione del laboratorio"""
+    
+    def __init__(
+        self, 
+        config_path: str = None, 
+        on_step_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    ):
+        """
+        Inizializza il controller della simulazione
+        
+        Args:
+            config_path: Percorso al file di configurazione
+            on_step_callback: Callback chiamato dopo ogni step con i dati della simulazione
+        """
+        # Percorso configurazione di default
+        if config_path is None:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            config_path = os.path.join(base_dir, "config", "simulation_config.json")
+        
+        self.config_path = config_path
+        self.on_step_callback = on_step_callback
+        
+        # Stato della simulazione
+        self.running = False
+        self.paused = False
+        self.speed = 1.0
+        
+        # Istanza del modello
+        self.model = None
+        
+        # Thread e evento di controllo
+        self.simulation_thread = None
+        self.stop_event = Event()
+        
+        logger.info(f"Simulation controller initialized with config: {config_path}")
+    
+    def initialize_model(self):
+        """Inizializza il modello di simulazione"""
+        try:
+            self.model = LabEnvironment(self.config_path)
+            logger.info("Simulation model initialized")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize simulation model: {e}")
+            return False
+    
+    def start_simulation(self):
+        """Avvia la simulazione in un thread separato"""
+        if self.running:
+            logger.warning("Simulation is already running")
+            return False
+            
+        if not self.model and not self.initialize_model():
+            logger.error("Could not initialize simulation model")
+            return False
+            
+        self.running = True
+        self.paused = False
+        self.stop_event.clear()
+        
+        # Avvia thread di simulazione
+        self.simulation_thread = Thread(target=self._simulation_loop)
+        self.simulation_thread.daemon = True
+        self.simulation_thread.start()
+        
+        logger.info("Simulation started")
+        return True
+    
+    def stop_simulation(self):
+        """Ferma la simulazione"""
+        if not self.running:
+            logger.warning("Simulation is not running")
+            return False
+            
+        self.running = False
+        self.stop_event.set()
+        
+        if self.simulation_thread:
+            self.simulation_thread.join(timeout=2.0)
+            if self.simulation_thread.is_alive():
+                logger.warning("Simulation thread did not terminate gracefully")
+                
+        self.simulation_thread = None
+        logger.info("Simulation stopped")
+        return True
+    
+    def pause_simulation(self):
+        """Mette in pausa la simulazione"""
+        if not self.running:
+            logger.warning("Simulation is not running")
+            return False
+            
+        self.paused = True
+        logger.info("Simulation paused")
+        return True
+    
+    def resume_simulation(self):
+        """Riprende la simulazione da pausa"""
+        if not self.running:
+            logger.warning("Simulation is not running")
+            return False
+            
+        self.paused = False
+        logger.info("Simulation resumed")
+        return True
+    
+    def set_speed(self, speed: float):
+        """Imposta la velocità della simulazione"""
+        if speed <= 0:
+            logger.warning(f"Invalid speed value: {speed}")
+            return False
+            
+        self.speed = speed
+        logger.info(f"Simulation speed set to {speed}")
+        return True
+    
+    def _simulation_loop(self):
+        """Loop principale della simulazione"""
+        step_count = 0
+        
+        try:
+            while self.running and not self.stop_event.is_set():
+                if not self.paused:
+                    # Calcola il tempo per uno step in base alla velocità
+                    step_time = 1.0 / (self.model.tick_rate * self.speed)
+                    
+                    # Esegue uno step del modello
+                    start_time = time.time()
+                    self.model.step()
+                    step_count += 1
+                    
+                    # Raccoglie dati dal modello
+                    sim_data = self._collect_simulation_data()
+                    
+                    # Callback con i dati della simulazione
+                    if self.on_step_callback:
+                        self.on_step_callback(sim_data)
+                    
+                    # Calcola tempo rimanente per lo step
+                    elapsed = time.time() - start_time
+                    remaining = step_time - elapsed
+                    
+                    if remaining > 0:
+                        # Attende il tempo rimanente
+                        time.sleep(remaining)
+                        
+                    if step_count % 100 == 0:
+                        logger.info(f"Simulation step {step_count} completed")
+                else:
+                    # In pausa, attende un breve periodo
+                    time.sleep(0.1)
+                    
+        except Exception as e:
+            logger.error(f"Error in simulation loop: {e}")
+            self.running = False
+        finally:
+            logger.info(f"Simulation loop terminated after {step_count} steps")
+    
+    def _collect_simulation_data(self) -> Dict[str, Any]:
+        """Raccoglie dati dalla simulazione per il frontend"""
+        return {
+            "step": self.model.schedule.steps,
+            "agent_count": self.model.schedule.get_agent_count(),
+            "agent_states": self.model.get_agent_states(),
+            "simulation": {
+                "running": self.running,
+                "paused": self.paused,
+                "speed": self.speed
+            }
+        }
+    
+    def get_simulation_state(self) -> Dict[str, Any]:
+        """Restituisce lo stato attuale della simulazione"""
+        if not self.model:
+            return {"initialized": False}
+            
+        return {
+            "initialized": True,
+            "running": self.running,
+            "paused": self.paused,
+            "speed": self.speed,
+            "step": self.model.schedule.steps if self.running else 0,
+            "agent_count": self.model.schedule.get_agent_count() if self.model else 0
+        }
+        
+    def reset_simulation(self):
+        """Resetta la simulazione"""
+        was_running = self.running
+        
+        if was_running:
+            self.stop_simulation()
+            
+        self.model = None
+        if self.initialize_model() and was_running:
+            self.start_simulation()
+            
+        logger.info("Simulation reset")
+        return True

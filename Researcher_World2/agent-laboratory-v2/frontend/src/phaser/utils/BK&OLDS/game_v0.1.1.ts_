@@ -1,0 +1,42 @@
+import Phaser from 'phaser';
+import { MercatorumLab } from './scenes/MercatorumLab';
+import { BlekingeLabScene } from './scenes/BlekingeLabScene';
+import { OPBGLabScene } from './scenes/OPBGLabScene';
+
+export const gameConfig: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  parent: 'game-container',
+  backgroundColor: '#f8f8f8',
+  pixelArt: true,  // Importante per la pixel art
+  roundPixels: true, // Evita l'aliasing dei pixel
+  antialias: false, // Disabilita l'anti-aliasing per mantenere l'aspetto pixel art
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 0 }, // Nessuna gravità per un gioco top-down
+      debug: process.env.NODE_ENV === 'development' // Debug solo in sviluppo
+    }
+  },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  scene: [
+    MercatorumLab,
+    BlekingeLabScene,
+    OPBGLabScene
+  ]
+};
+
+export class Game extends Phaser.Game {
+  constructor(config: Phaser.Types.Core.GameConfig) {
+    super(config);
+  }
+}
+
+// Funzione per creare e avviare il gioco
+export function createGame(): Game {
+  return new Game(gameConfig);
+}

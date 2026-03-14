@@ -1,0 +1,108 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { initGame, Game, SCENE_KEYS } from '../phaser/game';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: Game) => void;
+  selectedLab?: string;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
+  onGameReady, 
+  selectedLab 
+}) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameInstanceRef = useRef<Game | null>(null);
+  const gameReadyFiredRef = useRef<boolean>(false);
+  const [isGameInitialized, setIsGameInitialized] = useState(false);
+
+  // Inizializzazione del gioco
+  useEffect(() => {
+    if (gameContainerRef.current && !gameInstanceRef.current) {
+      try {
+        const containerId = 'phaser-game';
+        console.log('Initializing Phaser game in container:', containerId);
+        gameInstanceRef.current = initGame(containerId);
+        setIsGameInitialized(true);
+        
+        if (onGameReady && gameInstanceRef.current && !gameReadyFiredRef.current) {
+          gameReadyFiredRef.current = true;
+          onGameReady(gameInstanceRef.current);
+        }
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+      }
+    }
+
+    return () => {
+      if (gameInstanceRef.current) {
+        console.log('Destroying Phaser game instance');
+        gameInstanceRef.current.destroy(true);
+        gameInstanceRef.current = null;
+        gameReadyFiredRef.current = false;
+        setIsGameInitialized(false);
+      }
+    };
+  }, [onGameReady]);
+
+  // Gestione del cambio di laboratorio
+  useEffect(() => {
+    if (isGameInitialized && gameInstanceRef.current && selectedLab) {
+      console.log(`Changing lab to: ${selectedLab}`);
+      
+      const game = gameInstanceRef.current;
+      
+      // Verifica quale scena avviare in base alla selezione
+      let sceneKey: string;
+      switch (selectedLab) {
+        case 'Blekinge Lab':
+          sceneKey = SCENE_KEYS.BLEKINGE;
+          break;
+        case 'OPBG IRCCS Lab':
+          sceneKey = SCENE_KEYS.OPBG;
+          break;
+        case 'Università Mercatorum':
+        default:
+          sceneKey = SCENE_KEYS.MERCATORUM;
+          break;
+      }
+      
+      // Verifica in modo sicuro se il metodo esiste prima di chiamarlo
+      if (game.startLabScene && typeof game.startLabScene === 'function') {
+        setTimeout(() => {
+          console.log(`Starting scene: ${sceneKey}`);
+          game.startLabScene!(sceneKey); // Usa ! per assicurare TypeScript che il metodo esiste
+        }, 100);
+      } else {
+        console.error('startLabScene method not available on game instance');
+        
+        // Fallback: prova a usare il metodo standard di Phaser se startLabScene non è disponibile
+        try {
+          if (game.scene && typeof game.scene.start === 'function') {
+            console.log(`Fallback: starting scene with standard method: ${sceneKey}`);
+            
+            // Ferma tutte le scene attive prima
+            game.scene.scenes.forEach(scene => {
+              if (scene && scene.scene && typeof scene.scene.isActive === 'function' && scene.scene.isActive()) {
+                console.log(`Stopping scene: ${scene.scene.key}`);
+                scene.scene.stop();
+              }
+            });
+            
+            // Avvia la nuova scena
+            game.scene.start(sceneKey);
+          }
+        } catch (error) {
+          console.error('Error in fallback scene starting:', error);
+        }
+      }
+    }
+  }, [selectedLab, isGameInitialized]);
+
+  return (
+    <div className="simulation-container">
+      <div id="phaser-game" ref={gameContainerRef} style={{ width: '100%', height: '600px' }} />
+    </div>
+  );
+};
+
+export default SimulationContainer;

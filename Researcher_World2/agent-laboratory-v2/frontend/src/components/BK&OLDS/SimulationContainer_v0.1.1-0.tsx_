@@ -1,0 +1,272 @@
+// Path: frontend/src/components/SimulationContainer.tsx
+
+import React, { useEffect, useRef, useState } from 'react';
+import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
+import FLStatusPanel from './FLStatusPanel';
+import FLStatusConnector from './FLStatusConnector';
+import { FLStatusData } from '../phaser/fl/FLController';
+import { FLState } from '../phaser/fl/FLState';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: any) => void;
+  selectedLab?: string;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
+  onGameReady, 
+  selectedLab 
+}) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameReadyFiredRef = useRef<boolean>(false);
+  const [flEnabled, setFLEnabled] = useState<boolean>(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
+  const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
+  
+  // Timer per simulare aggiornamenti dello stato FL
+  const flUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Inizializzazione del gioco
+  useEffect(() => {
+    if (gameContainerRef.current) {
+      try {
+        const containerId = 'phaser-game';
+        console.log('Initializing Phaser game in container:', containerId);
+        
+        // Inizializza o recupera l'istanza di gioco esistente
+        const gameInstance = initGame(containerId);
+        
+        // Evita chiamate multiple a onGameReady
+        if (onGameReady && !gameReadyFiredRef.current) {
+          gameReadyFiredRef.current = true;
+          onGameReady(gameInstance);
+        }
+
+        // Aggiorna stato connessione
+        setConnectionStatus('connected');
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+        setConnectionStatus('error');
+      }
+    }
+
+    // Cleanup dei timer quando il componente viene smontato
+    return () => {
+      if (flUpdateTimerRef.current) {
+        clearInterval(flUpdateTimerRef.current);
+        flUpdateTimerRef.current = null;
+      }
+    };
+  }, [onGameReady]);
+
+  // Gestione del cambio di laboratorio
+  useEffect(() => {
+    if (selectedLab) {
+      const game = getGameInstance();
+      
+      if (!game) {
+        console.error('Game instance not available');
+        return;
+      }
+      
+      let sceneKey = '';
+      switch (selectedLab) {
+        case 'BlekingeLabScene':
+          sceneKey = SCENE_KEYS.BLEKINGE;
+          break;
+        case 'OPBGLabScene':
+          sceneKey = SCENE_KEYS.OPBG;
+          break;
+        case 'MercatorumLabScene':
+        default:
+          sceneKey = SCENE_KEYS.MERCATORUM;
+      }
+      
+      console.log(`SimulationContainer: Switching to scene ${sceneKey}`);
+      
+      try {
+        if (typeof game.startLabScene === 'function') {
+          // Usa l'API di gestione delle scene definita in game.ts
+          game.startLabScene(sceneKey);
+        } else {
+          console.error('startLabScene method not available on game instance');
+        }
+      } catch (error) {
+        console.error(`Error switching to lab ${sceneKey}:`, error);
+      }
+    }
+  }, [selectedLab]);
+
+  // Simula gli aggiornamenti periodici dello stato FL dal backend
+  useEffect(() => {
+    if (flEnabled && !flUpdateTimerRef.current) {
+      // Inizializzazione dello stato FL
+      const initialState: FLStatusData = {
+        enabled: true,
+        currentState: FLState.IDLE,
+        activeAgents: [
+          { id: 'agent1', state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'researcher' },
+          { id: 'agent2', state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'phd_student' },
+          { id: 'agent3', state: FLState.IDLE, labType: 'OPBG', agentType: 'medical_doctor' }
+        ],
+        metrics: {
+          accuracy: 0,
+          loss: 0,
+          round: 0,
+          clientFraction: 0.8
+        },
+        connections: [
+          { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+          { source: 'BLEKINGE', target: 'OPBG', active: false },
+          { source: 'OPBG', target: 'MERCATORUM', active: false }
+        ]
+      };
+      
+      setFLStatus(initialState);
+      
+      // Simulazione del ciclo FL con transizioni di stato
+      const states = [FLState.TRAINING, FLState.SENDING, FLState.AGGREGATING, FLState.RECEIVING, FLState.IDLE];
+      let currentStateIndex = 0;
+      let round = 0;
+      
+      flUpdateTimerRef.current = setInterval(() => {
+        currentStateIndex = (currentStateIndex + 1) % states.length;
+        const newState = states[currentStateIndex];
+        
+        // Quando torniamo allo stato IDLE, incrementiamo il round
+        if (newState === FLState.IDLE && currentStateIndex === 0) {
+          round++;
+        }
+        
+        // Aggiorna lo stato
+        setFLStatus(prevState => {
+          if (!prevState) return prevState;
+          
+          // Stato globale
+          const updatedState = {
+            ...prevState,
+            currentState: newState,
+            metrics: {
+              ...prevState.metrics,
+              accuracy: Math.min(0.95, (prevState.metrics.accuracy || 0) + 0.05),
+              loss: Math.max(0.05, (prevState.metrics.loss || 1) - 0.05),
+              round: round
+            }
+          };
+          
+          // Attiva/disattiva connessioni in base allo stato
+          let activeConnections: Array<{ source: string, target: string, active: boolean }> = [];
+          if (newState === FLState.SENDING) {
+            activeConnections = [
+              { source: 'MERCATORUM', target: 'BLEKINGE', active: true },
+              { source: 'BLEKINGE', target: 'OPBG', active: true },
+              { source: 'OPBG', target: 'MERCATORUM', active: false }
+            ];
+          } else if (newState === FLState.RECEIVING) {
+            activeConnections = [
+              { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+              { source: 'BLEKINGE', target: 'OPBG', active: false },
+              { source: 'OPBG', target: 'MERCATORUM', active: true }
+            ];
+          } else if (newState === FLState.AGGREGATING) {
+            activeConnections = [
+              { source: 'MERCATORUM', target: 'BLEKINGE', active: true },
+              { source: 'BLEKINGE', target: 'OPBG', active: true },
+              { source: 'OPBG', target: 'MERCATORUM', active: true }
+            ];
+          } else {
+            activeConnections = [
+              { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+              { source: 'BLEKINGE', target: 'OPBG', active: false },
+              { source: 'OPBG', target: 'MERCATORUM', active: false }
+            ];
+          }
+          
+          // Aggiorna lo stato degli agenti
+          const updatedAgents = prevState.activeAgents.map(agent => ({
+            ...agent,
+            state: newState
+          }));
+          
+          return {
+            ...updatedState,
+            activeAgents: updatedAgents,
+            connections: activeConnections
+          };
+        });
+        
+      }, 3000); // Aggiorna ogni 3 secondi
+    } else if (!flEnabled && flUpdateTimerRef.current) {
+      // Ferma gli aggiornamenti se FL è disattivato
+      clearInterval(flUpdateTimerRef.current);
+      flUpdateTimerRef.current = null;
+      
+      // Imposta lo stato su "disattivato"
+      setFLStatus(prevState => {
+        if (!prevState) return null;
+        return {
+          ...prevState,
+          enabled: false,
+          currentState: FLState.IDLE,
+          activeAgents: prevState.activeAgents.map(agent => ({
+            ...agent,
+            state: FLState.IDLE
+          })),
+          connections: prevState.connections.map(conn => ({
+            ...conn,
+            active: false
+          }))
+        };
+      });
+    }
+    
+    return () => {
+      if (flUpdateTimerRef.current) {
+        clearInterval(flUpdateTimerRef.current);
+        flUpdateTimerRef.current = null;
+      }
+    };
+  }, [flEnabled]);
+
+  // Handler per attivare/disattivare il federated learning
+  const handleToggleFL = async (enabled: boolean) => {
+    try {
+      // In un ambiente reale, qui ci sarebbe una chiamata API
+      // Simula una risposta API di successo
+      const success = true;
+      
+      if (success) {
+        setFLEnabled(enabled);
+        console.log(`Federated Learning ${enabled ? 'enabled' : 'disabled'}`);
+      } else {
+        console.error('Failed to toggle Federated Learning');
+      }
+    } catch (error) {
+      console.error('Error toggling Federated Learning:', error);
+    }
+  };
+
+  return (
+    <div className="simulation-container">
+      {/* Pannello di controllo FL */}
+      <FLStatusPanel 
+        flStatus={flStatus} 
+        onToggleFL={handleToggleFL} 
+      />
+      
+      {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
+      <FLStatusConnector 
+        flStatus={flStatus} 
+        onToggleFL={handleToggleFL} 
+      />
+      
+      {/* Container del gioco Phaser */}
+      <div 
+        id="phaser-game" 
+        ref={gameContainerRef} 
+        style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }} 
+      />
+    </div>
+  );
+};
+
+export default SimulationContainer;

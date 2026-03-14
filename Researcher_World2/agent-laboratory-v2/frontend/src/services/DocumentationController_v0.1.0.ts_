@@ -1,0 +1,184 @@
+/**
+ * DocumentationController.ts
+ * Controller per la gestione della documentazione nell'applicazione Agent Laboratory
+ */
+
+// Importazione per garantire che questo file sia trattato come un modulo
+import { createContext } from 'react';
+
+// Definizione delle categorie di documentazione
+export enum DocumentCategory {
+  Architecture = 'architecture',
+  UserGuide = 'user-guide',
+  Research = 'research',
+  Development = 'development'
+}
+
+// Struttura di un documento
+export interface Document {
+  id: string;
+  title: string;
+  filename: string;
+  category: DocumentCategory;
+  type: 'pdf' | 'markdown';
+  description?: string;
+}
+
+// Classe principale per la gestione della documentazione
+export class DocumentationController {
+  private documents: Document[] = [];
+  private loaded: boolean = false;
+  
+  constructor() {
+    // L'inizializzazione verrà fatta nel metodo initialize
+  }
+  
+  // Metodo per inizializzare i documenti
+  public async initialize(): Promise<void> {
+    try {
+      // In un'implementazione reale, potresti caricare un file JSON con l'indice dei documenti
+      this.documents = [
+        {
+          id: 'agent-lab-architecture',
+          title: 'Agent Laboratory: Architettura Tecnica',
+          filename: 'agent-laboratory-architecture.pdf',
+          category: DocumentCategory.Architecture,
+          type: 'pdf',
+          description: 'Panoramica dell\'architettura tecnica del progetto Agent Laboratory'
+        },
+        {
+          id: 'federated-learning-intro',
+          title: 'Introduzione al Federated Learning',
+          filename: 'federated-learning-intro.md',
+          category: DocumentCategory.Research,
+          type: 'markdown',
+          description: 'Documentazione introduttiva sul federated learning'
+        },
+        {
+          id: 'user-manual',
+          title: 'Manuale Utente',
+          filename: 'user-manual.pdf',
+          category: DocumentCategory.UserGuide,
+          type: 'pdf',
+          description: 'Guida completa all\'utilizzo dell\'Agent Laboratory'
+        },
+        {
+          id: 'improvement-proposals',
+          title: 'Proposte di Miglioramento',
+          filename: 'improvement-proposals.md',
+          category: DocumentCategory.Development,
+          type: 'markdown',
+          description: 'Proposte per il miglioramento dell\'interfaccia e della simulazione'
+        }
+      ];
+      
+      this.loaded = true;
+      return Promise.resolve();
+    } catch (error) {
+      console.error("Errore durante l'inizializzazione della documentazione:", error);
+      return Promise.reject(error);
+    }
+  }
+  
+  // Ottiene tutti i documenti
+  public getAllDocuments(): Document[] {
+    return [...this.documents];
+  }
+  
+  // Filtra documenti per categoria
+  public getDocumentsByCategory(category: DocumentCategory): Document[] {
+    return this.documents.filter(doc => doc.category === category);
+  }
+  
+  // Carica contenuti Markdown (simulato per i file di esempio)
+  public async loadMarkdownContent(documentId: string): Promise<string> {
+    // In un'implementazione reale, caricheresti il file effettivo
+    const doc = this.documents.find(d => d.id === documentId);
+    
+    if (!doc) {
+      throw new Error(`Documento non trovato: ${documentId}`);
+    }
+    
+    // Contenuto Markdown simulato per l'esempio
+    if (documentId === 'federated-learning-intro') {
+      return `# Introduzione al Federated Learning
+      
+## Cos'è il Federated Learning?
+
+Il Federated Learning è un approccio al machine learning dove il modello viene addestrato su più dispositivi o server senza condividere direttamente i dati.
+
+## Vantaggi principali
+
+1. **Privacy dei dati**: I dati rimangono sui dispositivi locali
+2. **Riduzione del trasferimento dati**: Solo i parametri del modello vengono trasferiti
+3. **Scalabilità**: Possibilità di addestrare su migliaia di dispositivi
+
+## Algoritmi principali
+
+- FedAvg (Federated Averaging)
+- FedProx
+- Secure Aggregation
+
+## Applicazioni
+
+- Tastiere predittive
+- Sistemi sanitari
+- Analisi finanziaria
+`;
+    } else if (documentId === 'improvement-proposals') {
+      return `# Proposte di Miglioramento per Agent Laboratory
+
+## Interfaccia Utente
+
+1. **Dashboard più informativo**: Integrare un pannello di statistiche più dettagliato che mostri metriche in tempo reale come:
+   - Metriche di convergenza degli algoritmi FL
+   - Interazioni tra agenti
+   - Uso di risorse computazionali
+
+2. **Rappresentazione visiva delle connessioni FL**: Le linee tratteggiate tra laboratori potrebbero animarsi o cambiare colore durante il trasferimento di conoscenze.
+
+3. **Timeline interattiva**: Aggiungere una timeline che permetta di vedere l'evoluzione della simulazione nel tempo.
+
+## Simulazione
+
+1. **Indicatori di stato agenti**: Piccole icone o aure colorate intorno agli agenti che indichino il loro stato attuale.
+
+2. **Eventi casuali**: Introdurre eventi imprevisti come "problemi di privacy", "breakthrough di ricerca" o "conferenze".
+
+3. **Visualizzazione del progresso scientifico**: Grafici o indicatori che mostrino l'avanzamento della conoscenza.
+
+## Funzionalità Avanzate
+
+1. **Strumenti di configurazione avanzata**: Pannello per modificare i parametri degli algoritmi FL.
+
+2. **Modalità esportazione dati**: Funzionalità per esportare i risultati della simulazione.
+
+3. **Scenari predefiniti**: Introdurre scenari che simulino specifiche condizioni di ricerca.
+`;
+    }
+    
+    return "# Contenuto non disponibile\n\nIl contenuto di questo documento non è disponibile in questa versione demo.";
+  }
+  
+  // Ottiene il percorso del file PDF
+  public getDocumentPath(documentId: string): string {
+    const doc = this.documents.find(d => d.id === documentId);
+    
+    if (!doc) {
+      throw new Error(`Documento non trovato: ${documentId}`);
+    }
+    
+    return `/docs/${doc.filename}`;
+  }
+  
+  // Verifica se i documenti sono stati caricati
+  public isLoaded(): boolean {
+    return this.loaded;
+  }
+}
+
+// Esporta un'istanza singleton del controller
+export const documentationController = new DocumentationController();
+
+// Esportazione per Context API di React (opzionale, per uso futuro)
+export const DocumentationContext = createContext<DocumentationController>(documentationController);

@@ -1,0 +1,1026 @@
+// frontend/src/phaser/scenes/BlekingeLabScene.ts
+
+import { BaseScene } from './BaseScene';
+import { Agent, AgentState } from '../sprites/Agent';
+import { LabTheme } from './BaseLabScene';
+
+export class BlekingeLabScene extends BaseScene {
+  // Agenti e interazioni
+  protected agents: Agent[] = [];
+  protected interactionZones: Phaser.GameObjects.Zone[] = [];
+  
+  // Grid per il pathfinding
+  protected grid: number[][] = [];
+  
+  // Elementi di debug
+  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  private debugText: Phaser.GameObjects.Text | null = null;
+  private assetsLoaded: boolean = false;
+  
+  // Tema del laboratorio Blekinge
+  protected theme: LabTheme = {
+    name: "Blekinge University Lab",
+    backgroundColor: 0x88ccee,
+    tilesetKey: 'tiles_blekinge',
+    colorPalette: {
+      primary: 0x3f51b5,  // Blu principale
+      secondary: 0x4fc3f7, // Azzurro chiaro
+      accent: 0xffcc44,    // Giallo-oro per accenti
+      background: 0x88ccee // Azzurro ghiaccio per sfondo
+    }
+  };
+
+  constructor() {
+    super('BlekingeLabScene');
+    console.log('BlekingeLabScene constructor called');
+  }
+
+  init(): void {
+    console.log('BlekingeLabScene init START');
+    try {
+      super.init();
+      this.grid = [];
+      this.agents = [];
+      this.interactionZones = [];
+      this.assetsLoaded = false;
+      console.log('BlekingeLabScene init COMPLETE');
+    } catch (error) {
+      console.error('Error in BlekingeLabScene init:', error);
+    }
+  }
+
+  preload() {
+    console.log('BlekingeLabScene preload START');
+    try {
+      // Chiama il preload del padre per caricare gli asset comuni
+      super.preload();
+      
+      // Aggiungi listener per tracciare lo stato di caricamento
+      this.load.on('progress', (value: number) => {
+        console.log(`Load progress: ${Math.round(value * 100)}%`);
+        this.updateDebugInfo(`Loading: ${Math.round(value * 100)}%`);
+      });
+      
+      this.load.on('complete', () => {
+        console.log('All assets loaded successfully');
+        this.assetsLoaded = true;
+        this.updateDebugInfo('Assets loaded - creating scene elements');
+      });
+      
+      this.load.on('loaderror', (file: any) => {
+        console.error(`Error loading file: ${file.key} from ${file.url}`);
+        this.updateDebugInfo(`Error loading: ${file.key}`);
+      });
+      
+      // FIX: Tenta di caricare gli sprite da diversi percorsi possibili
+      // Opzione 1: sprites directory
+      this.load.spritesheet('professor_sprites', '/assets/sprites/professor.png', { frameWidth: 32, frameHeight: 48 });
+      this.load.spritesheet('researcher_sprites', '/assets/sprites/researcher.png', { frameWidth: 32, frameHeight: 48 });
+      
+      // Opzione 2: characters directory
+      this.load.spritesheet('professor_chars', '/assets/characters/professor.png', { frameWidth: 32, frameHeight: 48 });
+      this.load.spritesheet('researcher_chars', '/assets/characters/researcher.png', { frameWidth: 32, frameHeight: 48 });
+      
+      // Opzione 3: caratteri specifici
+      this.load.spritesheet('professor_specific', '/assets/characters/professor_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+      this.load.spritesheet('researcher_specific', '/assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+      
+      // Opzione 4: in sprites/Agent directory
+      this.load.spritesheet('professor_agent', '/assets/sprites/Agent/professor.png', { frameWidth: 32, frameHeight: 48 });
+      this.load.spritesheet('researcher_agent', '/assets/sprites/Agent/researcher.png', { frameWidth: 32, frameHeight: 48 });
+      
+      // Carica risorse specifiche per questo laboratorio
+      this.assetLoader.loadImage('blekinge_background', '/assets/labs/blekinge/background.png');
+      this.assetLoader.loadImage('blekinge_furniture', '/assets/labs/blekinge/furniture.png');
+      
+      // Carica tileset specifico
+      this.assetLoader.loadImage(this.theme.tilesetKey, '/assets/labs/blekinge/tileset.png');
+      
+      // Forza l'inizio del caricamento
+      this.load.start();
+      
+      console.log('BlekingeLabScene preload COMPLETE');
+    } catch (error) {
+      console.error('Error in BlekingeLabScene preload:', error);
+      this.updateDebugInfo(`Preload error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  create() {
+    console.log('BlekingeLabScene create START');
+    
+    try {
+      // Inizializza gli elementi di debug
+      this.createDebugElements();
+      
+      // Imposta un colore di sfondo acceso per debug
+      this.cameras.main.setBackgroundColor(0xFF00FF); // Magenta vivace per debug
+      
+      // Visualizza asset disponibili
+      this.displayLoadedAssets();
+      
+      // Trova la migliore texture disponibile per gli agenti
+      this.setupBestAgentTextures();
+      
+      // Verifica se le texture dei personaggi sono state caricate
+      this.createPlaceholdersForMissingAssets([
+        'student', 'researcher', 'professor', 'doctor',
+        'blekinge_background', 'blekinge_furniture', this.theme.tilesetKey
+      ]);
+      
+      // Controlla lo stato di texture per gli agenti
+      if (this.debugText) {
+        this.updateDebugInfo(`Character textures:
+          student: ${this.textures.exists('student')}
+          researcher: ${this.textures.exists('researcher')}
+          professor: ${this.textures.exists('professor')}
+          doctor: ${this.textures.exists('doctor')}`);
+      }
+      
+      // Dopo il debug, usa il colore reale
+      setTimeout(() => {
+        this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
+      }, 1000);
+      
+      // FIX: Crea animazioni esplicite per i personaggi
+      this.createCharacterAnimations();
+      
+      // Crea lo sfondo con pattern scandinavo
+      this.createScandinavianBackground();
+      
+      // Crea una mappa base (temporanea)
+      this.createTemporaryMap();
+      
+      // Inizializza la griglia per il pathfinding
+      this.initializeGrid();
+      
+      // Crea le zone di interazione
+      this.createInteractionZones();
+      
+      // Crea alcuni agenti di test
+      this.createTestAgents();
+      
+      // Setup della camera
+      this.setupCamera();
+      
+      // Aggiungi pulsante per tornare al lab Mercatorum
+      this.createNavigationButtons();
+      
+      // Testo di placeholder (temporaneo)
+      const text = this.add.text(
+        this.cameras.main.centerX, 
+        this.cameras.main.centerY,
+        'Blekinge University Lab\nIn costruzione...',
+        { 
+          fontSize: '32px',
+          color: '#ffffff',
+          align: 'center',
+          fontFamily: 'Arial'
+        }
+      );
+      text.setOrigin(0.5);
+      text.setDepth(10); // Assicura che il testo sia visibile sopra gli altri elementi
+      
+      console.log('BlekingeLabScene create COMPLETE');
+      
+      // Forza l'attivazione della scena se non è già attiva
+      if (!this.scene.isActive()) {
+        console.log('BlekingeLabScene not active, attempting to force activation');
+        this.scene.setActive(true);
+        this.scene.setVisible(true);
+      }
+      
+    } catch (error) {
+      console.error('Error in BlekingeLabScene create:', error);
+      this.updateDebugInfo(`Create error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Trova la migliore texture disponibile per gli agenti e la imposta come predefinita
+   */
+  private setupBestAgentTextures(): void {
+    try {
+      console.log('Setting up best available agent textures');
+      
+      // Array delle possibili chiavi di texture per il professore
+      const professorTextures = [
+        'professor_agent',
+        'professor_sprites',
+        'professor_chars',
+        'professor_specific',
+        'professor'
+      ];
+      
+      // Array delle possibili chiavi di texture per il ricercatore
+      const researcherTextures = [
+        'researcher_agent',
+        'researcher_sprites',
+        'researcher_chars',
+        'researcher_specific',
+        'researcher'
+      ];
+      
+      // Trova la prima texture disponibile per il professore
+      for (const key of professorTextures) {
+        if (this.textures.exists(key)) {
+          console.log(`Found professor texture: ${key}`);
+          // Se non è la chiave 'professor', crea un alias
+          if (key !== 'professor') {
+            this.textures.addGLTexture('professor', this.textures.get(key).glTexture);
+            console.log(`Created alias 'professor' -> ${key}`);
+          }
+          break;
+        }
+      }
+      
+      // Trova la prima texture disponibile per il ricercatore
+      for (const key of researcherTextures) {
+        if (this.textures.exists(key)) {
+          console.log(`Found researcher texture: ${key}`);
+          // Se non è la chiave 'researcher', crea un alias
+          if (key !== 'researcher') {
+            this.textures.addGLTexture('researcher', this.textures.get(key).glTexture);
+            console.log(`Created alias 'researcher' -> ${key}`);
+          }
+          break;
+        }
+      }
+      
+      // Log delle texture disponibili dopo la configurazione
+      console.log('Available textures after setup:');
+      console.log(`professor: ${this.textures.exists('professor')}`);
+      console.log(`researcher: ${this.textures.exists('researcher')}`);
+    } catch (error) {
+      console.error('Error in setupBestAgentTextures:', error);
+    }
+  }
+  
+  // FIX: Metodo dedicato per creare le animazioni dei personaggi specificamente per questa scena
+  private createCharacterAnimations(): void {
+    try {
+      console.log('Creating custom character animations for BlekingeScene');
+      
+      // Verifica se le texture esistono
+      if (!this.textures.exists('professor')) {
+        console.warn('Professor texture does not exist, creating placeholder');
+        this.createStaticPlaceholderTexture('professor', 32, 48);
+      }
+      
+      if (!this.textures.exists('researcher')) {
+        console.warn('Researcher texture does not exist, creating placeholder');
+        this.createStaticPlaceholderTexture('researcher', 32, 48);
+      }
+      
+      // Crea le animazioni base per ogni tipo di personaggio
+      const characters = ['professor', 'researcher'];
+      const states = ['idle', 'walk'];
+      
+      characters.forEach(char => {
+        states.forEach(state => {
+          const key = `${char}_${state}`;
+          
+          // Salta se l'animazione esiste già
+          if (this.anims.exists(key)) {
+            console.log(`Animation ${key} already exists, skipping`);
+            return;
+          }
+          
+          try {
+            if (state === 'idle') {
+              this.anims.create({
+                key: key,
+                frames: this.anims.generateFrameNumbers(char, { start: 0, end: 0 }),
+                frameRate: 1,
+                repeat: 0
+              });
+              console.log(`Created animation: ${key}`);
+            } else if (state === 'walk') {
+              this.anims.create({
+                key: key,
+                frames: this.anims.generateFrameNumbers(char, { start: 0, end: 2 }),
+                frameRate: 6,
+                repeat: -1
+              });
+              console.log(`Created animation: ${key}`);
+            }
+          } catch (error) {
+            console.error(`Error creating animation ${key}:`, error);
+          }
+        });
+      });
+      
+      console.log('Custom character animations created successfully');
+    } catch (error) {
+      console.error('Error creating character animations:', error);
+    }
+  }
+  
+  // FIX: Metodo migliorato per creare texture placeholder statiche
+  private createStaticPlaceholderTexture(key: string, width: number, height: number): void {
+    try {
+      console.log(`Creating static placeholder texture for ${key}`);
+      
+      // Crea un graphics object per disegnare un placeholder
+      const graphics = this.add.graphics();
+      
+      // Disegna un rettangolo colorato
+      graphics.fillStyle(0xff00ff); // Magenta
+      graphics.fillRect(0, 0, width, height); // Dimensioni standard di un personaggio
+      
+      // Aggiungi un contorno
+      graphics.lineStyle(2, 0xffffff);
+      graphics.strokeRect(0, 0, width, height);
+      
+      // Aggiunge un pattern distintivo per renderlo visibile
+      graphics.lineStyle(1, 0xffffff);
+      graphics.lineBetween(0, 0, width, height);
+      graphics.lineBetween(width, 0, 0, height);
+      
+      // Salva il graphics come texture
+      const texture = this.textures.createCanvas(key, width, height);
+      const context = texture.getContext();
+      context.drawImage(graphics.canvas, 0, 0);
+      
+      // Aggiungi frame espliciti per lo spritesheet placeholder
+      texture.add(0, 0, 0, 0, width, height);
+      texture.add(1, 0, 0, 0, width, height);
+      texture.add(2, 0, 0, 0, width, height);
+      
+      texture.refresh();
+      
+      // Pulisci la grafica
+      graphics.destroy();
+      
+      console.log(`Created static placeholder texture for ${key} with ${texture.frameTotal} frames`);
+    } catch (error) {
+      console.error(`Error creating static placeholder for ${key}:`, error);
+    }
+  }
+  
+  update(time: number, delta: number) {
+    try {
+      // Aggiorna tutti gli agenti
+      this.updateAgents(time, delta);
+      
+      // Controlla le interazioni
+      this.checkInteractions();
+    } catch (error) {
+      console.error('Error in BlekingeLabScene update:', error);
+    }
+  }
+  
+  /**
+   * Crea elementi per il debug visivo
+   */
+  private createDebugElements(): void {
+    try {
+      // Crea un pannello di debug per mostrare informazioni sugli asset
+      this.debugGraphics = this.add.graphics();
+      
+      if (this.debugGraphics) {
+        this.debugGraphics.fillStyle(0x000000, 0.7);
+        this.debugGraphics.fillRect(10, 10, 400, 200);
+        this.debugGraphics.setDepth(1000);
+        this.debugGraphics.setScrollFactor(0);
+      }
+      
+      // Testo di debug
+      this.debugText = this.add.text(
+        20, 
+        20, 
+        'Debug info loading...', 
+        { 
+          fontSize: '14px',
+          color: '#FFFFFF',
+          fontFamily: 'monospace',
+          wordWrap: { width: 380 }
+        }
+      );
+      
+      if (this.debugText) {
+        this.debugText.setDepth(1001);
+        this.debugText.setScrollFactor(0);
+      }
+      
+      // Pulsante per nascondere/mostrare il debug
+      const toggleButton = this.add.text(
+        410, 
+        10, 
+        'X', 
+        { 
+          fontSize: '16px',
+          color: '#FFFFFF',
+          backgroundColor: '#FF0000',
+          padding: { left: 5, right: 5, top: 2, bottom: 2 }
+        }
+      );
+      
+      if (toggleButton) {
+        toggleButton.setDepth(1001);
+        toggleButton.setScrollFactor(0);
+        toggleButton.setInteractive({ useHandCursor: true });
+        toggleButton.on('pointerdown', () => {
+          // Toggle visibility
+          if (this.debugGraphics !== null && this.debugText !== null) {
+            const visible = !this.debugGraphics.visible;
+            this.debugGraphics.setVisible(visible);
+            this.debugText.setVisible(visible);
+            toggleButton.setText(visible ? 'X' : 'D');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error creating debug elements:', error);
+    }
+  }
+  
+  /**
+   * Aggiorna le informazioni di debug
+   */
+  private updateDebugInfo(text: string): void {
+    if (this.debugText !== null) {
+      this.debugText.setText(text);
+    }
+  }
+  
+  /**
+   * Visualizza informazioni sugli asset caricati
+   */
+  private displayLoadedAssets(): void {
+    try {
+      const textureKeys = this.textures.getTextureKeys();
+      const infoText = `
+        Scene: ${this.scene.key}
+        Loaded textures: ${textureKeys.length}
+        Keys: ${textureKeys.slice(0, 5).join(', ')}${textureKeys.length > 5 ? '...' : ''}
+        Animation count: ${this.animations.size}
+      `;
+      
+      this.updateDebugInfo(infoText);
+      console.log(infoText);
+    } catch (error) {
+      console.error('Error displaying loaded assets:', error);
+    }
+  }
+  
+  /**
+   * Crea lo sfondo con pattern scandinavo
+   */
+  private createScandinavianBackground() {
+    try {
+      console.log('Creating Scandinavian background');
+      
+      // Prima verifica se l'immagine di background è stata caricata
+      if (this.textures.exists('blekinge_background')) {
+        console.log('Using loaded background image');
+        const background = this.add.image(
+          this.cameras.main.width / 2, 
+          this.cameras.main.height / 2, 
+          'blekinge_background'
+        );
+        background.setDepth(-10);
+        
+        // Aggiusta le dimensioni se necessario
+        if (background.width > this.cameras.main.width || background.height > this.cameras.main.height) {
+          background.setScale(
+            Math.min(
+              this.cameras.main.width / background.width,
+              this.cameras.main.height / background.height
+            )
+          );
+        }
+        
+        this.updateDebugInfo('Using loaded background image');
+        return;
+      }
+      
+      // Se non è disponibile l'immagine, crea un pattern grafico
+      this.updateDebugInfo('Creating fallback background pattern');
+      
+      // Crea un pattern di background in stile scandinavo minimalista
+      const graphics = this.add.graphics();
+      
+      // Sfondo azzurro ghiaccio
+      graphics.fillStyle(this.theme.backgroundColor, 1);
+      graphics.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+      
+      // Pattern geometrici
+      graphics.lineStyle(2, 0xffffff, 0.3);
+      
+      // Linee orizzontali
+      for (let y = 0; y < this.cameras.main.height; y += 40) {
+        graphics.moveTo(0, y);
+        graphics.lineTo(this.cameras.main.width, y);
+      }
+      
+      // Triangoli (pattern nordico)
+      graphics.fillStyle(this.theme.colorPalette.accent, 0.2);
+      for (let x = 0; x < this.cameras.main.width; x += 80) {
+        for (let y = 0; y < this.cameras.main.height; y += 80) {
+          graphics.fillTriangle(
+            x, y,
+            x + 40, y,
+            x + 20, y + 30
+          );
+        }
+      }
+      
+      graphics.strokePath();
+      graphics.setDepth(-10);
+    } catch (error) {
+      console.error('Error in createScandinavianBackground:', error);
+      this.updateDebugInfo(`Background error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Crea una mappa temporanea fino a quando non abbiamo un tilemap
+   */
+  private createTemporaryMap() {
+    try {
+      console.log('Creating temporary map');
+      
+      // Prima verifica se l'immagine del mobilio è stata caricata
+      if (this.textures.exists('blekinge_furniture')) {
+        console.log('Using loaded furniture image');
+        const furniture = this.add.image(
+          this.cameras.main.width / 2, 
+          this.cameras.main.height / 2, 
+          'blekinge_furniture'
+        );
+        furniture.setDepth(-5);
+        
+        // Impostazioni per debug
+        this.updateDebugInfo('Using loaded furniture image');
+        
+        // Creazione di una griglia di base per il pathdinding
+        this.createGridFromImage(furniture);
+        return;
+      }
+      
+      this.updateDebugInfo('Creating fallback furniture graphics');
+      
+      // Creazione di una griglia di base per il laboratorio
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      
+      // Crea una griglia vuota
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+      
+      // Aggiungi alcuni "mobili" al laboratorio come esempio
+      const furniture = this.add.graphics();
+      furniture.fillStyle(this.theme.colorPalette.primary, 0.7);
+      
+      // Tavolo centrale
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      
+      // Tavolo grande al centro
+      furniture.fillRect(
+        centerX * gridSize - 80, 
+        centerY * gridSize - 40, 
+        160, 
+        80
+      );
+      
+      // Marca il tavolo come non percorribile nella griglia
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) {
+            this.grid[y][x] = 1;
+          }
+        }
+      }
+      
+      // Postazioni di lavoro lungo i bordi
+      furniture.fillStyle(this.theme.colorPalette.secondary, 0.7);
+      
+      // Postazioni sul lato sinistro
+      for (let y = 2; y < height - 2; y += 3) {
+        furniture.fillRect(gridSize, y * gridSize, gridSize * 2, gridSize);
+        // Marca come non percorribile
+        if (y >= 0 && y < height) {
+          this.grid[y][1] = 1;
+          this.grid[y][2] = 1;
+        }
+      }
+      
+      // Postazioni sul lato destro
+      for (let y = 2; y < height - 2; y += 3) {
+        furniture.fillRect(width * gridSize - gridSize * 3, y * gridSize, gridSize * 2, gridSize);
+        // Marca come non percorribile
+        if (y >= 0 && y < height) {
+          this.grid[y][width - 2] = 1;
+          this.grid[y][width - 3] = 1;
+        }
+      }
+      
+      // Parete di schermi
+      furniture.fillStyle(0x333333, 0.8);
+      furniture.fillRect(0, 0, width * gridSize, gridSize);
+      
+      // Marca la parete come non percorribile
+      for (let x = 0; x < width; x++) {
+        this.grid[0][x] = 1;
+      }
+      
+      furniture.setDepth(-5);
+    } catch (error) {
+      console.error('Error in createTemporaryMap:', error);
+      this.updateDebugInfo(`Map error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Crea una griglia di pathfinding basata su un'immagine
+   */
+  private createGridFromImage(image: Phaser.GameObjects.Image): void {
+    try {
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      
+      // Crea una griglia base
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+      
+      // In una versione avanzata, qui analizzeremmo i pixel dell'immagine
+      // Per semplicità, creiamo solo una zona non attraversabile al centro
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      
+      // Marca un'area centrale come non attraversabile (es. il tavolo)
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) {
+            this.grid[y][x] = 1;
+          }
+        }
+      }
+      
+      // Marca una zona superiore come non attraversabile (es. schermi)
+      for (let x = 0; x < width; x++) {
+        this.grid[0][x] = 1;
+      }
+    } catch (error) {
+      console.error('Error in createGridFromImage:', error);
+    }
+  }
+  
+  /**
+   * Inizializza la griglia per il pathfinding
+   */
+  protected initializeGrid(): void {
+    try {
+      // Nota: in una versione completa, qui leggeremmo da un tilemap
+      // Per ora utilizziamo la griglia creata in createTemporaryMap
+      console.log('Grid initialized with dimensions:', this.grid.length, 'x', this.grid[0]?.length);
+    } catch (error) {
+      console.error('Error in initializeGrid:', error);
+    }
+  }
+  
+  /**
+   * Crea le zone di interazione nel laboratorio
+   */
+  protected createInteractionZones(): void {
+    try {
+      console.log('Creating interaction zones');
+      const gridSize = 32;
+      
+      // Innovation corner - zona per brainstorming
+      const innovationZone = this.add.zone(
+        100, 
+        200, 
+        gridSize * 4, 
+        gridSize * 4
+      );
+      innovationZone.setName('innovation_corner');
+      innovationZone.setInteractive();
+      
+      // Debug: visualizza la zona
+      const zoneGraphics = this.add.graphics();
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.strokeRect(
+        innovationZone.x - innovationZone.width / 2, 
+        innovationZone.y - innovationZone.height / 2, 
+        innovationZone.width, 
+        innovationZone.height
+      );
+      
+      this.interactionZones.push(innovationZone);
+      
+      // Parete di schermi - zona di visualizzazione dati
+      const dataWallZone = this.add.zone(
+        this.cameras.main.width / 2, 
+        gridSize / 2, 
+        this.cameras.main.width - 100, 
+        gridSize * 2
+      );
+      dataWallZone.setName('data_wall');
+      dataWallZone.setInteractive();
+      
+      // Debug: visualizza la zona
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.strokeRect(
+        dataWallZone.x - dataWallZone.width / 2, 
+        dataWallZone.y - dataWallZone.height / 2, 
+        dataWallZone.width, 
+        dataWallZone.height
+      );
+      
+      this.interactionZones.push(dataWallZone);
+    } catch (error) {
+      console.error('Error in createInteractionZones:', error);
+    }
+  }
+  
+  /**
+   * Crea alcuni agenti di test per il laboratorio
+   */
+  protected createTestAgents(): void {
+    try {
+      console.log('Creating test agents');
+      
+      // Debug dello stato delle texture
+      this.updateDebugInfo(`Creating agents...
+      Researcher texture exists: ${this.textures.exists('researcher')}
+      Professor texture exists: ${this.textures.exists('professor')}
+      `);
+      
+      // FIX: Nuova implementazione che utilizza sprite effettivi invece di placeholder
+      
+      // Crea un professore e un ricercatore direttamente in questa scena
+      const professorAgent = new Agent(
+        this, 
+        300, 
+        250, 
+        'professor', 
+        { 
+          role: 'professor', 
+          name: 'Prof. Johansson', 
+          speed: 40
+        }
+      );
+      
+      this.add.existing(professorAgent);
+      this.agents.push(professorAgent);
+      
+      const researcherAgent = new Agent(
+        this, 
+        400, 
+        250, 
+        'researcher', 
+        { 
+          role: 'researcher', 
+          name: 'Dr. Andersson', 
+          speed: 60
+        }
+      );
+      
+      this.add.existing(researcherAgent);
+      this.agents.push(researcherAgent);
+      
+      // Trigger immediato alle animazioni
+      professorAgent.changeState(AgentState.IDLE);
+      researcherAgent.changeState(AgentState.IDLE);
+      
+      console.log('Test agents created');
+    } catch (error) {
+      console.error('Error in createTestAgents:', error);
+      this.updateDebugInfo(`Error creating agents: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Configura la camera
+   */
+  protected setupCamera(): void {
+    try {
+      console.log('Setting up camera');
+      // Imposta i limiti della camera alle dimensioni del canvas
+      this.cameras.main.setBounds(0, 0, this.cameras.main.width, this.cameras.main.height);
+      
+      // Zoom iniziale
+      this.cameras.main.setZoom(1);
+      
+      // Posiziona la camera al centro
+      this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+      
+      // Aggiungi controlli di zoom (mousewheel)
+      this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
+        const currentZoom = this.cameras.main.zoom;
+        let newZoom = currentZoom;
+        
+        if (deltaY > 0) {
+          newZoom = Math.max(0.8, currentZoom - 0.1);
+        } else {
+          newZoom = Math.min(2, currentZoom + 0.1);
+        }
+        
+        this.cameras.main.setZoom(newZoom);
+      });
+      
+      // Aggiungi controlli di trascinamento per la camera
+      this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        if (pointer.isDown) {
+          this.cameras.main.scrollX -= pointer.velocity.x / 10;
+          this.cameras.main.scrollY -= pointer.velocity.y / 10;
+        }
+      });
+    } catch (error) {
+      console.error('Error in setupCamera:', error);
+    }
+  }
+  
+  /**
+   * Crea i pulsanti di navigazione tra laboratori
+   */
+  private createNavigationButtons(): void {
+    try {
+      console.log('Creating navigation buttons');
+      // Pulsante per tornare al lab Mercatorum
+      const backButton = this.add.text(
+        100, 
+        100, 
+        '← Torna a Mercatorum', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#3f51b5',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      backButton.setInteractive({ useHandCursor: true });
+      backButton.on('pointerdown', () => {
+        this.scene.start('MercatorumLab');
+      });
+      
+      // Pulsante per passare a OPBG Lab
+      const opbgButton = this.add.text(
+        100, 
+        140, 
+        '→ Vai a OPBG Lab', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#3f51b5',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      opbgButton.setInteractive({ useHandCursor: true });
+      opbgButton.on('pointerdown', () => {
+        this.scene.start('OPBGLabScene');
+      });
+      
+      // Imposta profondità per assicurarsi che i pulsanti siano sopra altri elementi
+      backButton.setDepth(100);
+      opbgButton.setDepth(100);
+    } catch (error) {
+      console.error('Error in createNavigationButtons:', error);
+    }
+  }
+  
+  /**
+   * Aggiorna tutti gli agenti
+   */
+  protected updateAgents(time: number, delta: number): void {
+    this.agents.forEach(agent => {
+      if (typeof agent.update === 'function') {
+        agent.update(time, delta);
+      }
+    });
+  }
+  
+  /**
+   * Controlla le interazioni tra agenti e con l'ambiente
+   */
+  protected checkInteractions(): void {
+    try {
+      // Controlla interazioni agente-agente
+      for (let i = 0; i < this.agents.length; i++) {
+        for (let j = i + 1; j < this.agents.length; j++) {
+          const agent1 = this.agents[i];
+          const agent2 = this.agents[j];
+          
+          const distance = Phaser.Math.Distance.Between(
+            agent1.x, agent1.y,
+            agent2.x, agent2.y
+          );
+          
+          // Se gli agenti sono abbastanza vicini, possono interagire
+          if (distance < 32) {
+            this.handleAgentInteraction(agent1, agent2);
+          }
+        }
+      }
+      
+      // Controlla interazioni agente-zona
+      this.agents.forEach(agent => {
+        this.interactionZones.forEach(zone => {
+          const bounds = zone.getBounds();
+          if (bounds.contains(agent.x, agent.y)) {
+            this.handleZoneInteraction(agent, zone);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Error in checkInteractions:', error);
+    }
+  }
+  
+  /**
+   * Gestisce l'interazione tra due agenti
+   */
+  protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
+    try {
+      // Debug: mostra un'interazione tra agenti
+      console.log(`Agent interaction between ${agent1.name} and ${agent2.name}`);
+      
+      // Esempio: crea una bolla di dialogo temporanea
+      const dialogPosition = {
+        x: (agent1.x + agent2.x) / 2,
+        y: Math.min(agent1.y, agent2.y) - 20
+      };
+      
+      const dialogBubble = this.add.graphics();
+      dialogBubble.fillStyle(0xffffff, 0.8);
+      dialogBubble.fillRoundedRect(dialogPosition.x - 40, dialogPosition.y - 15, 80, 30, 10);
+      dialogBubble.setDepth(100);
+      
+      // Esempio di emoji per la conversazione
+      const dialogText = this.add.text(
+        dialogPosition.x, 
+        dialogPosition.y, 
+        '💡', 
+        { fontSize: '20px' }
+      );
+      dialogText.setOrigin(0.5);
+      dialogText.setDepth(101);
+      
+      // Rimuovi la bolla dopo un po'
+      this.time.delayedCall(2000, () => {
+        dialogBubble.destroy();
+        dialogText.destroy();
+      });
+    } catch (error) {
+      console.error('Error in handleAgentInteraction:', error);
+    }
+  }
+  
+  /**
+   * Gestisce l'interazione tra un agente e una zona
+   */
+  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
+    try {
+      // Debug: mostra un'interazione con la zona
+      console.log(`Agent ${agent.name} interacting with zone ${zone.name}`);
+      
+      // Esempio: mostra un'icona sopra l'agente in base alla zona
+      let iconText = '❓';
+      
+      if (zone.name === 'innovation_corner') {
+        iconText = '💡';
+      } else if (zone.name === 'data_wall') {
+        iconText = '📊';
+      }
+      
+      const iconPosition = {
+        x: agent.x,
+        y: agent.y - 30
+      };
+      
+      // Aggiungi l'icona
+      const icon = this.add.text(
+        iconPosition.x, 
+        iconPosition.y, 
+        iconText, 
+        { fontSize: '24px' }
+      );
+      icon.setOrigin(0.5);
+      icon.setDepth(100);
+      
+      // Rimuovi l'icona dopo un po'
+      this.time.delayedCall(1500, () => {
+        icon.destroy();
+      });
+    } catch (error) {
+      console.error('Error in handleZoneInteraction:', error);
+    }
+  }
+  
+  /**
+   * Trova un percorso tra due punti usando una versione semplificata dell'algoritmo A*
+   */
+  protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
+    // Implementazione semplificata che restituisce un percorso diretto
+    // In una versione completa, qui andrebbe implementato l'algoritmo A*
+    const path = [
+      { x: startX, y: startY },
+      { x: targetX, y: targetY }
+    ];
+    
+    return path;
+  }
+}

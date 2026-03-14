@@ -1,0 +1,39 @@
+import React, { useEffect, useState } from 'react';
+import { FLStatusData } from '../phaser/fl/FLController';
+import { getGameInstance } from '../utils/gameInstance';
+
+interface FLStatusConnectorProps {
+  flStatus: FLStatusData | null;
+  onToggleFL: (enabled: boolean) => void;
+}
+
+/**
+ * Componente che collega il pannello di stato FL con il controller di effetti visivi nel gioco Phaser.
+ * Questo componente non ha un rendering visibile, ma gestisce la comunicazione tra React e Phaser.
+ */
+const FLStatusConnector: React.FC<FLStatusConnectorProps> = ({ flStatus, onToggleFL }) => {
+  const [lastUpdateTime, setLastUpdateTime] = useState<number>(0);
+
+  // Aggiorna gli effetti visivi quando cambia lo stato FL
+  useEffect(() => {
+    if (!flStatus) return;
+
+    // Evita aggiornamenti troppo frequenti (throttling)
+    const now = Date.now();
+    if (now - lastUpdateTime < 100) return;
+    setLastUpdateTime(now);
+
+    // Ottiene l'istanza del gioco
+    const gameInstance = getGameInstance();
+    if (!gameInstance) return;
+
+    // Codice per aggiornare gli effetti FL nel gioco
+    // Questo codice verrà eseguito nel contesto di Phaser
+    gameInstance.events.emit('updateFLStatus', flStatus);
+
+  }, [flStatus, lastUpdateTime]);
+
+  return null; // Questo componente non ha un rendering visibile
+};
+
+export default FLStatusConnector;

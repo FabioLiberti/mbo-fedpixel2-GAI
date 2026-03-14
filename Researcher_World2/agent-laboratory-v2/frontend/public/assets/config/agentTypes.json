@@ -1,0 +1,80 @@
+{
+    "professor": {
+      "title": "Professor",
+      "description": "Esperto accademico che supervisiona le ricerche sul federated learning",
+      "skills": [
+        "FL Systems Architecture", 
+        "Theoretical Guarantees", 
+        "Privacy Economics"
+      ],
+      "role": "Supervisiona progetti di ricerca e guida gli studenti PhD",
+      "background": "Esperienza pluriennale in ricerca sul federated learning",
+      "color": "#1E88E5",
+      "spritesheetPath": "assets/characters/professor_spritesheet.png"
+    },
+    "researcher": {
+      "title": "Researcher",
+      "description": "Ricercatore post-doc che conduce esperimenti e sviluppa algoritmi",
+      "skills": [
+        "Secure Aggregation", 
+        "Non-IID Data Handling", 
+        "Communication Efficiency"
+      ],
+      "role": "Conduce esperimenti avanzati e sviluppa nuovi algoritmi di aggregazione",
+      "background": "Specializzato in ottimizzazione di algoritmi distribuiti",
+      "color": "#43A047",
+      "spritesheetPath": "assets/characters/researcher_spritesheet.png"
+    },
+    "student": {
+      "title": "PhD Student",
+      "description": "Studente di dottorato che si concentra su specifici aspetti del federated learning",
+      "skills": [
+        "Data Science",
+        "Privacy Engineering",
+        "Optimization Theory"
+      ],
+      "role": "Esplora nuove direzioni di ricerca sotto la supervisione del professore",
+      "background": "Formazione in matematica e informatica con interesse per l'apprendimento federato",
+      "color": "#FB8C00",
+      "spritesheetPath": "assets/characters/student_spritesheet.png"
+    },
+    "doctor": {
+      "title": "Medical Doctor",
+      "description": "Medico specializzato nell'applicazione del federated learning in contesti clinici",
+      "skills": [
+        "Clinical Data Interpretation",
+        "Diagnostic Model Evaluation",
+        "Patient-Specific Adaptation"
+      ],
+      "role": "Fornisce esperienza clinica e valida i modelli da una prospettiva medica",
+      "background": "Formazione medica con specializzazione in informatica medica",
+      "color": "#8E24AA",
+      "spritesheetPath": "assets/characters/doctor_spritesheet.png"
+    },
+    "engineer": {
+      "title": "ML Engineer",
+      "description": "Ingegnere specializzato nell'implementazione pratica di algoritmi FL",
+      "skills": [
+        "Model Optimization",
+        "Systems Integration",
+        "Empirical Evaluation"
+      ],
+      "role": "Trasforma gli algoritmi teorici in implementazioni efficienti",
+      "background": "Esperienza nell'ingegneria del software e machine learning applicato",
+      "color": "#F44336",
+      "spritesheetPath": "assets/characters/engineer_spritesheet.png"
+    },
+    "privacy_specialist": {
+      "title": "Privacy Specialist",
+      "description": "Esperto in sicurezza e privacy per i sistemi di federated learning",
+      "skills": [
+        "Differential Privacy Implementation",
+        "Attack Simulation",
+        "Compliance Verification"
+      ],
+      "role": "Garantisce che i protocolli FL rispettino gli standard di privacy",
+      "background": "Formazione in crittografia e privacy computazionale",
+      "color": "#607D8B",
+      "spritesheetPath": "assets/characters/privacy_specialist.png"
+    }
+  }

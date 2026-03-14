@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load staticfiles %}
+
+{% block content %}
+<style>
+    .debug-panel {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #00ff00;
+        padding: 15px;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+        max-width: 300px;
+        z-index: 1000;
+    }
+    
+    .agent-info {
+        background: #f0f0f0;
+        border: 1px solid #ddd;
+        margin: 10px;
+        padding: 15px;
+        border-radius: 5px;
+    }
+    
+    .agent-position {
+        font-weight: bold;
+        color: #2196F3;
+    }
+    
+    .agent-action {
+        color: #4CAF50;
+        margin: 5px 0;
+    }
+    
+    .agent-chat {
+        background: #E3F2FD;
+        padding: 8px;
+        border-left: 4px solid #2196F3;
+        margin: 5px 0;
+    }
+</style>
+
+<div class="debug-panel" id="debug-panel">
+    <h3>Live Simulation Debug</h3>
+    <div>Status: <span id="status">Connecting...</span></div>
+    <div>Step: <span id="current-step">{{step}}</span></div>
+    <div>Simulation: <span id="sim-code">{{sim_code}}</span></div>
+    <div>Last Update: <span id="last-update">Never</span></div>
+</div>
+
+<div style="margin: 20px;">
+    <h1>Generative Agents - Live Debug View</h1>
+    
+    <div style="margin: 20px 0;">
+        <button onclick="fetchMovementData()">Refresh Movement Data</button>
+        <button onclick="toggleAutoUpdate()">Toggle Auto Update: <span id="auto-status">ON</span></button>
+        <button onclick="nextStep()">Next Step</button>
+    </div>
+    
+    <div>
+        <h2>Current Time: <span id="game-time">Loading...</span></h2>
+    </div>
+    
+    <div id="agents-container">
+        <h3>Agents Information:</h3>
+        <div id="agents-list">Loading agents...</div>
+    </div>
+    
+    <div style="margin-top: 30px;">
+        <h3>Raw API Responses:</h3>
+        <pre id="raw-data" style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 300px; overflow-y: auto;"></pre>
+    </div>
+</div>
+
+<script>
+let currentStep = {{step}};
+let simCode = "{{sim_code}}";
+let autoUpdate = true;
+let updateInterval;
+
+function updateStatus(message, color = '#00ff00') {
+    document.getElementById('status').textContent = message;
+    document.getElementById('status').style.color = color;
+}
+
+function updateLastUpdateTime() {
+    const now = new Date().toLocaleTimeString();
+    document.getElementById('last-update').textContent = now;
+}
+
+function fetchMovementData() {
+    updateStatus('Fetching...', '#ffff00');
+    
+    fetch('/update_environment/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            step: currentStep,
+            sim_code: simCode
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Movement data:', data);
+        document.getElementById('raw-data').textContent = JSON.stringify(data, null, 2);
+        
+        if (data['<step>'] !== -1) {
+            updateStatus('Data received', '#00ff00');
+            displayAgentsData(data);
+            updateLastUpdateTime();
+            
+            if (data.meta && data.meta.curr_time) {
+                document.getElementById('game-time').textContent = data.meta.curr_time;
+            }
+        } else {
+            updateStatus('No data for step ' + currentStep, '#ff9900');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        updateStatus('Error: ' + error.message, '#ff0000');
+    });
+}
+
+function displayAgentsData(data) {
+    const container = document.getElementById('agents-list');
+    container.innerHTML = '';
+    
+    if (!data.persona) {
+        container.innerHTML = '<p>No agent data available</p>';
+        return;
+    }
+    
+    Object.keys(data.persona).forEach(agentName => {
+        const agent = data.persona[agentName];
+        const agentDiv = document.createElement('div');
+        agentDiv.className = 'agent-info';
+        
+        const position = agent.movement || [0, 0];
+        const description = agent.description || 'No description';
+        const chat = agent.chat || null;
+        const emoji = agent.pronunciatio || '🤖';
+        
+        agentDiv.innerHTML = `
+            <h4>${agentName} ${emoji}</h4>
+            <div class="agent-position">Position: (${position[0]}, ${position[1]})</div>
+            <div class="agent-action">Action: ${description}</div>
+            ${chat ? `<div class="agent-chat">💬 "${chat[1]}"</div>` : ''}
+        `;
+        
+        container.appendChild(agentDiv);
+    });
+}
+
+function nextStep() {
+    currentStep++;
+    document.getElementById('current-step').textContent = currentStep;
+    fetchMovementData();
+}
+
+function toggleAutoUpdate() {
+    autoUpdate = !autoUpdate;
+    document.getElementById('auto-status').textContent = autoUpdate ? 'ON' : 'OFF';
+    
+    if (autoUpdate) {
+        updateInterval = setInterval(() => {
+            fetchMovementData();
+        }, 3000);
+    } else {
+        clearInterval(updateInterval);
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    fetchMovementData();
+    
+    // Start auto update
+    updateInterval = setInterval(() => {
+        if (autoUpdate) {
+            fetchMovementData();
+        }
+    }, 3000);
+});
+</script>
+
+{% endblock content %}

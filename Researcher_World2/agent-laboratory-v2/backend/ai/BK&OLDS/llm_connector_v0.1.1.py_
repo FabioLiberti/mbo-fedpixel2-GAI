@@ -1,0 +1,301 @@
+"""
+LLM Connector per Agent Laboratory.
+Gestisce la comunicazione con Ollama per fornire capacità di ragionamento agli agenti.
+"""
+
+import json
+import logging
+import time
+import os
+from typing import Dict, List, Optional, Any
+
+import httpx
+
+# Configurazione del logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("llm_connector")
+
+class LLMConnector:
+    """
+    Classe per gestire la comunicazione con Ollama LLM.
+    Fornisce metodi per generare testo e dialoghi per gli agenti.
+    """
+    
+    def __init__(
+        self, 
+        config_path: str = None
+    ):
+        """
+        Inizializza il connector.
+        
+        Args:
+            config_path: Percorso al file di configurazione LLM
+        """
+        # Carica la configurazione
+        self.config = self._load_config(config_path)
+        
+        # Estrai parametri di configurazione
+        llm_config = self.config.get("llm", {})
+        self.base_url = llm_config.get("base_url", "http://localhost:11434")
+        self.model = llm_config.get("model", "qwen3:0.6b")
+        self.timeout = llm_config.get("timeout", 30)
+        self.parameters = llm_config.get("parameters", {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "max_tokens": 200
+        })
+        
+        # Inizializza il client HTTP
+        self.client = httpx.AsyncClient(timeout=self.timeout)
+        
+        # Cache per i dialoghi
+        self.dialog_cache = {}
+        self.enable_caching = self.config.get("dialog_generation", {}).get("enable_caching", True)
+        self.cache_expiry = self.config.get("dialog_generation", {}).get("cache_expiry_seconds", 3600)
+        
+        logger.info(f"LLM Connector inizializzato con modello: {self.model}")
+    
+    def _load_config(self, config_path: str = None) -> Dict[str, Any]:
+        """
+        Carica la configurazione LLM.
+        
+        Args:
+            config_path: Percorso al file di configurazione
+            
+        Returns:
+            Configurazione LLM
+        """
+        # Se non è specificato un percorso, usa quello di default
+        if config_path is None:
+            # Ottieni il percorso del file corrente
+            current_file = os.path.abspath(__file__)
+            ai_dir = os.path.dirname(current_file)
+            backend_dir = os.path.dirname(ai_dir)
+            config_path = os.path.join(backend_dir, "config", "llm_config.json")
+        
+        # Verifica se il file esiste
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading LLM config: {e}")
+        
+        # Configurazione di default
+        logger.warning(f"LLM config file not found at {config_path}, using defaults")
+        return {
+            "llm": {
+                "enabled": True,
+                "model": "qwen3:0.6b",
+                "base_url": "http://localhost:11434",
+                "timeout": 30,
+                "parameters": {
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "max_tokens": 200
+                }
+            },
+            "dialog_generation": {
+                "enable_caching": True,
+                "cache_expiry_seconds": 3600,
+                "fallback_dialogs": {
+                    "default": "I'm currently focused on my federated learning research."
+                }
+            },
+            "prompt_templates": {
+                "researcher_dialog": "Sei un {researcher_type} specializzato in {specialization}.\nIl tuo obiettivo è fare ricerca su federated learning.\n\nContesto attuale:\n- Stato laboratorio: {lab_state}\n- Agenti vicini: {nearby_agents}\n- Progresso ricerca FL: {fl_progress}\n- Conoscenze attuali: {knowledge_base}\n\nSituazione: {current_situation}\n\nRispondi con un breve dialogo realistico (1-2 frasi) che questo ricercatore potrebbe dire in questa situazione.\nIl dialogo deve essere chiaro, conciso e in prima persona."
+            }
+        }
+    
+    async def close(self):
+        """Chiude il client HTTP."""
+        await self.client.aclose()
+    
+    async def generate_text(self, prompt: str, **kwargs) -> str:
+        """
+        Genera testo utilizzando il LLM.
+        
+        Args:
+            prompt: Testo di input per il LLM
+            **kwargs: Parametri aggiuntivi per la richiesta
+            
+        Returns:
+            Testo generato dal LLM
+        """
+        start_time = time.time()
+        
+        # Prepara i parametri della richiesta
+        model = kwargs.get("model", self.model)
+        options = kwargs.get("options", {})
+        
+        # Unisci i parametri di default con quelli specificati
+        for key, value in self.parameters.items():
+            if key not in options:
+                options[key] = value
+        
+        # Prepara la richiesta
+        request_data = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": options
+        }
+        
+        try:
+            # Invia la richiesta a Ollama
+            response = await self.client.post(
+                f"{self.base_url}/api/generate",
+                json=request_data,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+            
+            # Processa la risposta
+            result = response.json()
+            
+            # Log delle performance
+            elapsed = time.time() - start_time
+            logger.debug(f"LLM request completed in {elapsed:.2f}s")
+            
+            return result.get("response", "")
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            return f"Error generating text: HTTP {e.response.status_code}"
+        except httpx.RequestError as e:
+            logger.error(f"Request error: {str(e)}")
+            return "Error connecting to LLM service"
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            return "Unexpected error occurred"
+    
+    def _get_cache_key(self, researcher_type: str, specialization: str, current_situation: str) -> str:
+        """
+        Genera una chiave per la cache dei dialoghi.
+        
+        Args:
+            researcher_type: Tipo di ricercatore
+            specialization: Specializzazione
+            current_situation: Situazione attuale
+            
+        Returns:
+            Chiave cache
+        """
+        return f"{researcher_type}-{specialization}-{current_situation}"
+    
+    def _get_fallback_dialog(self, researcher_type: str) -> str:
+        """
+        Ottiene un dialogo di fallback per un tipo di ricercatore.
+        
+        Args:
+            researcher_type: Tipo di ricercatore
+            
+        Returns:
+            Dialogo di fallback
+        """
+        fallbacks = self.config.get("dialog_generation", {}).get("fallback_dialogs", {})
+        return fallbacks.get(researcher_type.lower(), fallbacks.get("default", "I'm researching federated learning."))
+    
+    async def generate_researcher_dialog(
+        self,
+        researcher_type: str,
+        specialization: str,
+        context: Dict[str, Any],
+        current_situation: str
+    ) -> str:
+        """
+        Genera un dialogo per un ricercatore in base al contesto.
+        
+        Args:
+            researcher_type: Tipo di ricercatore (PhD, Professor, ecc.)
+            specialization: Specializzazione del ricercatore
+            context: Contesto attuale (ambiente, altri agenti, ecc.)
+            current_situation: Situazione specifica a cui reagire
+            
+        Returns:
+            Dialogo generato per il ricercatore
+        """
+        # Verifica se c'è una risposta in cache
+        if self.enable_caching:
+            cache_key = self._get_cache_key(researcher_type, specialization, current_situation)
+            cached_result = self.dialog_cache.get(cache_key)
+            
+            if cached_result:
+                cache_time, dialog = cached_result
+                # Verifica se la cache è ancora valida
+                if time.time() - cache_time < self.cache_expiry:
+                    logger.debug(f"Using cached dialog for {researcher_type}")
+                    return dialog
+        
+        # Ottieni il template del prompt
+        prompt_template = self.config.get("prompt_templates", {}).get(
+            "researcher_dialog", 
+            "Sei un {researcher_type} specializzato in {specialization}. Situazione: {current_situation}"
+        )
+        
+        # Formatta il prompt
+        nearby_agents_str = ", ".join(context.get("nearby_agents", ["Nessuno"]))
+        prompt = prompt_template.format(
+            researcher_type=researcher_type,
+            specialization=specialization,
+            lab_state=context.get("lab_state", "normale"),
+            nearby_agents=nearby_agents_str,
+            fl_progress=context.get("fl_progress", "iniziale"),
+            knowledge_base=context.get("knowledge_base", f"Expertise in {specialization}"),
+            current_situation=current_situation
+        )
+        
+        # Genera la risposta
+        response = await self.generate_text(
+            prompt=prompt, 
+            options={
+                "temperature": self.parameters.get("temperature", 0.7),
+                "top_p": self.parameters.get("top_p", 0.9),
+                "max_tokens": self.parameters.get("max_tokens", 200)
+            }
+        )
+        
+        # Verifica se la risposta è valida
+        if not response or response.startswith("Error"):
+            logger.warning(f"Failed to generate dialog for {researcher_type}, using fallback")
+            return self._get_fallback_dialog(researcher_type)
+        
+        # Ripulisci la risposta
+        dialog = response.strip()
+        
+        # Salva in cache
+        if self.enable_caching:
+            cache_key = self._get_cache_key(researcher_type, specialization, current_situation)
+            self.dialog_cache[cache_key] = (time.time(), dialog)
+        
+        return dialog
+
+
+# Esempio di utilizzo (per debugging)
+async def test_connector():
+    """Funzione di test per verificare il connector."""
+    connector = LLMConnector()
+    
+    try:
+        response = await connector.generate_researcher_dialog(
+            researcher_type="PhD Student",
+            specialization="Privacy Engineering",
+            context={
+                "lab_state": "attivo",
+                "nearby_agents": ["Professor di FL Systems Architecture", "ML Engineer"],
+                "fl_progress": "fase intermedia",
+                "knowledge_base": "Differential Privacy, Secure Aggregation"
+            },
+            current_situation="Hai appena scoperto un miglioramento nell'algoritmo di secure aggregation"
+        )
+        
+        print("Risposta LLM:")
+        print(response)
+        
+    finally:
+        await connector.close()
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(test_connector())

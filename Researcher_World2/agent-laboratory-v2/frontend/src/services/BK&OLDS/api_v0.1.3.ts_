@@ -1,0 +1,134 @@
+import { io, Socket } from 'socket.io-client';
+
+// Configurazione di base per l'API REST - aggiornata con la porta 8091
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8091';
+
+// Classe per gestire WebSocket
+class WebSocketService {
+  private socket: Socket | null = null;
+  private messageHandlers: { [key: string]: ((data: any) => void)[] } = {};
+
+  constructor() {
+    this.socket = null;
+  }
+
+  // Connessione al server WebSocket
+  connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        console.log(`Connecting to WebSocket at ${API_BASE_URL}`);
+        this.socket = io(API_BASE_URL, {
+          reconnection: true,
+          reconnectionAttempts: 5,
+          timeout: 10000
+        });
+
+        this.socket.on('connect', () => {
+          console.log('WebSocket connected successfully');
+          resolve();
+        });
+
+        this.socket.on('connect_error', (error) => {
+          console.error('WebSocket connection error:', error);
+          reject(error);
+        });
+
+        this.socket.on('disconnect', (reason) => {
+          console.log('WebSocket disconnected:', reason);
+        });
+
+        // Gestisci messaggi in arrivo
+        this.socket.onAny((eventName, data) => {
+          if (this.messageHandlers[eventName]) {
+            this.messageHandlers[eventName].forEach(handler => handler(data));
+          }
+        });
+
+      } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
+        reject(error);
+      }
+    });
+  }
+
+  // Disconnetti dal server
+  disconnect(): void {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+  }
+
+  // Invia un messaggio al server
+  sendMessage(event: string, data: any): void {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit(event, data);
+    } else {
+      console.warn('WebSocket not connected, message not sent');
+    }
+  }
+
+  // Registra un handler per un tipo di messaggio
+  onMessage(event: string, handler: (data: any) => void): void {
+    if (!this.messageHandlers[event]) {
+      this.messageHandlers[event] = [];
+    }
+    this.messageHandlers[event].push(handler);
+  }
+
+  // Rimuovi un handler
+  offMessage(event: string, handler?: (data: any) => void): void {
+    if (!this.messageHandlers[event]) {
+      return;
+    }
+    
+    if (handler) {
+      this.messageHandlers[event] = this.messageHandlers[event].filter(h => h !== handler);
+    } else {
+      delete this.messageHandlers[event];
+    }
+  }
+
+  // Controlla se il socket è connesso
+  isConnected(): boolean {
+    return this.socket !== null && this.socket.connected;
+  }
+}
+
+// Istanza singleton del servizio WebSocket
+export const webSocketService = new WebSocketService();
+
+// Funzioni API REST
+export const api = {
+  // Ottieni configurazione simulazione
+  getSimulationConfig: async () => {
+    try {
+      const url = `${API_BASE_URL}/api/simulation/config`;
+      console.log(`Fetching simulation config from: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch simulation config: ${response.status} ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('API error:', error);
+      throw error;
+    }
+  },
+  
+  // Ottieni dati laboratorio
+  getLaboratoryData: async (labId: string) => {
+    try {
+      const url = `${API_BASE_URL}/api/laboratory/${labId}`;
+      console.log(`Fetching laboratory data from: ${url}`);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch data for laboratory ${labId}: ${response.status} ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('API error:', error);
+      throw error;
+    }
+  }
+};

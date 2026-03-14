@@ -1,0 +1,283 @@
+// frontend/src/phaser/ui/SpeechBubble.ts
+
+import Phaser from 'phaser';
+import { FLDialogType } from '../types/DialogTypes';
+
+export class SpeechBubble {
+  private scene: Phaser.Scene;
+  private x: number;
+  private y: number;
+  private message: string;
+  private type: FLDialogType;
+  private container: Phaser.GameObjects.Container;
+  
+  // Usiamo ! per indicare a TypeScript che questi valori verranno assegnati nel metodo createBubble
+  private backgroundSprite!: Phaser.GameObjects.Sprite | null;
+  private backgroundGraphics!: Phaser.GameObjects.Graphics | null;
+  private tailSprite!: Phaser.GameObjects.Sprite | null;
+  private tailGraphics!: Phaser.GameObjects.Graphics | null;
+  
+  private icon: Phaser.GameObjects.Sprite | null = null;
+  private text!: Phaser.GameObjects.Text;
+  private remainingTime: number = 3000;
+  private isDestroyed: boolean = false;
+  
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    message: string,
+    type: FLDialogType = FLDialogType.GENERAL,
+    options?: {
+      width?: number;
+      padding?: number;
+      targetPos?: { x: number, y: number };
+    }
+  ) {
+    this.scene = scene;
+    this.x = x;
+    this.y = y;
+    this.message = message;
+    this.type = type;
+    
+    // Inizializza le proprietà per evitare errori TypeScript
+    this.backgroundSprite = null;
+    this.backgroundGraphics = null;
+    this.tailSprite = null;
+    this.tailGraphics = null;
+    
+    this.container = this.scene.add.container(x, y);
+    this.container.setDepth(1000); // Assicura che il dialogo sia sopra agli altri elementi
+    
+    // Crea gli elementi della nuvoletta
+    this.createBubble(options);
+    
+    // Animazione di comparsa
+    this.playAppearAnimation();
+  }
+  
+  private createBubble(options?: {
+    width?: number;
+    padding?: number;
+    targetPos?: { x: number, y: number };
+  }): void {
+    // Parametri di default
+    const padding = options?.padding || 10;
+    const maxWidth = options?.width || 120;
+    
+    // Crea il testo
+    this.text = this.scene.add.text(0, 0, this.message, {
+      fontFamily: 'Arial',
+      fontSize: '12px',
+      color: '#000000',
+      wordWrap: { width: maxWidth }
+    });
+    this.text.setOrigin(0.5);
+    
+    // Calcola le dimensioni della nuvoletta in base al testo
+    const width = Math.max(this.text.width + padding * 2, 40);
+    const height = Math.max(this.text.height + padding * 2, 30);
+    
+    // Crea lo sfondo della nuvoletta
+    this.createBackground(width, height);
+    
+    // Crea la coda della nuvoletta
+    this.createTail(height);
+    
+    // Aggiungi un'icona in base al tipo di dialogo
+    this.addTypeIcon();
+    
+    // Aggiungi il testo al container
+    this.container.add(this.text);
+  }
+  
+  /**
+   * Crea lo sfondo della nuvoletta
+   */
+  private createBackground(width: number, height: number): void {
+    try {
+      if (this.scene.textures.exists('bubble-background')) {
+        // Crea uno sprite per lo sfondo
+        const sprite = this.scene.add.sprite(0, 0, 'bubble-background');
+        sprite.setOrigin(0.5);
+        sprite.setScale(
+          width / sprite.width,
+          height / sprite.height
+        );
+        
+        // Salva il riferimento e aggiungi al container
+        this.backgroundSprite = sprite;
+        this.container.add(this.backgroundSprite);
+      } else {
+        throw new Error('Bubble background texture not found');
+      }
+    } catch (error) {
+      console.error('Error creating bubble background:', error);
+      
+      // Fallback: crea un rettangolo semplice se l'immagine non è disponibile
+      const graphics = this.scene.add.graphics();
+      graphics.fillStyle(0xFFFFFF, 1);
+      graphics.fillRoundedRect(-width/2, -height/2, width, height, 8);
+      graphics.lineStyle(2, 0x000000, 1);
+      graphics.strokeRoundedRect(-width/2, -height/2, width, height, 8);
+      
+      // Salva il riferimento e aggiungi al container
+      this.backgroundGraphics = graphics;
+      this.container.add(this.backgroundGraphics);
+    }
+  }
+  
+  /**
+   * Crea la coda della nuvoletta
+   */
+  private createTail(height: number): void {
+    try {
+      if (this.scene.textures.exists('bubble-tail')) {
+        // Crea uno sprite per la coda
+        const sprite = this.scene.add.sprite(0, height / 2, 'bubble-tail');
+        sprite.setOrigin(0.5, 0);
+        
+        // Salva il riferimento e aggiungi al container
+        this.tailSprite = sprite;
+        this.container.add(this.tailSprite);
+      } else {
+        throw new Error('Bubble tail texture not found');
+      }
+    } catch (error) {
+      console.error('Error creating bubble tail:', error);
+      
+      // Fallback: crea un triangolo semplice se l'immagine non è disponibile
+      const graphics = this.scene.add.graphics();
+      graphics.fillStyle(0xFFFFFF, 1);
+      graphics.fillTriangle(0, height/2, -10, height/2 + 10, 10, height/2 + 10);
+      graphics.lineStyle(2, 0x000000, 1);
+      graphics.strokeTriangle(0, height/2, -10, height/2 + 10, 10, height/2 + 10);
+      
+      // Salva il riferimento e aggiungi al container
+      this.tailGraphics = graphics;
+      this.container.add(this.tailGraphics);
+    }
+  }
+  
+  private addTypeIcon(): void {
+    let iconKey = '';
+    
+    switch (this.type) {
+      case FLDialogType.MODEL:
+        iconKey = 'icon-model';
+        break;
+      case FLDialogType.DATA:
+        iconKey = 'icon-data';
+        break;
+      case FLDialogType.PRIVACY:
+        iconKey = 'icon-privacy';
+        break;
+      case FLDialogType.RESEARCH:
+        iconKey = 'icon-research';
+        break;
+      default:
+        // Nessuna icona per il tipo GENERAL
+        return;
+    }
+    
+    try {
+      // Verifica che la texture esista prima di creare lo sprite
+      if (this.scene.textures.exists(iconKey)) {
+        // Posiziona l'icona nell'angolo superiore sinistro della nuvoletta
+        const offsetX = -this.text.width / 2 - 5;
+        const offsetY = -this.text.height / 2 - 5;
+        
+        // Crea l'icona, configurala e aggiungila al container in un unico blocco
+        const icon = this.scene.add.sprite(offsetX, offsetY, iconKey);
+        icon.setScale(0.5);
+        icon.setOrigin(0, 0);
+        
+        // Salva il riferimento e aggiungi al container
+        this.icon = icon;
+        this.container.add(this.icon);
+      } else {
+        console.warn(`Icon texture '${iconKey}' not found`);
+      }
+    } catch (error) {
+      console.error(`Error creating icon ${iconKey}:`, error);
+    }
+  }
+  
+  private playAppearAnimation(): void {
+    // Animazione di comparsa
+    this.container.setAlpha(0);
+    this.container.setScale(0.5);
+    
+    this.scene.tweens.add({
+      targets: this.container,
+      alpha: 1,
+      scale: 1,
+      duration: 200,
+      ease: 'Back.easeOut'
+    });
+  }
+  
+  private playDisappearAnimation(): void {
+    // Animazione di scomparsa
+    this.scene.tweens.add({
+      targets: this.container,
+      alpha: 0,
+      scale: 0.5,
+      duration: 200,
+      ease: 'Back.easeIn',
+      onComplete: () => {
+        this.container.destroy();
+        this.isDestroyed = true;
+      }
+    });
+  }
+  
+  /**
+   * Aggiorna la posizione della nuvoletta per seguire l'agente
+   * @param x Nuova posizione x
+   * @param y Nuova posizione y
+   */
+  public updatePosition(x: number, y: number): void {
+    if (this.isDestroyed) return;
+    
+    this.x = x;
+    this.y = y;
+    this.container.setPosition(x, y);
+  }
+  
+  /**
+   * Imposta la durata della nuvoletta (in millisecondi)
+   * @param duration Durata in ms
+   */
+  public setDuration(duration: number): void {
+    this.remainingTime = duration;
+  }
+  
+  /**
+   * Aggiorna lo stato della nuvoletta (da chiamare nel loop di update)
+   * @param delta Tempo trascorso dall'ultimo frame
+   * @returns true se la nuvoletta è ancora attiva, false se è stata distrutta
+   */
+  public update(delta: number): boolean {
+    if (this.isDestroyed) return false;
+    
+    this.remainingTime -= delta;
+    
+    if (this.remainingTime <= 0) {
+      this.playDisappearAnimation();
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Distrugge immediatamente la nuvoletta
+   */
+  public destroy(): void {
+    if (!this.isDestroyed) {
+      this.container.destroy();
+      this.isDestroyed = true;
+    }
+  }
+}

@@ -1,0 +1,96 @@
+// frontend/src/phaser/assetConfig.ts
+
+/**
+ * Configurazione centralizzata di tutti gli asset utilizzati nel gioco
+ */
+
+// Configurazione base path
+export const BASE_PATH = process.env.PUBLIC_URL || '';
+
+// Struttura per organizzare i percorsi degli asset
+export const ASSETS = {
+  // Tilemaps
+  tilemaps: {
+    mercatorum: `${BASE_PATH}/assets/tilemaps/mercatorum-map.json`,
+    blekinge: `${BASE_PATH}/assets/tilemaps/blekinge-map.json`,
+    opbg: `${BASE_PATH}/assets/tilemaps/opbg-map.json`,
+  },
+  
+  // Tileset images
+  tilesets: {
+    main: `${BASE_PATH}/assets/tilesets/tiles.png`,
+    mercatorum: `${BASE_PATH}/assets/tilesets/mercatorum-tiles.png`,
+    blekinge: `${BASE_PATH}/assets/tilesets/blekinge-tiles.png`,
+    opbg: `${BASE_PATH}/assets/tilesets/opbg-tiles.png`,
+  },
+  
+  // Spritesheets dei personaggi
+  characters: {
+    professor: {
+      path: `${BASE_PATH}/assets/sprites/professor.png`,
+      config: { frameWidth: 32, frameHeight: 48 }
+    },
+    researcher: {
+      path: `${BASE_PATH}/assets/sprites/researcher.png`,
+      config: { frameWidth: 32, frameHeight: 48 }
+    },
+    student: {
+      path: `${BASE_PATH}/assets/sprites/student.png`,
+      config: { frameWidth: 32, frameHeight: 48 }
+    },
+    doctor: {
+      path: `${BASE_PATH}/assets/sprites/doctor.png`,
+      config: { frameWidth: 32, frameHeight: 48 }
+    },
+    engineer: {
+      path: `${BASE_PATH}/assets/sprites/engineer.png`,
+      config: { frameWidth: 32, frameHeight: 48 }
+    },
+  },
+  
+  // Logo e interfaccia
+  ui: {
+    mercatorumLogo: `${BASE_PATH}/assets/ui/mercatorum-logo.png`,
+    blekingeLogo: `${BASE_PATH}/assets/ui/blekinge-logo.png`,
+    opbgLogo: `${BASE_PATH}/assets/ui/opbg-logo.png`,
+    placeholder: `${BASE_PATH}/assets/ui/placeholder.png`,
+  },
+  
+  // Animazioni
+  animations: {
+    // Definizioni delle animazioni per ogni personaggio
+    professor: {
+      idle: { key: 'professor-idle', frames: { start: 0, end: 3 }, frameRate: 5, repeat: -1 },
+      walk: { key: 'professor-walk', frames: { start: 4, end: 7 }, frameRate: 10, repeat: -1 },
+      discuss: { key: 'professor-discuss', frames: { start: 8, end: 11 }, frameRate: 7, repeat: -1 },
+    },
+    researcher: {
+      idle: { key: 'researcher-idle', frames: { start: 0, end: 3 }, frameRate: 5, repeat: -1 },
+      walk: { key: 'researcher-walk', frames: { start: 4, end: 7 }, frameRate: 10, repeat: -1 },
+      discuss: { key: 'researcher-discuss', frames: { start: 8, end: 11 }, frameRate: 7, repeat: -1 },
+    },
+  },
+};
+
+// Verifica la disponibilità degli asset (utile per debugging)
+export const verifyAssets = (): void => {
+  // Controlla se i percorsi puntano a file esistenti (solo in sviluppo)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Asset configuration loaded:');
+    console.log('Tilemaps:', ASSETS.tilemaps);
+    console.log('Tilesets:', ASSETS.tilesets);
+    console.log('Characters:', ASSETS.characters);
+    console.log('UI:', ASSETS.ui);
+  }
+};
+
+// Funzione per ottenere il percorso completo di un asset
+export const getAssetPath = (path: string): string => {
+  // Se è già un percorso assoluto, restituiscilo così com'è
+  if (path.startsWith('http') || path.startsWith('/')) {
+    return path;
+  }
+  
+  // Altrimenti, aggiungi il BASE_PATH
+  return `${BASE_PATH}/${path}`;
+};

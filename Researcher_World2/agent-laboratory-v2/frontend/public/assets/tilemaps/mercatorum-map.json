@@ -1,0 +1,67 @@
+{
+    "width": 25,
+    "height": 20,
+    "tilewidth": 32,
+    "tileheight": 32,
+    "type": "map",
+    "layers": [
+      {
+        "name": "floor",
+        "data": [ ],
+        "width": 25,
+        "height": 20,
+        "x": 0,
+        "y": 0,
+        "type": "tilelayer",
+        "visible": true
+      },
+      {
+        "name": "walls",
+        "data": [ ],
+        "width": 25,
+        "height": 20,
+        "x": 0,
+        "y": 0,
+        "type": "tilelayer",
+        "visible": true,
+        "properties": [
+          {
+            "name": "collides",
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "name": "furniture",
+        "data": [ ],
+        "width": 25,
+        "height": 20,
+        "x": 0,
+        "y": 0,
+        "type": "tilelayer",
+        "visible": true,
+        "properties": [
+          {
+            "name": "collides",
+            "type": "bool",
+            "value": true
+          }
+        ]
+      }
+    ],
+    "tilesets": [
+      {
+        "name": "mercatorum-tileset",
+        "firstgid": 1,
+        "tilewidth": 32,
+        "tileheight": 32,
+        "imagewidth": 256,
+        "imageheight": 256,
+        "columns": 8,
+        "margin": 0,
+        "spacing": 0,
+        "image": "tileset.png"
+      }
+    ]
+  }

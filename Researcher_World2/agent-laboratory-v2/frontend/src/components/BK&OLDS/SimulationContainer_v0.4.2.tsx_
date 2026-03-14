@@ -1,0 +1,124 @@
+import React, { useEffect, useRef } from 'react';
+import { initGame, Game, SCENE_KEYS } from '../phaser/game';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: Game) => void;
+  selectedLab?: string;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
+  onGameReady, 
+  selectedLab 
+}) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameInstanceRef = useRef<Game | null>(null);
+  const gameReadyFiredRef = useRef<boolean>(false);
+
+  // Inizializzazione del gioco
+  useEffect(() => {
+    if (gameContainerRef.current && !gameInstanceRef.current) {
+      try {
+        const containerId = 'phaser-game';
+        console.log('Initializing Phaser game in container:', containerId);
+        gameInstanceRef.current = initGame(containerId);
+        
+        // Evita chiamate multiple a onGameReady
+        if (onGameReady && gameInstanceRef.current && !gameReadyFiredRef.current) {
+          gameReadyFiredRef.current = true;
+          onGameReady(gameInstanceRef.current);
+        }
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+      }
+    }
+
+    // Cleanup al momento dell'unmount
+    return () => {
+      if (gameInstanceRef.current) {
+        console.log('Destroying Phaser game instance');
+        gameInstanceRef.current.destroy(true);
+        gameInstanceRef.current = null;
+        gameReadyFiredRef.current = false;
+      }
+    };
+  }, [onGameReady]);
+
+  // Gestione del cambio di laboratorio
+  useEffect(() => {
+    if (selectedLab && gameInstanceRef.current) {
+      const game = gameInstanceRef.current;
+      
+      let sceneKey = '';
+      switch (selectedLab) {
+        case SCENE_KEYS.BLEKINGE:
+          sceneKey = SCENE_KEYS.BLEKINGE;
+          break;
+        case SCENE_KEYS.OPBG:
+          sceneKey = SCENE_KEYS.OPBG;
+          break;
+        case SCENE_KEYS.MERCATORUM:
+        default:
+          sceneKey = SCENE_KEYS.MERCATORUM;
+      }
+      
+      console.log(`SimulationContainer: Switching to scene ${sceneKey}`);
+      
+      try {
+        // Verifica se ci sono scene attive da fermare
+        game.scene.scenes.forEach(scene => {
+          if (scene && scene.scene && typeof scene.scene.isActive === 'function') {
+            if (scene.scene.isActive()) {
+              console.log(`Stopping active scene: ${scene.scene.key}`);
+              scene.scene.stop();
+            }
+          }
+        });
+        
+        // Piccolo timeout per assicurarsi che le scene siano fermate
+        setTimeout(() => {
+          // Forza riavvio della scena anche se è già nella cache
+          console.log(`Force restarting scene: ${sceneKey}`);
+          try {
+            // Prima prova a stoppare esplicitamente
+            if (game.scene.isActive(sceneKey)) {
+              game.scene.stop(sceneKey);
+            }
+            
+            // Poi avvia
+            game.scene.start(sceneKey);
+            
+            // Verifica dopo un breve timeout se la scena è davvero attiva
+            setTimeout(() => {
+              if (!game.scene.isActive(sceneKey)) {
+                console.warn(`Scene ${sceneKey} did not activate properly, trying alternative approach`);
+                // Approccio alternativo: rimuovi e aggiungi nuovamente la scena
+                try {
+                  const sceneInstance = game.scene.getScene(sceneKey);
+                  if (sceneInstance) {
+                    game.scene.remove(sceneKey);
+                    // Ricrea la scena (questo dipende dall'implementazione)
+                    // In questo caso il reload della scena dovrebbe essere gestito in App.tsx
+                  }
+                } catch (err) {
+                  console.error(`Failed to remove scene ${sceneKey}:`, err);
+                }
+              }
+            }, 200);
+          } catch (err) {
+            console.error(`Error when starting scene ${sceneKey}:`, err);
+          }
+        }, 50);
+      } catch (error) {
+        console.error(`Error switching to lab ${sceneKey}:`, error);
+      }
+    }
+  }, [selectedLab]);
+
+  return (
+    <div className="simulation-container">
+      <div id="phaser-game" ref={gameContainerRef} style={{ width: '100%', height: '600px' }} />
+    </div>
+  );
+};
+
+export default SimulationContainer;

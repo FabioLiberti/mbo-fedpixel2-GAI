@@ -1,0 +1,375 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
+import FLStatusPanel from './FLStatusPanel';
+import FLStatusConnector from './FLStatusConnector';
+import { FLStatusData } from '../phaser/fl/FLController';
+import { FLState } from '../phaser/fl/FLState';
+
+interface SimulationContainerProps {
+  onGameReady?: (game: any) => void;
+  selectedLab?: string;
+}
+
+// Definiamo un tipo per gli agenti FL
+interface FLAgent {
+  id: string;
+  state: string;
+  labType: string;
+  agentType: string;
+}
+
+// Definiamo un tipo per le connessioni FL
+interface FLConnection {
+  source: string;
+  target: string;
+  active: boolean;
+}
+
+const SimulationContainer: React.FC<SimulationContainerProps> = ({ 
+  onGameReady, 
+  selectedLab 
+}) => {
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const gameReadyFiredRef = useRef<boolean>(false);
+  const [flEnabled, setFLEnabled] = useState<boolean>(true); // Default a true per mostrare il pannello
+  const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
+  
+  // Timer per simulare aggiornamenti dello stato FL
+  const flUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Flag per tenere traccia se la simulazione locale è attiva
+  const localSimulationActiveRef = useRef<boolean>(false);
+  // Flag per gestire l'avvio iniziale
+  const hasInitializedSimRef = useRef<boolean>(false);
+
+  // Inizializzazione del gioco
+  useEffect(() => {
+    if (gameContainerRef.current) {
+      try {
+        const containerId = 'phaser-game';
+        console.log('Initializing Phaser game in container:', containerId);
+        
+        // Inizializza o recupera l'istanza di gioco esistente
+        const gameInstance = initGame(containerId);
+        
+        // Evita chiamate multiple a onGameReady
+        if (onGameReady && !gameReadyFiredRef.current) {
+          gameReadyFiredRef.current = true;
+          onGameReady(gameInstance);
+        }
+        
+        // NUOVA FUNZIONALITÀ: Ascolta gli eventi FL da Phaser
+        gameInstance.events.on('updateFLStatus', (flStatusData: FLStatusData) => {
+          console.log('Received FL status update from Phaser:', flStatusData);
+          setFLStatus(flStatusData);
+          // Aggiorna anche lo stato di abilitazione
+          setFLEnabled(flStatusData.enabled);
+        });
+
+        // NUOVO: Ascolta gli eventi toggleFLPanel da Phaser
+        gameInstance.events.on('toggleFLPanel', (data: { visible: boolean }) => {
+          console.log('Received toggleFLPanel event:', data);
+          // Aggiorna il registro del gioco
+          gameInstance.registry.set('flPanelVisible', data.visible);
+        });
+
+        // Connetti i pulsanti UI ai metodi Phaser
+        setupSimulationControls(gameInstance);
+      } catch (error) {
+        console.error('Failed to initialize Phaser game:', error);
+      }
+    }
+
+    // Cleanup dei timer e degli event listener quando il componente viene smontato
+    return () => {
+      if (flUpdateTimerRef.current) {
+        clearInterval(flUpdateTimerRef.current);
+        flUpdateTimerRef.current = null;
+      }
+      localSimulationActiveRef.current = false;
+      hasInitializedSimRef.current = false;
+      
+      // Rimuovi anche gli event listener
+      const gameInstance = getGameInstance();
+      if (gameInstance) {
+        gameInstance.events.off('updateFLStatus');
+        gameInstance.events.off('toggleFLPanel');
+      }
+    };
+  }, [onGameReady]);
+
+  // Configura gli eventi per i controlli della simulazione
+  const setupSimulationControls = (gameInstance: any) => {
+    // Emettiamo un evento per comunicare che i controlli sono pronti
+    gameInstance.events.emit('controlsReady', true);
+
+    // Collegamento diretto con App.tsx tramite eventi globali
+    document.addEventListener('simulation:control', (event: any) => {
+      const action = event.detail.action;
+      if (action) {
+        console.log(`Received simulation control event: ${action}`);
+        gameInstance.events.emit(`simulation:${action}`);
+      }
+    });
+  };
+
+  // Gestione del cambio di laboratorio
+  useEffect(() => {
+    if (selectedLab) {
+      const game = getGameInstance();
+      
+      if (!game) {
+        console.error('Game instance not available');
+        return;
+      }
+      
+      let sceneKey = '';
+      switch (selectedLab) {
+        case 'BlekingeLabScene':
+        case SCENE_KEYS.BLEKINGE:
+          sceneKey = SCENE_KEYS.BLEKINGE;
+          break;
+        case 'OPBGLabScene':
+        case SCENE_KEYS.OPBG:
+          sceneKey = SCENE_KEYS.OPBG;
+          break;
+        case SCENE_KEYS.WORLD_MAP:
+        case 'WorldMapScene':
+          sceneKey = SCENE_KEYS.WORLD_MAP;
+          break;
+        case 'MercatorumLabScene':
+        case SCENE_KEYS.MERCATORUM:
+        default:
+          sceneKey = SCENE_KEYS.MERCATORUM;
+      }
+      
+      console.log(`SimulationContainer: Switching to scene ${sceneKey}`);
+      
+      try {
+        if (typeof game.startLabScene === 'function') {
+          // Usa l'API di gestione delle scene definita in game.ts
+          game.startLabScene(sceneKey);
+        } else {
+          console.error('startLabScene method not available on game instance');
+        }
+      } catch (error) {
+        console.error(`Error switching to lab ${sceneKey}:`, error);
+      }
+    }
+  }, [selectedLab]);
+
+  // Funzione per avviare la simulazione locale (fallback)
+  const startLocalSimulation = useCallback(() => {
+    // Se abbiamo già una simulazione attiva, non ne avviamo un'altra
+    if (flUpdateTimerRef.current || !flEnabled || localSimulationActiveRef.current) {
+      return;
+    }
+
+    console.log("Starting local FL simulation (fallback)");
+    localSimulationActiveRef.current = true;
+    
+    // Inizializzazione dello stato FL
+    const initialState: FLStatusData = {
+      enabled: true,
+      currentState: FLState.IDLE,
+      fromSimulation: true, // Flag per indicare che è una simulazione locale
+      activeAgents: [
+        { id: 'agent1', state: FLState.IDLE, labType: 'MERCATORUM', agentType: 'researcher' },
+        { id: 'agent2', state: FLState.IDLE, labType: 'BLEKINGE', agentType: 'phd_student' },
+        { id: 'agent3', state: FLState.IDLE, labType: 'OPBG', agentType: 'medical_doctor' }
+      ],
+      metrics: {
+        accuracy: 0,
+        loss: 0,
+        round: 0,
+        clientFraction: 0.8
+      },
+      connections: [
+        { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+        { source: 'BLEKINGE', target: 'OPBG', active: false },
+        { source: 'OPBG', target: 'MERCATORUM', active: false }
+      ]
+    };
+    
+    setFLStatus(initialState);
+    
+    // Simulazione del ciclo FL con transizioni di stato
+    const states = [FLState.TRAINING, FLState.SENDING, FLState.AGGREGATING, FLState.RECEIVING, FLState.IDLE];
+    let currentStateIndex = 0;
+    let round = 0;
+    
+    flUpdateTimerRef.current = setInterval(() => {
+      if (!flEnabled) {
+        // Se FL viene disabilitato, fermiamo il timer
+        if (flUpdateTimerRef.current) {
+          clearInterval(flUpdateTimerRef.current);
+          flUpdateTimerRef.current = null;
+          localSimulationActiveRef.current = false;
+        }
+        return;
+      }
+
+      currentStateIndex = (currentStateIndex + 1) % states.length;
+      const newState = states[currentStateIndex];
+      
+      // Quando torniamo allo stato IDLE, incrementiamo il round
+      if (newState === FLState.IDLE && currentStateIndex === 0) {
+        round++;
+      }
+      
+      // Aggiorna lo stato
+      setFLStatus((prevState: FLStatusData | null) => {
+        if (!prevState) return prevState;
+        
+        // Stato globale
+        const updatedState = {
+          ...prevState,
+          currentState: newState,
+          fromSimulation: true, // Mantiene il flag
+          metrics: {
+            ...prevState.metrics,
+            accuracy: Math.min(0.95, (prevState.metrics.accuracy || 0) + 0.05),
+            loss: Math.max(0.05, (prevState.metrics.loss || 1) - 0.05),
+            round: round
+          }
+        };
+        
+        // Attiva/disattiva connessioni in base allo stato
+        let activeConnections: Array<FLConnection> = [];
+        if (newState === FLState.SENDING) {
+          activeConnections = [
+            { source: 'MERCATORUM', target: 'BLEKINGE', active: true },
+            { source: 'BLEKINGE', target: 'OPBG', active: true },
+            { source: 'OPBG', target: 'MERCATORUM', active: false }
+          ];
+        } else if (newState === FLState.RECEIVING) {
+          activeConnections = [
+            { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+            { source: 'BLEKINGE', target: 'OPBG', active: false },
+            { source: 'OPBG', target: 'MERCATORUM', active: true }
+          ];
+        } else if (newState === FLState.AGGREGATING) {
+          activeConnections = [
+            { source: 'MERCATORUM', target: 'BLEKINGE', active: true },
+            { source: 'BLEKINGE', target: 'OPBG', active: true },
+            { source: 'OPBG', target: 'MERCATORUM', active: true }
+          ];
+        } else {
+          activeConnections = [
+            { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
+            { source: 'BLEKINGE', target: 'OPBG', active: false },
+            { source: 'OPBG', target: 'MERCATORUM', active: false }
+          ];
+        }
+        
+        // Aggiorna lo stato degli agenti
+        const updatedAgents = prevState.activeAgents.map((agent: FLAgent) => ({
+          ...agent,
+          state: newState
+        }));
+        
+        return {
+          ...updatedState,
+          activeAgents: updatedAgents,
+          connections: activeConnections
+        };
+      });
+      
+    }, 3000); // Aggiorna ogni 3 secondi
+  }, [flEnabled]); // La funzione dipende solo da flEnabled
+
+  // Inizializzazione separata tramite un effect
+  useEffect(() => {
+    // Inizializza la simulazione solo una volta
+    if (flEnabled && !hasInitializedSimRef.current && !flStatus) {
+      hasInitializedSimRef.current = true;
+      startLocalSimulation();
+    }
+  }, [flEnabled, flStatus, startLocalSimulation]);
+
+  // EFFECT SEPARATO PER FERMARE LA SIMULAZIONE (per evitare dipendenze cicliche)
+  useEffect(() => {
+    // Gestisce solo l'arresto della simulazione quando necessario
+    if (!flEnabled && flUpdateTimerRef.current) {
+      clearInterval(flUpdateTimerRef.current);
+      flUpdateTimerRef.current = null;
+      localSimulationActiveRef.current = false;
+      
+      // Imposta lo stato su "disattivato" solo se FL è disabilitato e c'è uno stato attivo
+      if (flStatus) {
+        setFLStatus({
+          ...flStatus,
+          enabled: false,
+          currentState: FLState.IDLE,
+          activeAgents: flStatus.activeAgents.map((agent: FLAgent) => ({
+            ...agent,
+            state: FLState.IDLE
+          })),
+          connections: flStatus.connections.map((conn: FLConnection) => ({
+            ...conn,
+            active: false
+          }))
+        });
+      }
+    }
+    
+    // Ferma la simulazione se riceviamo dati reali da Phaser
+    if (flStatus && !flStatus.fromSimulation && flUpdateTimerRef.current) {
+      clearInterval(flUpdateTimerRef.current);
+      flUpdateTimerRef.current = null;
+      localSimulationActiveRef.current = false;
+    }
+  }, [flEnabled, flStatus]);
+
+  // Handler per attivare/disattivare il federated learning
+  const handleToggleFL = async (enabled: boolean) => {
+    try {
+      // Comunica con il gioco Phaser per sincronizzare lo stato FL
+      const game = getGameInstance();
+      if (game) {
+        // Emetti un evento per il gioco
+        game.events.emit('toggleFL', { enabled });
+      }
+      
+      setFLEnabled(enabled);
+      console.log(`Federated Learning ${enabled ? 'enabled' : 'disabled'}`);
+      
+      // Avvia la simulazione locale se FL è abilitato e non ci sono dati dal gioco
+      if (enabled && !localSimulationActiveRef.current && (!flStatus || flStatus.fromSimulation)) {
+        setTimeout(() => {
+          startLocalSimulation();
+        }, 0);
+      }
+    } catch (error) {
+      console.error('Error toggling Federated Learning:', error);
+    }
+  };
+
+  return (
+    <div className="simulation-container" style={{ position: 'relative' }}>
+      {/* Container del gioco Phaser */}
+      <div 
+        id="phaser-game" 
+        ref={gameContainerRef} 
+        style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }} 
+      />
+      
+      {/* Pannello di controllo FL - Viene mostrato o nascosto in base agli eventi ricevuti */}
+      {flStatus && (
+        <>
+          <FLStatusPanel 
+            flStatus={flStatus} 
+            onToggleFL={handleToggleFL} 
+          />
+          
+          {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
+          <FLStatusConnector 
+            flStatus={flStatus} 
+            onToggleFL={handleToggleFL} 
+          />
+        </>
+      )}
+    </div>
+  );
+};
+
+export default SimulationContainer;

@@ -1,0 +1,61 @@
+import React, { useState } from 'react';
+import './App.css';
+import SimulationContainer from './components/SimulationContainer';
+import { Game } from './phaser/game';
+import { webSocketService } from './services/api';
+
+function App() {
+  const [game, setGame] = useState<Game | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  // Inizializza WebSocket quando il componente viene montato
+  React.useEffect(() => {
+    webSocketService.connect();
+    setConnected(true);
+
+    return () => {
+      webSocketService.disconnect();
+    };
+  }, []);
+
+  const handleGameReady = (gameInstance: Game) => {
+    setGame(gameInstance);
+    console.log('Phaser game initialized and ready');
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Agent Laboratory</h1>
+        <p>Simulatore di Federated Learning</p>
+        <div className="connection-status">
+          Backend: <span className={connected ? 'connected' : 'disconnected'}>
+            {connected ? 'Connesso' : 'Disconnesso'}
+          </span>
+        </div>
+      </header>
+      
+      <main>
+        <div className="simulation-section">
+          <SimulationContainer onGameReady={handleGameReady} />
+        </div>
+        
+        <div className="controls-section">
+          <h2>Controlli</h2>
+          <button 
+            onClick={() => {
+              // Esempio di interazione con il gioco
+              if (game) {
+                game.scene.start('MercatorumLab');
+              }
+            }}
+          >
+            Avvia Lab Mercatorum
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default App;

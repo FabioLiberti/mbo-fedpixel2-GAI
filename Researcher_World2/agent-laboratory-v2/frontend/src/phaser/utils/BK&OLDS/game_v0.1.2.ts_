@@ -1,0 +1,43 @@
+import Phaser from 'phaser';
+import { MercatorumLab } from './scenes/MercatorumLab';
+import { BlekingeLabScene } from './scenes/BlekingeLabScene';
+import { OPBGLabScene } from './scenes/OPBGLabScene';
+
+export const gameConfig: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  pixelArt: true,
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 0 }, // Disabilitiamo la gravità per un movimento top-down
+      debug: false
+    }
+  },
+  scene: [MercatorumLab, BlekingeLabScene, OPBGLabScene],
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  backgroundColor: '#000000'
+};
+
+export class Game extends Phaser.Game {
+  constructor(container: HTMLElement) {
+    super({
+      ...gameConfig,
+      parent: container
+    });
+  }
+}
+
+// Funzione di utilità per inizializzare il gioco in un container React
+export function initGame(containerId: string): Game {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    throw new Error(`Container with id ${containerId} not found`);
+  }
+  
+  return new Game(container);
+}

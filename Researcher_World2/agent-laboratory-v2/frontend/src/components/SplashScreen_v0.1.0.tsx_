@@ -1,0 +1,159 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import './SplashScreen.css';
+import Phaser from 'phaser';
+import { SplashScene } from '../phaser/scenes/SplashScene';
+
+interface SplashScreenProps {
+  onComplete: () => void;
+  timeout?: number;
+}
+
+const SplashScreen: React.FC<SplashScreenProps> = ({ 
+  onComplete, 
+  timeout = 5000 // Timeout di sicurezza
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const gameRef = useRef<Phaser.Game | null>(null);
+  const eventEmitterRef = useRef<Phaser.Events.EventEmitter>(new Phaser.Events.EventEmitter());
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [loadingText, setLoadingText] = useState<string>('');
+  
+  // Creiamo la funzione handleSplashComplete con useCallback per evitare warning di dipendenze
+  const handleSplashComplete = useCallback(() => {
+    console.log('[SplashScreen] handleSplashComplete chiamato');
+    
+    // Previeni chiamate multiple
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
+    // Chiama onComplete con un piccolo ritardo
+    setTimeout(() => {
+      console.log('[SplashScreen] Chiamata callback onComplete');
+      onComplete();
+    }, 100);
+  }, [onComplete]);
+  
+  // Gestione messaggi di stato
+  useEffect(() => {
+    const messages = [
+      'Inizializzazione laboratori...',
+      'Creazione agenti di ricerca...',
+      'Configurazione algoritmi FL...',
+      'Sincronizzazione dati...'
+    ];
+    
+    // Cambia messaggio ogni secondo
+    let index = 0;
+    const interval = setInterval(() => {
+      setLoadingText(messages[index % messages.length]);
+      index++;
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Inizializzazione Phaser
+  useEffect(() => {
+    console.log('[SplashScreen] Inizializzazione componente');
+    
+    // Salviamo un riferimento all'eventEmitter corrente
+    const currentEventEmitter = eventEmitterRef.current;
+    
+    // Configura il timeout di sicurezza
+    timeoutRef.current = setTimeout(() => {
+      console.log('[SplashScreen] Timeout di sicurezza triggerato');
+      handleSplashComplete();
+    }, timeout);
+    
+    // Ascolta per il completamento dello splash
+    currentEventEmitter.on('splashComplete', handleSplashComplete);
+    
+    // Crea il gioco Phaser con solo la scena di splash
+    try {
+      if (containerRef.current && !gameRef.current) {
+        console.log('[SplashScreen] Creazione istanza Phaser');
+        
+        const config: Phaser.Types.Core.GameConfig = {
+          type: Phaser.AUTO,
+          parent: containerRef.current,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          backgroundColor: '#222222',
+          transparent: false,
+          audio: { noAudio: true }, // Disabilita l'audio per evitare errori
+          scene: [],
+        };
+        
+        gameRef.current = new Phaser.Game(config);
+        
+        // Aggiungi la scena di splash
+        gameRef.current.scene.add('SplashScene', SplashScene, true, { 
+          eventEmitter: currentEventEmitter 
+        });
+        
+        console.log('[SplashScreen] Istanza Phaser creata e scena aggiunta');
+      }
+    } catch (error) {
+      console.error('[SplashScreen] Errore nella creazione istanza Phaser:', error);
+      // In caso di errore, completa comunque il processo di splash
+      handleSplashComplete();
+    }
+    
+    // Gestione del resize
+    const handleResize = () => {
+      if (gameRef.current) {
+        gameRef.current.scale.resize(window.innerWidth, window.innerHeight);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup
+    return () => {
+      console.log('[SplashScreen] Pulizia componente');
+      currentEventEmitter.off('splashComplete', handleSplashComplete);
+      window.removeEventListener('resize', handleResize);
+      
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      if (gameRef.current) {
+        try {
+          gameRef.current.destroy(true);
+          gameRef.current = null;
+          console.log('[SplashScreen] Istanza Phaser distrutta');
+        } catch (error) {
+          console.error('[SplashScreen] Errore nella distruzione istanza Phaser:', error);
+        }
+      }
+    };
+  }, [timeout, handleSplashComplete]); // Aggiungiamo handleSplashComplete alle dipendenze
+  
+  // Skip manuale dell'animazione tramite clic
+  const handleSkipClick = () => {
+    console.log('[SplashScreen] Skip richiesto dall\'utente');
+    eventEmitterRef.current.emit('skipSplash');
+  };
+  
+  return (
+    <div className="splash-screen-container" onClick={handleSkipClick}>
+      <div ref={containerRef} className="phaser-container" />
+      
+      {/* Layer di fallback in caso Phaser non funzioni */}
+      <div className="fallback-layer">
+        <div className="logo-container">
+          <div className="lab-box mercatorum"></div>
+          <div className="lab-box blekinge"></div>
+          <div className="lab-box opbg"></div>
+        </div>
+        <div className="loading-text">{loadingText}</div>
+        <div className="skip-text">Clicca per continuare</div>
+      </div>
+    </div>
+  );
+};
+
+export default SplashScreen;

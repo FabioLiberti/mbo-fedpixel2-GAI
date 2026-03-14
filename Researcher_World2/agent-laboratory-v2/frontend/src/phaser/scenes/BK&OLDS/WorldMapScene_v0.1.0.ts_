@@ -1,0 +1,260 @@
+import Phaser from 'phaser';
+import { BaseScene } from './BaseScene';
+import { LabMiniature } from '../entities/LabMiniature';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { SCENE_KEYS } from '../game';
+
+export class WorldMapScene extends BaseScene {
+  private labMiniatures: Map<string, LabMiniature> = new Map();
+  // Inizializzazione delle proprietà per risolvere gli errori TS2564
+  private globalAgentController!: GlobalAgentController;
+  private navigationButtons!: Phaser.GameObjects.Container;
+  private infoPanel!: Phaser.GameObjects.Container;
+    
+  constructor() {
+    super('WorldMapScene');
+  }
+
+  init(): void {
+    this.cameras.main.setBackgroundColor('#1a1a2e');
+  }
+
+  preload(): void {
+    // Precaricare assets specifici della mappa mondiale
+    this.load.image('world-map-background', 'assets/ui/world-map-background.png');
+    this.load.image('lab-connection', 'assets/ui/lab-connection-line.png');
+    this.load.image('data-exchange-icon', 'assets/ui/data-exchange-icon.png');
+    this.load.image('agent-dot', 'assets/ui/agent-dot.png');
+    
+    // Pulsanti UI
+    this.load.image('info-button', 'assets/ui/info-button.png');
+    this.load.image('settings-button', 'assets/ui/settings-button.png');
+    this.load.image('close-button', 'assets/ui/close-button.png');
+    
+    // Precaricare miniature dei laboratori
+    this.load.image('blekinge-miniature', 'assets/labs/blekinge/miniature.png');
+    this.load.image('mercatorum-miniature', 'assets/labs/mercatorum/miniature.png');
+    this.load.image('opbg-miniature', 'assets/labs/opbg/miniature.png');
+  }
+
+  create(): void {
+    // Creazione dello sfondo della mappa mondiale
+    this.add.image(this.cameras.main.centerX, this.cameras.main.centerY, 'world-map-background')
+      .setOrigin(0.5)
+      .setDisplaySize(this.cameras.main.width, this.cameras.main.height);
+    
+    // Posizionamento delle miniature dei laboratori
+    this.createLabMiniatures();
+    
+    // Creazione delle connessioni tra laboratori
+    this.createLabConnections();
+    
+    // Inizializzazione del controller degli agenti globali
+    this.globalAgentController = new GlobalAgentController(this);
+    this.globalAgentController.initialize();
+    
+    // Creazione dei pulsanti di navigazione
+    this.createNavigationUI();
+    
+    // Creazione del pannello informativo
+    this.createInfoPanel();
+    
+    // Registrazione degli eventi
+    this.registerEvents();
+  }
+
+  update(time: number, delta: number): void {
+    // Correzione dell'errore TS2802 usando Array.from
+    Array.from(this.labMiniatures.values()).forEach(miniature => {
+      miniature.update(time, delta);
+    });
+    
+    // Aggiornamento degli agenti sulla mappa
+    if (this.globalAgentController) {
+      this.globalAgentController.update(time, delta);
+    }
+  }
+
+  private createLabMiniatures(): void {
+    // Posizionamento delle miniature dei laboratori in modo triangolare
+    const centerX = this.cameras.main.centerX;
+    const centerY = this.cameras.main.centerY;
+    const radius = Math.min(this.cameras.main.width, this.cameras.main.height) * 0.3;
+    
+    // Mercatorum Lab (in alto)
+    const mercatorumMiniature = new LabMiniature(
+      this,
+      centerX,
+      centerY - radius,
+      'mercatorum-miniature',
+      'Università Mercatorum',
+      SCENE_KEYS.MERCATORUM
+    );
+    this.labMiniatures.set('mercatorum', mercatorumMiniature);
+    
+    // Blekinge Lab (in basso a sinistra)
+    const blekingeMiniature = new LabMiniature(
+      this,
+      centerX - radius * 0.866, // cos(120°) * radius
+      centerY + radius * 0.5,   // sin(120°) * radius
+      'blekinge-miniature',
+      'Blekinge University',
+      SCENE_KEYS.BLEKINGE
+    );
+    this.labMiniatures.set('blekinge', blekingeMiniature);
+    
+    // OPBG Lab (in basso a destra)
+    const opbgMiniature = new LabMiniature(
+      this,
+      centerX + radius * 0.866, // cos(240°) * radius
+      centerY + radius * 0.5,   // sin(240°) * radius
+      'opbg-miniature',
+      'OPBG IRCCS',
+      SCENE_KEYS.OPBG
+    );
+    this.labMiniatures.set('opbg', opbgMiniature);
+  }
+
+  private createLabConnections(): void {
+    // Creazione di linee che connettono i laboratori per rappresentare la rete federata
+    const graphics = this.add.graphics();
+    graphics.lineStyle(4, 0x3a86ff, 0.7);
+    
+    // Correzione degli errori TS2532 verificando che gli oggetti non siano undefined
+    const mercatorumMiniature = this.labMiniatures.get('mercatorum');
+    const blekingeMiniature = this.labMiniatures.get('blekinge');
+    const opbgMiniature = this.labMiniatures.get('opbg');
+    
+    if (mercatorumMiniature && blekingeMiniature && opbgMiniature) {
+      const mercatorumPos = mercatorumMiniature.getPosition();
+      const blekingePos = blekingeMiniature.getPosition();
+      const opbgPos = opbgMiniature.getPosition();
+      
+      // Disegno delle connessioni tra i laboratori
+      graphics.beginPath();
+      graphics.moveTo(mercatorumPos.x, mercatorumPos.y);
+      graphics.lineTo(blekingePos.x, blekingePos.y);
+      graphics.lineTo(opbgPos.x, opbgPos.y);
+      graphics.lineTo(mercatorumPos.x, mercatorumPos.y);
+      graphics.closePath();
+      graphics.strokePath();
+      
+      // Aggiunta di icone di "data exchange" lungo le connessioni
+      this.createDataExchangeVisuals(mercatorumPos, blekingePos);
+      this.createDataExchangeVisuals(blekingePos, opbgPos);
+      this.createDataExchangeVisuals(opbgPos, mercatorumPos);
+    }
+  }
+
+  private createDataExchangeVisuals(from: Phaser.Math.Vector2, to: Phaser.Math.Vector2): void {
+    // Creazione di particelle o icone che si muovono lungo le connessioni
+    // per rappresentare il flusso di dati del federated learning
+    const midX = (from.x + to.x) / 2;
+    const midY = (from.y + to.y) / 2;
+    
+    const exchangeIcon = this.add.image(midX, midY, 'data-exchange-icon')
+      .setScale(0.5)
+      .setAlpha(0.8);
+    
+    // Animazione di pulsazione per rappresentare lo scambio di dati
+    this.tweens.add({
+      targets: exchangeIcon,
+      scale: 0.7,
+      alpha: 1,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1
+    });
+  }
+
+  private createNavigationUI(): void {
+    // Creazione dei pulsanti di navigazione (zoom in/out, settings, etc.)
+    this.navigationButtons = this.add.container(
+      this.cameras.main.width - 50,
+      this.cameras.main.height - 150
+    );
+    
+    // Pulsante Info
+    const infoButton = this.add.image(0, 0, 'info-button')
+      .setInteractive()
+      .on('pointerdown', () => this.toggleInfoPanel());
+    
+    // Pulsante Settings
+    const settingsButton = this.add.image(0, 50, 'settings-button')
+      .setInteractive()
+      .on('pointerdown', () => console.log('Settings clicked'));
+    
+    this.navigationButtons.add([infoButton, settingsButton]);
+  }
+
+  private createInfoPanel(): void {
+    // Creazione del pannello informativo (nascosto all'inizio)
+    this.infoPanel = this.add.container(
+      this.cameras.main.centerX,
+      this.cameras.main.centerY
+    ).setVisible(false);
+    
+    // Sfondo del pannello
+    const panelBg = this.add.rectangle(0, 0, 500, 400, 0x000000, 0.8)
+      .setOrigin(0.5);
+    
+    // Titolo del pannello
+    const title = this.add.text(0, -150, 'Federated Learning Network', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    // Descrizione
+    const description = this.add.text(0, -80, 
+      'This map shows the three research laboratories participating in the\n' +
+      'federated learning network. Each lab specializes in different aspects\n' +
+      'of privacy-preserving collaborative machine learning.', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffffff',
+      align: 'center'
+    }).setOrigin(0.5);
+    
+    // Pulsante di chiusura
+    const closeButton = this.add.image(220, -170, 'close-button')
+      .setScale(0.5)
+      .setInteractive()
+      .on('pointerdown', () => this.toggleInfoPanel());
+    
+    this.infoPanel.add([panelBg, title, description, closeButton]);
+  }
+
+  private toggleInfoPanel(): void {
+    this.infoPanel.setVisible(!this.infoPanel.visible);
+  }
+
+  private registerEvents(): void {
+    // Registrazione degli eventi per gestire la navigazione tra le scene
+    this.events.on('shutdown', () => {
+      // Pulizia quando la scena viene chiusa
+      this.events.off('shutdown');
+      
+      // Rimuovi il controller degli agenti
+      if (this.globalAgentController) {
+        this.globalAgentController.destroy();
+      }
+    });
+    
+    // Correzione dell'errore TS2802 usando Array.from
+    Array.from(this.labMiniatures.values()).forEach(miniature => {
+      miniature.on('labSelected', (targetScene: string) => {
+        if (this.scene.manager && typeof this.scene.manager.start === 'function') {
+          // Usa il game instance per navigare correttamente
+          const game = this.game as any;
+          if (game.startLabScene && typeof game.startLabScene === 'function') {
+            game.startLabScene(targetScene);
+          } else {
+            console.log(`Starting scene: ${targetScene} (fallback method)`);
+            this.scene.start(targetScene);
+          }
+        }
+      });
+    });
+  }
+}

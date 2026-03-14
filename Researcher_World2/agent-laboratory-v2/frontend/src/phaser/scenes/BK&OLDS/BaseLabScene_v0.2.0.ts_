@@ -1,0 +1,302 @@
+import Phaser from 'phaser';
+import { Agent } from '../sprites/Agent';
+
+export type LabTheme = {
+  name: string;
+  backgroundColor: number;
+  tilesetKey: string;
+  colorPalette: {
+    primary: number;
+    secondary: number;
+    accent: number;
+    background: number;
+  };
+};
+
+export abstract class BaseLabScene extends Phaser.Scene {
+  // Mappa e ambiente
+  protected map!: Phaser.Tilemaps.Tilemap;
+  protected tileset!: Phaser.Tilemaps.Tileset;
+  protected floorLayer!: Phaser.Tilemaps.TilemapLayer;
+  protected wallsLayer!: Phaser.Tilemaps.TilemapLayer;
+  protected furnitureLayer!: Phaser.Tilemaps.TilemapLayer;
+  
+  // Agenti e interazioni
+  protected agents: Agent[] = [];
+  protected interactionZones: Phaser.GameObjects.Zone[] = [];
+  
+  // Tema del laboratorio
+  protected abstract theme: LabTheme;
+  
+  // Grid per il pathfinding
+  protected grid: number[][] = [];
+  
+  constructor(key: string) {
+    super(key);
+  }
+  
+  abstract preload(): void;
+  
+  /**
+   * Metodo create condiviso tra tutte le scene di laboratorio
+   */
+  create(): void {
+    this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
+    
+    // Inizializza la mappa
+    this.createMap();
+    
+    // Inizializza la griglia per il pathfinding
+    this.initializeGrid();
+    
+    // Crea le zone di interazione
+    this.createInteractionZones();
+    
+    // Crea gli agenti
+    this.createAgents();
+    
+    // Setup della camera
+    this.setupCamera();
+    
+    // Eventi specifici per il laboratorio
+    this.setupLabSpecificEvents();
+  }
+  
+  /**
+   * Update loop per la scena
+   * @param time Tempo corrente
+   * @param delta Delta time tra i frame
+   */
+  update(time: number, delta: number): void {
+    // Aggiorna tutti gli agenti
+    this.updateAgents(time, delta);
+    
+    // Controlla le interazioni
+    this.checkInteractions();
+    
+    // Aggiornamenti specifici del laboratorio
+    this.updateLabSpecific(time, delta);
+  }
+  
+  /**
+   * Creazione della mappa base del laboratorio
+   */
+  protected createMap(): void {
+    // Questo metodo sarà implementato nelle sottoclassi per creare layout specifici
+    // Base implementation is empty
+  }
+  
+  /**
+   * Inizializza la griglia per il pathfinding
+   */
+  protected initializeGrid(): void {
+    if (!this.map) return;
+    
+    const width = this.map.width;
+    const height = this.map.height;
+    
+    // Inizializza la griglia con tutti i valori a 0 (percorribili)
+    this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+    
+    // Marca le celle non percorribili (muri, mobili, ecc.) con 1
+    if (this.wallsLayer) {
+      this.wallsLayer.forEachTile(tile => {
+        if (tile.index !== -1) { // -1 è l'indice per le tile vuote
+          this.grid[tile.y][tile.x] = 1;
+        }
+      });
+    }
+    
+    if (this.furnitureLayer) {
+      this.furnitureLayer.forEachTile(tile => {
+        if (tile.index !== -1 && tile.properties.blocking) {
+          this.grid[tile.y][tile.x] = 1;
+        }
+      });
+    }
+  }
+  
+  /**
+   * Crea le zone di interazione nel laboratorio
+   */
+  protected createInteractionZones(): void {
+    // Le zone di interazione sono aree specifiche dove gli agenti possono interagire
+    // Saranno implementate nelle sottoclassi
+  }
+  
+  /**
+   * Crea gli agenti per il laboratorio
+   */
+  protected createAgents(): void {
+    // La creazione degli agenti sarà implementata nelle sottoclassi
+  }
+  
+  /**
+   * Configura la camera
+   */
+  protected setupCamera(): void {
+    if (!this.map) return;
+    
+    // Imposta i limiti della camera
+    this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+    
+    // Zoom iniziale
+    this.cameras.main.setZoom(2);
+    
+    // Posiziona la camera al centro della mappa
+    this.cameras.main.centerOn(this.map.widthInPixels / 2, this.map.heightInPixels / 2);
+    
+    // Aggiungi controlli di zoom (mousewheel)
+    this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
+      const currentZoom = this.cameras.main.zoom;
+      let newZoom = currentZoom;
+      
+      if (deltaY > 0) {
+        newZoom = Math.max(1, currentZoom - 0.1);
+      } else {
+        newZoom = Math.min(4, currentZoom + 0.1);
+      }
+      
+      this.cameras.main.setZoom(newZoom);
+    });
+    
+    // Aggiungi controlli di trascinamento per la camera
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.isDown) {
+        this.cameras.main.scrollX -= pointer.velocity.x / 10;
+        this.cameras.main.scrollY -= pointer.velocity.y / 10;
+      }
+    });
+  }
+  
+  /**
+   * Configura eventi specifici per ciascun laboratorio
+   */
+  protected setupLabSpecificEvents(): void {
+    // Questo metodo sarà implementato nelle sottoclassi
+  }
+  
+  /**
+   * Aggiorna tutti gli agenti
+   */
+  protected updateAgents(time: number, delta: number): void {
+    this.agents.forEach(agent => {
+      agent.update(time, delta);
+    });
+  }
+  
+  /**
+   * Controlla le interazioni tra agenti e con l'ambiente
+   */
+  protected checkInteractions(): void {
+    // Controllo interazioni agente-agente
+    for (let i = 0; i < this.agents.length; i++) {
+      for (let j = i + 1; j < this.agents.length; j++) {
+        const agent1 = this.agents[i];
+        const agent2 = this.agents[j];
+        
+        const distance = Phaser.Math.Distance.Between(
+          agent1.x, agent1.y,
+          agent2.x, agent2.y
+        );
+        
+        // Se gli agenti sono abbastanza vicini, possono interagire
+        if (distance < 32) { // 32 pixels è un esempio, potrebbe essere aggiustato
+          this.handleAgentInteraction(agent1, agent2);
+        }
+      }
+    }
+    
+    // Controllo interazioni agente-zona
+    this.agents.forEach(agent => {
+      this.interactionZones.forEach(zone => {
+        const bounds = zone.getBounds();
+        if (bounds.contains(agent.x, agent.y)) {
+          this.handleZoneInteraction(agent, zone);
+        }
+      });
+    });
+  }
+  
+  /**
+   * Gestisce l'interazione tra due agenti
+   */
+  protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
+    // Logica di base per l'interazione tra agenti
+    // Può essere estesa nelle sottoclassi
+  }
+  
+  /**
+   * Gestisce l'interazione tra un agente e una zona
+   */
+  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
+    // Logica di base per l'interazione con una zona
+    // Può essere estesa nelle sottoclassi
+  }
+  
+  /**
+   * Aggiornamenti specifici per il laboratorio
+   */
+  protected updateLabSpecific(time: number, delta: number): void {
+    // Logica specifica per ogni laboratorio
+    // Sarà implementata nelle sottoclassi
+  }
+  
+  /**
+   * Trova un percorso tra due punti usando l'algoritmo A*
+   * Implementazione semplificata
+   */
+  protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
+    // Implementazione base dell'algoritmo A*
+    // In un progetto reale, potrebbe essere utile utilizzare una libreria 
+    // specializzata per pathfinding come EasyStar.js
+    
+    // Questa è una implementazione molto semplificata e non ottimale
+    // Restituisce un percorso diretto (senza ostacoli) come esempio
+    return [
+      { x: startX, y: startY },
+      { x: targetX, y: targetY }
+    ];
+  }
+  
+  /**
+   * Converte coordinate pixel in coordinate griglia
+   */
+  protected pixelToGrid(x: number, y: number): { x: number, y: number } {
+    if (!this.map) return { x: 0, y: 0 };
+    
+    const tileWidth = this.map.tileWidth;
+    const tileHeight = this.map.tileHeight;
+    
+    return {
+      x: Math.floor(x / tileWidth),
+      y: Math.floor(y / tileHeight)
+    };
+  }
+  
+  /**
+   * Converte coordinate griglia in coordinate pixel
+   */
+  protected gridToPixel(gridX: number, gridY: number): { x: number, y: number } {
+    if (!this.map) return { x: 0, y: 0 };
+    
+    const tileWidth = this.map.tileWidth;
+    const tileHeight = this.map.tileHeight;
+    
+    return {
+      x: gridX * tileWidth + tileWidth / 2,
+      y: gridY * tileHeight + tileHeight / 2
+    };
+  }
+  
+  /**
+   * Verifica se una cella della griglia è percorribile
+   */
+  protected isWalkable(gridX: number, gridY: number): boolean {
+    if (gridX < 0 || gridY < 0 || gridX >= this.grid[0].length || gridY >= this.grid.length) {
+      return false;
+    }
+    
+    return this.grid[gridY][gridX] === 0;
+  }
+}

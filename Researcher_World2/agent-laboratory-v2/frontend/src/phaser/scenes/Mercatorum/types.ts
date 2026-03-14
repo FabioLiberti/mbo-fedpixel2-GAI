@@ -1,0 +1,97 @@
+// src/phaser/scenes/Mercatorum/types.ts
+
+import { Agent } from '../../sprites/Agent';
+import { GlobalAgentController } from '../../controllers/GlobalAgentController';
+import { AgentsLegend } from '../../ui/AgentsLegend';
+import { LabTheme } from '../BaseLabScene';
+import { BaseScene } from '../BaseScene';
+import { LLMControlPanel } from '../../ui/LLMControlPanel'; 
+import { DialogEventTracker } from '../../controllers/DialogEventTracker'; // NUOVO
+
+export interface MercatorumAgentConfig {
+  type: string;
+  name: string;
+  position: { x: number; y: number };
+  specialization?: string;
+}
+
+export interface MercatorumLabConfig {
+  agents: MercatorumAgentConfig[];
+}
+
+// Interfaccia per contenere i riferimenti agli elementi della scena
+export interface MercatorumSceneRefs {
+  agents: Agent[];
+  interactionZones: Phaser.GameObjects.Zone[];
+  grid: number[][];
+  agentController: GlobalAgentController | null;
+  agentsLegend: AgentsLegend | null;
+  debugGraphics: Phaser.GameObjects.Graphics | null;
+  debugText: Phaser.GameObjects.Text | null;
+  controlPanel: Phaser.GameObjects.Container | null;
+  controlPanelToggle: Phaser.GameObjects.Container | null;
+  textureTestContainers: Phaser.GameObjects.Container[];
+  rawSprites: Phaser.GameObjects.Sprite[];
+  assetsLoaded: boolean;
+  isPanelOpen: boolean;
+  llmPanel: LLMControlPanel | null;
+}
+
+// Interfaccia per la scena Mercatorum che estende BaseScene
+export interface IMercatorumLabScene extends BaseScene {
+  agents: Agent[];
+  interactionZones: Phaser.GameObjects.Zone[];
+  grid: number[][];
+  agentController: GlobalAgentController | null;
+  agentsLegend: AgentsLegend | null;
+  debugGraphics: Phaser.GameObjects.Graphics | null;
+  debugText: Phaser.GameObjects.Text | null;
+  controlPanel: Phaser.GameObjects.Container | null;
+  controlPanelToggle: Phaser.GameObjects.Container | null;
+  textureTestContainers: Phaser.GameObjects.Container[];
+  rawSprites: Phaser.GameObjects.Sprite[];
+  assetsLoaded: boolean;
+  isPanelOpen: boolean;
+  theme: LabTheme;
+  llmPanel: LLMControlPanel | null;
+  dialogEventTracker?: DialogEventTracker | null; // NUOVO: aggiunto il tracker di dialoghi
+  updateDebugInfo(text: string): void;
+  trackDialog?(type: 'llm' | 'simulated' | 'standard', agentId?: string): void; // NUOVO: metodo opzionale per tracciare dialoghi
+}
+
+// Esporta il tema per il laboratorio Mercatorum
+export const MERCATORUM_THEME: LabTheme = {
+  name: "Università Mercatorum Lab",
+  backgroundColor: 0xd2691e, // Tonalità terracotta
+  tilesetKey: 'tiles_mercatorum',
+  colorPalette: {
+    primary: 0xd2691e,   // Tonalità terracotta
+    secondary: 0x1a365d, // Blu navy
+    accent: 0xf5f5dc,    // Crema
+    background: 0xd2691e  // Tonalità terracotta
+  }
+};
+
+// Configurazione degli agenti per Mercatorum
+export const MERCATORUM_AGENT_CONFIG: MercatorumLabConfig = {
+  agents: [
+    {
+      type: 'professor',
+      name: 'Prof. Rossi',
+      position: { x: 150, y: 200 },
+      specialization: 'business_intelligence'
+    },
+    {
+      type: 'researcher',
+      name: 'Dr. Bianchi',
+      position: { x: 300, y: 250 },
+      specialization: 'data_privacy'
+    },
+    {
+      type: 'student',
+      name: 'Dott. Verdi',
+      position: { x: 200, y: 150 },
+      specialization: 'financial_analytics'
+    }
+  ]
+};

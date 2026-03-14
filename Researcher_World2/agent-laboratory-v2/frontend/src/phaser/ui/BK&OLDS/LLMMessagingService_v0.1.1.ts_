@@ -1,0 +1,272 @@
+// frontend/src/phaser/ui/LLMMessagingService.ts
+
+import { LLMLogEntry } from './LLMPanelState';
+
+/**
+ * Interfaccia per messaggi di errore
+ */
+interface ErrorWithMessage {
+  message: string;
+}
+
+/**
+ * Interfaccia per la risposta dell'API di stato LLM
+ */
+interface LLMStatusResponse {
+  available: boolean;
+  model?: string;
+  message?: string;
+}
+
+/**
+ * Verifica se l'errore ha una proprietà message
+ */
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  );
+}
+
+/**
+ * Converte un errore in un messaggio di errore leggibile
+ */
+function toErrorMessage(error: unknown): string {
+  if (isErrorWithMessage(error)) {
+    return error.message;
+  }
+  return String(error);
+}
+
+/**
+ * Servizio per gestire la comunicazione con il backend per i messaggi LLM
+ */
+export class LLMMessagingService {
+  private isBackendConnected: boolean = false;
+  private lastBackendCheck: number = 0;
+  private checkInterval: number = 5000;
+  private defaultModelInfo: any;
+  private apiBaseUrl: string;
+  
+  constructor(defaultModelInfo: any) {
+    this.defaultModelInfo = defaultModelInfo;
+    
+    // Determina l'URL base dell'API
+    this.apiBaseUrl = this.getApiBaseUrl();
+    
+    // Controlla subito lo stato del backend
+    this.checkBackendStatus();
+  }
+  
+  /**
+   * Ottiene l'URL base dell'API
+   */
+  private getApiBaseUrl(): string {
+    // Cerca di ottenere l'URL base da una variabile di ambiente o config
+    const apiUrl = (window as any).API_BASE_URL;
+    
+    if (apiUrl) {
+      return apiUrl;
+    }
+    
+    // Altrimenti, costruisci l'URL in base all'host corrente
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    
+    // Usa la porta 8091 per lo sviluppo locale
+    return `${protocol}//${hostname}:8091`;
+  }
+  
+  /**
+   * Controlla lo stato del backend
+   */
+  public async checkBackendStatus(): Promise<boolean> {
+    try {
+      const now = Date.now();
+      // Limita la frequenza dei controlli
+      if (now - this.lastBackendCheck < this.checkInterval) {
+        return this.isBackendConnected;
+      }
+      
+      this.lastBackendCheck = now;
+      
+      // Effettua una chiamata all'API per controllare lo stato del servizio LLM
+      const response = await fetch(`${this.apiBaseUrl}/ai/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json() as LLMStatusResponse;
+        this.isBackendConnected = data.available;
+        
+        // Aggiorna le informazioni sul modello se disponibili
+        if (data.model) {
+          this.defaultModelInfo.model = data.model;
+        }
+        
+        // Emetti un evento per notificare il cambio di stato
+        const event = new CustomEvent('backend-status-changed', {
+          detail: { connected: this.isBackendConnected }
+        });
+        window.dispatchEvent(event);
+        
+        return this.isBackendConnected;
+      } else {
+        this.isBackendConnected = false;
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking backend status:', error);
+      this.isBackendConnected = false;
+      return false;
+    }
+  }
+  
+  /**
+   * Genera un messaggio LLM o simulato
+   */
+  public async generateMessage(agentData: any, messageType: string): Promise<LLMLogEntry> {
+    try {
+      // Verifica lo stato del backend
+      await this.checkBackendStatus();
+      
+      // Ottieni i dati dell'agente
+      const { id: agentId, name: agentName } = agentData;
+      const agentRole = agentData.role || 'researcher';
+      const agentSpecialization = agentData.specialization || 'Federated Learning';
+      
+      // Flag per indicare se il messaggio è simulato (quando il backend è disconnesso)
+      const isSimulated = !this.isBackendConnected;
+      
+      let messageText = '';
+      
+      // Simula un messaggio o genera un messaggio LLM in base allo stato del backend
+      if (isSimulated) {
+        // Genera un messaggio simulato basato sul tipo
+        messageText = this.generateSimulatedMessage(messageType, agentData);
+      } else {
+        // Chiama l'API per generare un messaggio reale
+        try {
+          // Costruisci i dati per la richiesta API
+          const requestData = {
+            agentId: agentId,
+            agentName: agentName || `Agent ${agentId}`,
+            agentRole: agentRole,
+            agentSpecialization: agentSpecialization,
+            targetAgentId: null,
+            targetAgentName: null,
+            targetAgentRole: null,
+            interactionType: messageType === 'dialog' ? 'working' : 'thinking',
+            labType: 'active'
+          };
+          
+          // Chiama l'API di generazione dialogo
+          const response = await fetch(`${this.apiBaseUrl}/ai/generate-dialog`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            messageText = data.dialog;
+          } else {
+            // Fallback ai messaggi simulati in caso di errore API
+            console.warn('Error from LLM API, using simulated message');
+            messageText = this.generateSimulatedMessage(messageType, agentData);
+          }
+        } catch (apiError) {
+          console.error('API call failed:', apiError);
+          messageText = this.generateSimulatedMessage(messageType, agentData);
+        }
+      }
+      
+      // Crea e restituisci un oggetto messaggio
+      return {
+        timestamp: Date.now(),
+        agentId,
+        agentName: agentName || `Agent ${agentId}`,
+        text: messageText,
+        type: messageType,
+        isSimulated,
+        modelInfo: { ...this.defaultModelInfo }
+      };
+    } catch (error) {
+      console.error('Error generating message:', error);
+      
+      // In caso di errore, restituisci un messaggio di errore simulato
+      return {
+        timestamp: Date.now(),
+        agentId: agentData.id,
+        agentName: agentData.name || `Agent ${agentData.id}`,
+        text: `Error generating message: ${toErrorMessage(error)}`,
+        type: messageType,
+        isSimulated: true,
+        modelInfo: { ...this.defaultModelInfo }
+      };
+    }
+  }
+  
+  /**
+   * Genera un messaggio simulato
+   */
+  private generateSimulatedMessage(type: string, agentData: any): string {
+    //const { role = 'researcher' } = agentData;
+    
+    // Messaggi simulati in base al tipo
+    const dialogMessages = [
+      "Let's analyze this federated learning approach in more detail.",
+      "I've been working on optimizing the client selection algorithm.",
+      "Have you considered the impact of non-IID data distribution on model convergence?",
+      "We should implement differential privacy techniques to enhance the security.",
+      "The communication efficiency could be improved with model compression."
+    ];
+    
+    const thinkingMessages = [
+      "The current aggregation method might be introducing bias due to the heterogeneous data sources...",
+      "If we implement quantization on the client updates, we could reduce bandwidth by 70% while maintaining accuracy...",
+      "The privacy-utility tradeoff is crucial here - increasing epsilon improves model performance but reduces privacy guarantees...",
+      "What if we implemented a dynamic client selection strategy based on data quality and computational resources?",
+      "The convergence rate seems to slow down after round 15, possibly due to client drift..."
+    ];
+    
+    const decisionMessages = [
+      "Decision: We should implement FedProx instead of FedAvg to handle the non-IID data distribution across clients.",
+      "Decision: Implementing secure aggregation protocol to enhance privacy guarantees for sensitive medical data.",
+      "Decision: We'll adopt adaptive learning rates for clients based on their local data distributions.",
+      "Decision: Implement knowledge distillation on the server to reduce the model size before distribution.",
+      "Decision: Applying differential privacy with a gradually decreasing epsilon value throughout training."
+    ];
+    
+    // Seleziona un array di messaggi in base al tipo
+    let messagesArray: string[];
+    
+    if (type === 'dialog') {
+      messagesArray = dialogMessages;
+    } else if (type === 'thinking') {
+      messagesArray = thinkingMessages;
+    } else if (type === 'decision') {
+      messagesArray = decisionMessages;
+    } else {
+      messagesArray = dialogMessages; // Default
+    }
+    
+    // Seleziona un messaggio casuale dall'array
+    const randomIndex = Math.floor(Math.random() * messagesArray.length);
+    return messagesArray[randomIndex];
+  }
+  
+  /**
+   * Restituisce lo stato attuale della connessione backend
+   */
+  public isConnected(): boolean {
+    return this.isBackendConnected;
+  }
+}

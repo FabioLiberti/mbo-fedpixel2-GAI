@@ -1,0 +1,244 @@
+import * as Phaser from 'phaser';
+
+// Interfaccia LabConfig integrata
+export interface LabConfig {
+    name: string;
+    id: string;
+    backgroundColor: number;
+    borderColor: number;
+    width: number;
+    height: number;
+    key?: string; // Chiave della scena
+}
+
+export class LabMiniature extends Phaser.GameObjects.Container {
+    private labImage: Phaser.GameObjects.Image;
+    private border: Phaser.GameObjects.Rectangle;
+    private label: Phaser.GameObjects.Text;
+    private agentSprites: Phaser.GameObjects.Sprite[] = [];
+    private labConfig: LabConfig;
+    private labWidth: number;
+    private labHeight: number;
+    private miniatureId: string;
+    
+    constructor(scene: Phaser.Scene, x: number, y: number, miniatureId: string, labName: string, sceneKey: string) {
+        // Usa cast esplicito per evitare problemi di tipo
+        super(scene as any, x, y);
+        
+        this.miniatureId = miniatureId;
+        
+        // Dimensioni maggiori per la miniatura (circa il triplo)
+        this.labWidth = 300;  // Precedentemente 150
+        this.labHeight = 200; // Precedentemente 100
+        
+        // Crea configurazione di default del laboratorio
+        this.labConfig = {
+            name: labName,
+            id: miniatureId,
+            backgroundColor: 0x333333,
+            borderColor: 0xffffff,
+            width: 800,  // Dimensione del laboratorio reale
+            height: 600, // Dimensione del laboratorio reale
+            key: sceneKey
+        };
+        
+        const castedScene = scene as any;
+        
+        // Crea l'immagine di sfondo del laboratorio invece del rettangolo
+        const textureKey = this.getLabTextureKey(miniatureId);
+        this.labImage = new Phaser.GameObjects.Image(castedScene, this.labWidth/2, this.labHeight/2, textureKey);
+        this.labImage.setDisplaySize(this.labWidth, this.labHeight);
+        this.add(this.labImage);
+        
+        // Crea bordo
+        this.border = new Phaser.GameObjects.Rectangle(castedScene, 0, 0, this.labWidth, this.labHeight, 0xffffff, 0);
+        this.border.setOrigin(0);
+        this.border.setStrokeStyle(2, this.labConfig.borderColor);
+        this.add(this.border);
+        
+        // Crea etichetta
+        this.label = new Phaser.GameObjects.Text(castedScene, this.labWidth / 2, 10, labName, {
+            fontFamily: 'Arial',
+            fontSize: '14px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3
+        });
+        this.label.setOrigin(0.5, 0);
+        this.add(this.label);
+        
+        // Aggiungi il container alla scena
+        scene.add.existing(this);
+    }
+    
+    /**
+     * Determina la chiave della texture da usare in base all'ID della miniatura
+     */
+    private getLabTextureKey(miniatureId: string): string {
+        switch (miniatureId) {
+            case 'mercatorum-miniature':
+                return 'mercatorum-lab-preview';
+            case 'blekinge-miniature':
+                return 'blekinge-lab-preview';
+            case 'opbg-miniature':
+                return 'opbg-lab-preview';
+            default:
+                return 'default-lab-preview';
+        }
+    }
+    
+    /**
+     * Aggiorna la posizione degli agenti nella miniatura del laboratorio
+     * @param agents Array di agenti nel laboratorio
+     */
+    public updateAgentPositions(agents: any[]): void {
+        // Elimina gli sprite degli agenti esistenti
+        this.agentSprites.forEach(sprite => sprite.destroy());
+        this.agentSprites = [];
+        
+        // Aggiungi i nuovi sprite degli agenti
+        agents.forEach(agent => {
+            // Calcola la posizione relativa nella miniatura basata sulla posizione dell'agente nel laboratorio
+            const relX = (agent.x / this.labConfig.width) * this.labWidth;
+            const relY = (agent.y / this.labConfig.height) * this.labHeight;
+            
+            // Aggiungi lo sprite dell'agente
+            this.addAgentSprite(relX, relY, agent.type);
+        });
+    }
+    
+    // Alias per mantenere la compatibilità con il codice esistente
+    public updateAgents(agents: any[]): void {
+        this.updateAgentPositions(agents);
+    }
+    
+    /**
+     * Crea uno sprite rappresentante un agente nella miniatura del laboratorio
+     * @param x Posizione x nella miniatura
+     * @param y Posizione y nella miniatura
+     * @param agentType Tipo di agente
+     */
+    private addAgentSprite(x: number, y: number, agentType: string): void {
+        const spriteKey = this.getAgentSpriteKey(agentType);
+        const agentSprite = new Phaser.GameObjects.Sprite(this.scene as any, x, y, spriteKey);
+        
+        // Scala piccola ma visibile
+        agentSprite.setScale(0.5);
+        
+        // Opacità leggermente ridotta per non essere troppo invadente
+        agentSprite.setAlpha(0.8);
+        
+        // Applica una tinta basata sul tipo di agente per distinguerli meglio
+        agentSprite.setTint(this.getAgentColor(agentType));
+        
+        this.add(agentSprite);
+        this.agentSprites.push(agentSprite);
+    }
+    
+    /**
+     * Determina la chiave della texture da usare in base al tipo di agente
+     */
+    private getAgentSpriteKey(agentType: string): string {
+        switch (agentType) {
+            case 'PhDStudent':
+                return 'phd-student-sprite';
+            case 'Researcher':
+                return 'researcher-sprite';
+            case 'Professor':
+                return 'professor-sprite';
+            case 'MLEngineer':
+                return 'ml-engineer-sprite';
+            case 'DataEngineer':
+                return 'data-engineer-sprite';
+            case 'PrivacySpecialist':
+                return 'privacy-specialist-sprite';
+            case 'MedicalDoctor':
+                return 'medical-doctor-sprite';
+            case 'BiomedicalEngineer':
+                return 'biomedical-engineer-sprite';
+            default:
+                return 'default-agent-sprite';
+        }
+    }
+    
+    /**
+     * Ottiene il colore associato al tipo di agente
+     * @param agentType Tipo di agente
+     * @returns Codice colore in formato esadecimale
+     */
+    private getAgentColor(agentType: string): number {
+        switch (agentType) {
+            case 'PhDStudent':
+                return 0x4287f5; // Blu
+            case 'Researcher':
+                return 0x42f587; // Verde
+            case 'Professor':
+                return 0xf54242; // Rosso
+            case 'MLEngineer':
+                return 0xf5a742; // Arancione
+            case 'DataEngineer':
+                return 0x9042f5; // Viola
+            case 'PrivacySpecialist':
+                return 0xf542e9; // Rosa
+            case 'MedicalDoctor':
+                return 0x42f5f5; // Ciano
+            case 'BiomedicalEngineer':
+                return 0xf5f542; // Giallo
+            default:
+                return 0xffffff; // Bianco come colore di default
+        }
+    }
+    
+    /**
+     * Imposta lo stato di selezione della miniatura
+     * @param selected True se selezionato, false altrimenti
+     */
+    public setSelected(selected: boolean): void {
+        // Enfatizza il bordo quando selezionato
+        const borderWidth = selected ? 3 : 2;
+        const borderColor = selected ? 0xffff00 : this.labConfig.borderColor;
+        
+        this.border.setStrokeStyle(borderWidth, borderColor);
+    }
+    
+    /**
+     * Ottiene la configurazione del laboratorio associata a questa miniatura
+     * @returns Configurazione del laboratorio
+     */
+    public getLabConfig(): LabConfig {
+        return this.labConfig;
+    }
+    
+    /**
+     * Ottiene la posizione del centro della miniatura
+     * @returns La posizione centrale come Vector2
+     */
+    public getPosition(): Phaser.Math.Vector2 {
+        return new Phaser.Math.Vector2(
+            this.x + this.labWidth / 2,
+            this.y + this.labHeight / 2
+        );
+    }
+    
+    /**
+     * Gestisce l'interazione quando la miniatura viene cliccata
+     * @param callback Funzione da chiamare quando la miniatura viene cliccata
+     */
+    public setInteractive(callback?: () => void): this {
+        this.labImage.setInteractive({ useHandCursor: true });
+        
+        if (callback) {
+            this.labImage.on('pointerdown', callback);
+        }
+        
+        return this;
+    }
+    
+    /**
+     * Pulisce le risorse quando la miniatura viene distrutta
+     */
+    public destroy(): void {
+        this.agentSprites.forEach(sprite => sprite.destroy());
+        super.destroy();
+    }
+}

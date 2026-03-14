@@ -1,0 +1,153 @@
+// frontend/src/utils/storageUtils.ts
+
+/**
+ * Utility per gestire il localStorage in modo sicuro
+ * Risolve i problemi di "Access to storage is not allowed from this context"
+ */
+
+// Memorizzazione in-memory come fallback
+const memoryStorage: { [key: string]: string } = {};
+
+/**
+ * Verifica se il localStorage è disponibile
+ * @returns true se localStorage è disponibile, false altrimenti
+ */
+export function isLocalStorageAvailable(): boolean {
+  try {
+    // Verifica prima se localStorage è definito (per ambienti come iframe con restrizioni)
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return false;
+    }
+    
+    // Alcuni browser permettono di accedere alla proprietà localStorage ma lanciano eccezioni quando si tenta di usarla
+    // Una semplice verifica delle proprietà non è sufficiente
+    const testKey = '__test_storage__';
+    
+    // Tenta di scrivere e leggere dal localStorage
+    window.localStorage.setItem(testKey, 'test');
+    const result = window.localStorage.getItem(testKey) === 'test';
+    window.localStorage.removeItem(testKey);
+    
+    return result;
+  } catch (error) {
+    // Se c'è un'eccezione, localStorage non è disponibile o non permette l'accesso
+    console.warn('localStorage not available, using memory storage instead:', error);
+    return false;
+  }
+}
+
+/**
+ * Salva un valore nel storage (localStorage se disponibile, altrimenti memory storage)
+ * @param key Chiave
+ * @param value Valore da salvare
+ */
+export function saveToStorage(key: string, value: any): void {
+  try {
+    if (typeof value !== 'string') {
+      value = JSON.stringify(value);
+    }
+    
+    if (isLocalStorageAvailable()) {
+      localStorage.setItem(key, value);
+    } else {
+      memoryStorage[key] = value;
+    }
+  } catch (error) {
+    console.error('Error saving to storage:', error);
+    // Fallback su memory storage
+    memoryStorage[key] = typeof value === 'string' ? value : JSON.stringify(value);
+  }
+}
+
+/**
+ * Legge un valore dal storage
+ * @param key Chiave
+ * @param defaultValue Valore di default
+ * @returns Il valore letto o il valore di default
+ */
+export function getFromStorage<T>(key: string, defaultValue: T): T {
+  try {
+    let storedValue: string | null = null;
+    
+    if (isLocalStorageAvailable()) {
+      storedValue = localStorage.getItem(key);
+    } else {
+      storedValue = memoryStorage[key] || null;
+    }
+    
+    if (storedValue === null) {
+      return defaultValue;
+    }
+    
+    // Prova a fare il parse
+    try {
+      return JSON.parse(storedValue) as T;
+    } catch {
+      // Se non è possibile fare il parse, restituisce il valore come stringa
+      return storedValue as unknown as T;
+    }
+  } catch (error) {
+    console.error('Error reading from storage:', error);
+    return defaultValue;
+  }
+}
+
+/**
+ * Rimuove un valore dal storage
+ * @param key Chiave
+ */
+export function removeFromStorage(key: string): void {
+  try {
+    if (isLocalStorageAvailable()) {
+      localStorage.removeItem(key);
+    }
+    
+    // Rimuovi sempre anche dalla memoria
+    delete memoryStorage[key];
+  } catch (error) {
+    console.error('Error removing from storage:', error);
+  }
+}
+
+/**
+ * Pulisce tutto il storage
+ */
+export function clearStorage(): void {
+  try {
+    if (isLocalStorageAvailable()) {
+      localStorage.clear();
+    }
+    
+    // Pulisci sempre anche la memoria
+    Object.keys(memoryStorage).forEach(key => {
+      delete memoryStorage[key];
+    });
+  } catch (error) {
+    console.error('Error clearing storage:', error);
+  }
+}
+
+// Inizializza verificando la disponibilità di localStorage
+const storageAvailable = isLocalStorageAvailable();
+console.log(`Storage initialization: ${storageAvailable ? 'Using localStorage' : 'Using memory fallback'}`);
+
+// Esporta un oggetto storage-like per una migliore compatibilità
+export const safeStorage = {
+  getItem: (key: string): string | null => getFromStorage(key, null),
+  setItem: (key: string, value: string): void => saveToStorage(key, value),
+  removeItem: (key: string): void => removeFromStorage(key),
+  clear: (): void => clearStorage(),
+  get length(): number {
+    return isLocalStorageAvailable() 
+      ? localStorage.length 
+      : Object.keys(memoryStorage).length;
+  },
+  key: (index: number): string | null => {
+    if (isLocalStorageAvailable()) {
+      return localStorage.key(index);
+    } else {
+      const keys = Object.keys(memoryStorage);
+      return index >= 0 && index < keys.length ? keys[index] : null;
+    }
+  }
+};

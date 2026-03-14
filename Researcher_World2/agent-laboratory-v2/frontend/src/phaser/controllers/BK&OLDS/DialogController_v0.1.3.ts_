@@ -1,0 +1,741 @@
+// frontend/src/phaser/controllers/DialogController.ts
+
+import Phaser from 'phaser';
+import { FLDialogType as DialogType } from '../types/DialogTypes';
+import { SpeechBubble } from '../ui/SpeechBubble';
+import { api } from '../../services/api';
+import { LabTheme } from '../scenes/BaseLabScene';
+
+/**
+ * Configurazione per un dialogo
+ */
+interface DialogConfig {
+  sourceId: string;           // ID dell'agente che parla
+  targetId?: string;          // ID dell'agente con cui parla (opzionale)
+  type: DialogType;           // Tipo di dialogo
+  text: string;               // Testo del dialogo
+  duration?: number;          // Durata del dialogo in ms
+  showEffect?: boolean;       // Se mostrare effetti visivi
+  callback?: () => void;      // Callback opzionale alla fine del dialogo
+  isLLMDialog?: boolean;      // Flag che indica se il dialogo è generato da LLM
+}
+
+/**
+ * Controller che gestisce le bolle di dialogo tra agenti
+ */
+export class DialogController {
+  private scene: Phaser.Scene;
+  private activeBubbles: Map<string, SpeechBubble> = new Map();
+  private dialogQueue: DialogConfig[] = [];
+  private isProcessingQueue: boolean = false;
+  private debugMode: boolean = false;
+  private isLLMAvailable: boolean = false;
+  private labTheme: LabTheme | null = null;
+
+  constructor(scene: Phaser.Scene, labTheme?: LabTheme) {
+    this.scene = scene;
+    this.labTheme = labTheme || null;
+    this.debugMode = localStorage.getItem('dialog_debug') === 'true';
+    
+    // Controlla la disponibilità del servizio LLM
+    this.checkLLMAvailability();
+    
+    // Registra eventi per le interazioni tra agenti
+    this.registerAgentInteractionEvents();
+  }
+
+  /**
+   * Verifica disponibilità del servizio LLM
+   */
+  private async checkLLMAvailability(): Promise<void> {
+    try {
+      const result = await api.checkLLMAvailability();
+      this.isLLMAvailable = result.available;
+      
+      if (this.debugMode) {
+        console.log(`[DialogController] LLM service availability: ${this.isLLMAvailable}`);
+      }
+    } catch (error) {
+      console.error('Failed to check LLM availability:', error);
+      this.isLLMAvailable = false;
+    }
+  }
+  
+  /**
+   * Registra gli eventi per le interazioni tra agenti
+   */
+  private registerAgentInteractionEvents(): void {
+    try {
+      // Ascolta eventi di interazione tra agenti
+      const gameEvents = this.scene.game.events;
+      gameEvents.on('agent-interaction', this.handleAgentInteraction, this);
+      
+      if (this.debugMode) {
+        console.log('[DialogController] Agent interaction events registered');
+      }
+    } catch (error) {
+      console.error('Error registering agent interaction events:', error);
+    }
+  }
+  
+  /**
+   * Gestisce un'interazione tra agenti
+   */
+  private async handleAgentInteraction(data: {
+    agentId1: string;
+    agentId2: string;
+    type: string;
+  }): Promise<void> {
+    if (this.debugMode) {
+      console.log(`[DialogController] Handling agent interaction between ${data.agentId1} and ${data.agentId2}`);
+    }
+    
+    try {
+      // Ottieni i dettagli degli agenti coinvolti
+      const agent1 = this.getAgentDetails(data.agentId1);
+      const agent2 = this.getAgentDetails(data.agentId2);
+      
+      if (!agent1 || !agent2) {
+        console.warn('[DialogController] Could not find agent details for interaction');
+        return;
+      }
+      
+      // Se il servizio LLM è disponibile, prova a generare dialoghi con LLM
+      if (this.isLLMAvailable) {
+        try {
+          // Genera dialogo per il primo agente
+          const dialogResult1 = await api.generateAgentDialog({
+            agentId: agent1.id,
+            agentName: agent1.name,
+            agentRole: agent1.role,
+            agentSpecialization: agent1.specialization || 'general',
+            targetAgentId: agent2.id,
+            targetAgentName: agent2.name,
+            targetAgentRole: agent2.role,
+            interactionType: data.type,
+            labType: this.getLabTypeString()
+          });
+          
+          // Crea dialogo per il primo agente
+          this.createDialog({
+            sourceId: agent1.id,
+            targetId: agent2.id,
+            type: this.getDialogTypeForRole(agent1.role),
+            text: dialogResult1.dialog,
+            isLLMDialog: dialogResult1.isLLMGenerated,
+            showEffect: true
+          });
+          
+          // Ritardo per il secondo dialogo
+          setTimeout(async () => {
+            // Genera dialogo per il secondo agente
+            const dialogResult2 = await api.generateAgentDialog({
+              agentId: agent2.id,
+              agentName: agent2.name,
+              agentRole: agent2.role,
+              agentSpecialization: agent2.specialization || 'general',
+              targetAgentId: agent1.id,
+              targetAgentName: agent1.name,
+              targetAgentRole: agent1.role,
+              interactionType: data.type,
+              labType: this.getLabTypeString()
+            });
+            
+            // Crea dialogo per il secondo agente
+            this.createDialog({
+              sourceId: agent2.id,
+              targetId: agent1.id,
+              type: this.getDialogTypeForRole(agent2.role),
+              text: dialogResult2.dialog,
+              isLLMDialog: dialogResult2.isLLMGenerated,
+              showEffect: false
+            });
+          }, 1500);
+          
+          return;
+        } catch (error) {
+          console.error('[DialogController] Error generating LLM dialogs:', error);
+          // Fallback ai dialoghi predefiniti
+        }
+      }
+      
+      // Fallback: crea dialoghi predefiniti
+      this.createPresetDialogForInteraction(agent1, agent2, data.type);
+      
+    } catch (error) {
+      console.error('[DialogController] Error handling agent interaction:', error);
+    }
+  }
+  
+  /**
+   * Crea dialoghi predefiniti per un'interazione
+   */
+  private createPresetDialogForInteraction(
+    agent1: any,
+    agent2: any,
+    interactionType: string
+  ): void {
+    // Crea dialogo per il primo agente
+    this.createDialog({
+      sourceId: agent1.id,
+      targetId: agent2.id,
+      type: this.getDialogTypeForRole(agent1.role),
+      text: this.getPresetDialog(agent1.role, interactionType),
+      showEffect: true
+    });
+    
+    // Ritardo per il secondo dialogo
+    setTimeout(() => {
+      this.createDialog({
+        sourceId: agent2.id,
+        targetId: agent1.id,
+        type: this.getDialogTypeForRole(agent2.role),
+        text: this.getPresetDialog(agent2.role, interactionType),
+        showEffect: false
+      });
+    }, 1500);
+  }
+  
+  /**
+   * Ottiene il tipo di laboratorio come stringa
+   */
+  private getLabTypeString(): string {
+    if (!this.labTheme) return 'default';
+    
+    if (this.labTheme.name.includes('Mercatorum')) {
+      return 'mercatorum';
+    } else if (this.labTheme.name.includes('Blekinge')) {
+      return 'blekinge';
+    } else if (this.labTheme.name.includes('OPBG') || this.labTheme.name.includes('Bambino Gesù')) {
+      return 'opbg';
+    }
+    
+    return 'default';
+  }
+  
+  /**
+   * Ottiene dettagli di un agente dall'ID
+   */
+  private getAgentDetails(agentId: string): any {
+    try {
+      const agents = this.scene.children.getChildren()
+        .filter((child: any) => 
+          (child.getData && child.getData('id') === agentId) || 
+          (child.getId && child.getId() === agentId)
+        );
+      
+      if (agents.length > 0) {
+        const agent = agents[0] as any;
+        return {
+          id: agentId,
+          name: agent.name || 'Unknown Agent',
+          role: agent.role || agent.type || 'researcher',
+          specialization: agent.specialization || 'general',
+          x: agent.x,
+          y: agent.y
+        };
+      }
+    } catch (error) {
+      console.error(`[DialogController] Error getting agent details for ${agentId}:`, error);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Ottiene il tipo di dialogo in base al ruolo dell'agente
+   */
+  private getDialogTypeForRole(role: string): DialogType {
+    // Mapping semplificato dei ruoli ai tipi di dialogo
+    const roleToTypeMap: { [key: string]: DialogType } = {
+      'professor': DialogType.RESEARCH,
+      'researcher': DialogType.RESEARCH,
+      'phd_student': DialogType.RESEARCH,
+      'student': DialogType.RESEARCH,
+      'doctor': DialogType.DATA,
+      'engineer': DialogType.MODEL,
+      'ml_engineer': DialogType.MODEL,
+      'data_engineer': DialogType.DATA,
+      'privacy_specialist': DialogType.PRIVACY
+    };
+    
+    // Ottieni il tipo di dialogo basato sul ruolo o usa GENERAL come default
+    return roleToTypeMap[role.toLowerCase()] || DialogType.GENERAL;
+  }
+
+  /**
+   * Attiva/disattiva la modalità debug
+   */
+  setDebugMode(enabled: boolean): void {
+    this.debugMode = enabled;
+    localStorage.setItem('dialog_debug', String(enabled));
+    
+    if (this.debugMode) {
+      console.log('[DialogController] Debug mode enabled');
+    }
+  }
+
+  /**
+   * Crea un dialogo tra due agenti
+   */
+  createDialog(config: DialogConfig): void {
+    // Aggiungi il dialogo alla coda
+    this.dialogQueue.push(config);
+    
+    if (this.debugMode) {
+      console.log(`[DialogController] Dialog queued: ${config.type} from ${config.sourceId} to ${config.targetId || 'broadcast'}`);
+      console.log(`[DialogController] Queue length: ${this.dialogQueue.length}`);
+    }
+    
+    // Se non stiamo già processando la coda, iniziamo
+    if (!this.isProcessingQueue) {
+      this.processDialogQueue();
+    }
+  }
+
+  /**
+   * Processa la coda dei dialoghi
+   */
+  private processDialogQueue(): void {
+    if (this.dialogQueue.length === 0) {
+      this.isProcessingQueue = false;
+      return;
+    }
+    
+    this.isProcessingQueue = true;
+    const dialog = this.dialogQueue.shift();
+    
+    if (!dialog) {
+      this.isProcessingQueue = false;
+      return;
+    }
+    
+    // Ottieni le posizioni degli agenti coinvolti
+    const sourcePosition = this.getAgentPosition(dialog.sourceId);
+    
+    if (!sourcePosition) {
+      console.warn(`[DialogController] Could not find agent with ID ${dialog.sourceId}`);
+      this.processDialogQueue(); // Passa al dialogo successivo
+      return;
+    }
+    
+    let targetPosition = null;
+    if (dialog.targetId) {
+      targetPosition = this.getAgentPosition(dialog.targetId);
+      if (!targetPosition && this.debugMode) {
+        console.warn(`[DialogController] Could not find target agent with ID ${dialog.targetId}`);
+      }
+    }
+    
+    // Crea la bolla di dialogo
+    this.showSpeechBubble(dialog, sourcePosition, targetPosition);
+    
+    // Mostra effetti visivi se richiesto
+    if (dialog.showEffect) {
+      this.showDialogEffect(dialog.type, sourcePosition, targetPosition);
+    }
+    
+    // Calcola la durata in base alla lunghezza del testo se non specificata
+    const duration = dialog.duration || Math.min(2000 + dialog.text.length * 30, 8000);
+    
+    // Programma la rimozione della bolla e il passaggio al dialogo successivo
+    this.scene.time.delayedCall(duration, () => {
+      this.removeSpeechBubble(dialog.sourceId);
+      
+      if (dialog.callback) {
+        dialog.callback();
+      }
+      
+      // Piccolo ritardo prima del prossimo dialogo
+      this.scene.time.delayedCall(300, () => {
+        this.processDialogQueue();
+      });
+    });
+  }
+
+  /**
+   * Mostra una bolla di dialogo
+   */
+  private showSpeechBubble(
+    dialog: DialogConfig,
+    sourcePos: { x: number, y: number },
+    targetPos: { x: number, y: number } | null
+  ): void {
+    // Se c'è già una bolla attiva per questo agente, la rimuoviamo
+    if (this.activeBubbles.has(dialog.sourceId)) {
+      this.removeSpeechBubble(dialog.sourceId);
+    }
+    
+    try {
+      // Crea una nuova bolla di dialogo
+      const bubble = new SpeechBubble(
+        this.scene,
+        sourcePos.x,
+        sourcePos.y - 40, // Posiziona sopra l'agente
+        dialog.text,
+        dialog.type,
+        {
+          width: 160,
+          padding: 8,
+          targetPos: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
+          isLLMDialog: dialog.isLLMDialog || false  // Passa il flag LLM
+        }
+      );
+      
+      // Aggiungila alla mappa delle bolle attive
+      this.activeBubbles.set(dialog.sourceId, bubble);
+      
+      if (this.debugMode) {
+        console.log(`[DialogController] Speech bubble created for ${dialog.sourceId}`);
+        if (dialog.isLLMDialog) {
+          console.log(`[DialogController] Dialog is LLM-generated`);
+        }
+      }
+    } catch (error) {
+      console.error('[DialogController] Error creating speech bubble:', error);
+    }
+  }
+
+  /**
+   * Rimuove una bolla di dialogo
+   */
+  removeSpeechBubble(agentId: string): void {
+    const bubble = this.activeBubbles.get(agentId);
+    if (bubble) {
+      bubble.destroy();
+      this.activeBubbles.delete(agentId);
+      
+      if (this.debugMode) {
+        console.log(`[DialogController] Speech bubble removed for ${agentId}`);
+      }
+    }
+  }
+
+  /**
+   * Ottiene la posizione di un agente dal suo ID
+   */
+  private getAgentPosition(agentId: string): { x: number, y: number } | null {
+    try {
+      // Cerca l'agente nella scena
+      const agent = this.scene.children.getChildren()
+        .find((child: Phaser.GameObjects.GameObject) => {
+          return (child.getData && 
+                 child.getData('id') === agentId) || 
+                 ((child as any).getId && 
+                 (child as any).getId() === agentId);
+        });
+      
+      if (agent && 'x' in agent && 'y' in agent) {
+        return { x: agent.x as number, y: agent.y as number };
+      }
+    } catch (error) {
+      console.error(`[DialogController] Error getting agent position for ${agentId}:`, error);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Ottiene un dialogo predefinito in base al ruolo e tipo di interazione
+   */
+  private getPresetDialog(role: string, interactionType: string): string {
+    const dialogs: { [key: string]: string[] } = {
+      'professor': [
+        "Let's analyze this research approach.",
+        "I've been working on a new theoretical model.",
+        "What do you think about differential privacy?",
+        "Have you seen the latest federated learning paper?",
+        "This algorithm shows promising convergence properties."
+      ],
+      'researcher': [
+        "I'm working on optimizing client selection.",
+        "My experiments show interesting non-IID behavior.",
+        "Let's collaborate on model compression techniques.",
+        "Communication efficiency is the key challenge here.",
+        "I've found a way to reduce the privacy budget."
+      ],
+      'phd_student': [
+        "I'm implementing a new aggregation method.",
+        "Could you review my experimental design?",
+        "The data heterogeneity is causing issues.",
+        "My literature review found some gaps in this area.",
+        "I'm trying to reproduce those benchmark results."
+      ],
+      'student': [
+        "I'm implementing a new aggregation method.",
+        "Could you review my experimental design?",
+        "The data heterogeneity is causing issues.",
+        "My literature review found some gaps in this area.",
+        "I'm trying to reproduce those benchmark results."
+      ],
+      'doctor': [
+        "Patient privacy must be our first priority.",
+        "This diagnostic model shows promising results.",
+        "We need more diverse medical data.",
+        "The ethical implications are significant.",
+        "Federated learning could transform clinical research."
+      ],
+      'engineer': [
+        "I've optimized the system throughput.",
+        "The deployment pipeline is almost ready.",
+        "Let's benchmark against the baseline.",
+        "We need more efficient resource allocation.",
+        "I've implemented the compression algorithm."
+      ],
+      'privacy_specialist': [
+        "This approach leaks too much information.",
+        "Let's analyze the privacy guarantees.",
+        "We need to increase the noise parameter.",
+        "The attack surface can be reduced.",
+        "I've developed a new secure aggregation protocol."
+      ]
+    };
+    
+    // Ottieni i dialoghi per il ruolo, o usa quelli generici
+    const roleDialogs = dialogs[role.toLowerCase()] || dialogs['researcher'];
+    
+    // Scegli un dialogo casuale
+    const randomIndex = Math.floor(Math.random() * roleDialogs.length);
+    return roleDialogs[randomIndex];
+  }
+
+  /**
+   * Mostra effetti visivi basati sul tipo di dialogo
+   */
+  private showDialogEffect(
+    type: DialogType,
+    sourcePos: { x: number, y: number },
+    targetPos: { x: number, y: number } | null
+  ): void {
+    try {
+      if (!targetPos) return;
+      
+      switch (type) {
+        case DialogType.MODEL:
+          this.showModelEffect(sourcePos.x, sourcePos.y);
+          break;
+        case DialogType.DATA:
+          this.showDataEffect(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y);
+          break;
+        case DialogType.PRIVACY:
+          this.showPrivacyEffect(sourcePos.x, sourcePos.y);
+          break;
+        case DialogType.RESEARCH:
+          this.showResearchEffect(sourcePos.x, sourcePos.y);
+          break;
+      }
+    } catch (error) {
+      console.warn('Error showing dialog effect:', error);
+      // Continuiamo l'esecuzione anche in caso di errore nell'effetto visivo
+    }
+  }
+
+  /**
+   * Effetto visivo per dialoghi di tipo MODEL
+   */
+  private showModelEffect(x: number, y: number): void {
+    // Crea un sistema di particelle per l'effetto
+    const particles = this.scene.add.particles('model-particle');
+    if (!particles) return;
+    
+    // Definisci la dimensione del cerchio prima di usarla
+    const radius = 40;
+    const duration = 2000;
+    
+    const emitter = particles.createEmitter({
+      blendMode: 'ADD',
+      tint: 0x00ff88
+    });
+    
+    // Configura l'emettitore per un effetto circolare
+    emitter.x = x;
+    emitter.y = y;
+    emitter.speed = 80;
+    emitter.emitZone = {
+      type: 'edge',
+      source: new Phaser.Geom.Circle(0, 0, radius),
+      quantity: 32,
+      yoyo: false
+    };
+    
+    // Attiva l'emettitore
+    emitter.start();
+    
+    // Imposta un timer per fermarlo e pulire
+    this.scene.time.delayedCall(duration, () => {
+      emitter.stop();
+      this.scene.time.delayedCall(1500, () => {
+        particles.destroy();
+      });
+    });
+  }
+
+  /**
+   * Effetto visivo per dialoghi di tipo PRIVACY
+   */
+  private showPrivacyEffect(x: number, y: number): void {
+    // Crea un sistema di particelle per l'effetto
+    const particles = this.scene.add.particles('privacy-particle');
+    if (!particles) return;
+    
+    const emitter = particles.createEmitter({
+      blendMode: 'ADD',
+      tint: 0xaa44ff
+    });
+    
+    // Imposta l'emettitore
+    emitter.x = x;
+    emitter.y = y;
+    emitter.scale = { start: 0.6, end: 0 };
+    emitter.speed = 60;
+    emitter.lifespan = 800;
+
+    // Crea un effetto di scudo/protezione
+    const shield = this.scene.add.graphics();
+    shield.lineStyle(2, 0xaa44ff, 0.8);
+    shield.strokeCircle(x, y, 30);
+    
+    // Attiva l'emettitore
+    emitter.start();
+    
+    // Imposta l'animazione dello scudo
+    this.scene.tweens.add({
+      targets: shield,
+      alpha: { from: 0.8, to: 0 },
+      duration: 1800,
+      ease: 'Power2',
+      onComplete: () => {
+        shield.destroy();
+        emitter.stop();
+        this.scene.time.delayedCall(1000, () => {
+          particles.destroy();
+        });
+      }
+    });
+  }
+
+  /**
+   * Effetto visivo per dialoghi di tipo RESEARCH
+   */
+  private showResearchEffect(x: number, y: number): void {
+    // Crea un sistema di particelle per l'effetto
+    const particles = this.scene.add.particles('research-particle');
+    if (!particles) return;
+    
+    const emitter = particles.createEmitter({
+      blendMode: 'ADD',
+      tint: 0xff8800
+    });
+    
+    // Configura l'emettitore per convergere verso il centro
+    emitter.x = x;
+    emitter.y = y;
+    emitter.speed = { min: 80, max: 120 };
+    emitter.scale = { start: 0.2, end: 0.5 };
+    emitter.lifespan = 1000;
+    emitter.emitZone = {
+      type: 'edge',
+      source: new Phaser.Geom.Circle(0, 0, 100),
+      quantity: 24,
+      yoyo: false
+    };
+    
+    // Imposta la direzione delle particelle verso il centro
+    emitter.emitAngle = {
+      min: 0,
+      max: 360
+    };
+    
+    // Anima le particelle verso il centro
+    emitter.gravityX = (x - emitter.x) * -1;
+    emitter.gravityY = (y - emitter.y) * -1;
+
+    // Attiva l'emettitore
+    emitter.start();
+    
+    // Imposta un timer per fermarlo e pulire
+    this.scene.time.delayedCall(2000, () => {
+      emitter.stop();
+      this.scene.time.delayedCall(1000, () => {
+        particles.destroy();
+      });
+    });
+  }
+
+  /**
+   * Effetto visivo per dialoghi di tipo DATA
+   */
+  private showDataEffect(sourceX: number, sourceY: number, targetX: number, targetY: number): void {
+    // Crea un sistema di particelle per l'effetto
+    const particles = this.scene.add.particles('data-particle');
+    if (!particles) return;
+    
+    const emitter = particles.createEmitter({
+      blendMode: 'ADD',
+      tint: 0x0088ff
+    });
+    
+    // Calcola l'angolo tra i due punti
+    const angle = Phaser.Math.Angle.Between(sourceX, sourceY, targetX, targetY);
+    
+    // Attiva l'emettitore alla posizione di partenza
+    emitter.x = sourceX;
+    emitter.y = sourceY;
+    emitter.angle = Phaser.Math.RadToDeg(angle);
+    emitter.speed = 100;
+    
+    // Calcola la distanza per regolare la durata della vita delle particelle
+    const distance = Phaser.Math.Distance.Between(sourceX, sourceY, targetX, targetY);
+    const particleLifespan = Math.min(distance * 10, 2000); // Proporzionale alla distanza
+    
+    emitter.lifespan = particleLifespan;
+    emitter.quantity = 2;
+    emitter.frequency = 100;
+    
+    // Attiva l'emettitore
+    emitter.start();
+    
+    // Imposta un timer per fermarlo e pulire
+    this.scene.time.delayedCall(particleLifespan + 500, () => {
+      emitter.stop();
+      this.scene.time.delayedCall(1000, () => {
+        particles.destroy();
+      });
+    });
+  }
+
+  /**
+   * Aggiorna lo stato delle bolle di dialogo attive
+   */
+  update(time: number, delta: number): void {
+    // Aggiorna la posizione delle bolle di dialogo basate sugli agenti
+    this.activeBubbles.forEach((bubble, agentId) => {
+      const agentPos = this.getAgentPosition(agentId);
+      if (agentPos) {
+        bubble.updatePosition(agentPos.x, agentPos.y - 40);
+      }
+    });
+  }
+
+  /**
+   * Pulisce tutte le bolle e le risorse quando si chiude la scena
+   */
+  destroy(): void {
+    // Rimuovi tutte le bolle di dialogo attive
+    this.activeBubbles.forEach((bubble, id) => {
+      bubble.destroy();
+    });
+    
+    // Rimuovi event listeners
+    const gameEvents = this.scene.game.events;
+    gameEvents.off('agent-interaction', this.handleAgentInteraction, this);
+    
+    this.activeBubbles.clear();
+    this.dialogQueue = [];
+    this.isProcessingQueue = false;
+    
+    if (this.debugMode) {
+      console.log('[DialogController] Destroyed all dialog resources');
+    }
+  }
+}

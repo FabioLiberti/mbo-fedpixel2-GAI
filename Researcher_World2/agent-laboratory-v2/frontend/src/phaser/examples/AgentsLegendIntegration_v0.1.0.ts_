@@ -1,0 +1,147 @@
+// frontend/src/phaser/examples/AgentsLegendIntegration.ts
+// Esempio di come integrare la legenda degli agenti in una scena
+
+// Modifichiamo i percorsi di importazione per essere relativi al progetto
+// invece che relativi al file
+import { AgentsLegend } from '../ui/AgentsLegend';
+import { AgentTypeInfo } from '../ui/LegendInfoPanel';
+
+/**
+ * Questo file mostra come integrare la legenda degli agenti in una scena
+ */
+
+// Esempio di uso della legenda in una scena
+// Questo codice può essere aggiunto al metodo create() di BlekingeLabScene.ts
+
+export function integrateAgentsLegend(scene: Phaser.Scene): void {
+  // OPZIONE 1: Caricamento asincrono del file JSON
+  async function loadAndCreateLegend(): Promise<void> {
+    try {
+      // Carica il file di configurazione degli agenti
+      const agentTypes = await AgentsLegend.loadAgentTypesConfig(scene);
+      
+      // Crea la legenda in alto a destra
+      // Utilizziamo esplicitamente legend per evitare warning
+      const legend = new AgentsLegend(
+        scene, 
+        scene.cameras.main.width - 220, 
+        20, 
+        agentTypes
+      );
+      
+      // Opzionalmente, aggiungi un pulsante nella UI per toggle della legenda
+      const toggleButton = scene.add.text(
+        scene.cameras.main.width - 100, 
+        scene.cameras.main.height - 40, 
+        'Legenda', 
+        { 
+          fontSize: '14px',
+          backgroundColor: '#3f51b5',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      toggleButton.setInteractive({ useHandCursor: true });
+      toggleButton.on('pointerdown', () => {
+        // Utilizziamo legend per il toggle
+        legend.toggleVisibility();
+      });
+      toggleButton.setScrollFactor(0);
+      toggleButton.setDepth(100);
+      
+      console.log('Agents legend created successfully');
+      
+      // Esporti legend come proprietà della scena per usarlo altrove
+      (scene as any).agentsLegend = legend;
+    } catch (error) {
+      console.error('Error creating agents legend:', error);
+    }
+  }
+  
+  // Avvia il processo di caricamento e creazione
+  loadAndCreateLegend();
+}
+
+/**
+ * Metodo alternativo con configurazione definita direttamente nel codice
+ * invece di usare un file JSON esterno
+ */
+export function integrateAgentsLegendWithInlineConfig(scene: Phaser.Scene): void {
+  // Configura i tipi di agenti direttamente nel codice
+  const agentTypesConfig: Record<string, AgentTypeInfo> = {
+    "professor": {
+      "title": "Professor",
+      "description": "Esperto accademico che supervisiona le ricerche",
+      "skills": ["FL Systems Architecture", "Theoretical Guarantees", "Privacy Economics"],
+      "role": "Supervisiona progetti di ricerca e guida gli studenti PhD",
+      "background": "Esperienza pluriennale in ricerca sul federated learning",
+      "color": "#1E88E5",
+      "spritesheetPath": "assets/characters/professor_spritesheet.png"
+    },
+    "researcher": {
+      "title": "Researcher",
+      "description": "Ricercatore post-doc che conduce esperimenti e sviluppa algoritmi",
+      "skills": ["Secure Aggregation", "Non-IID Data Handling", "Communication Efficiency"],
+      "role": "Conduce esperimenti avanzati e sviluppa nuovi algoritmi di aggregazione",
+      "background": "Specializzato in ottimizzazione di algoritmi distribuiti",
+      "color": "#43A047",
+      "spritesheetPath": "assets/characters/researcher_spritesheet.png"
+    }
+    // Altri tipi di agenti possono essere aggiunti qui...
+  };
+  
+  // Crea la legenda in alto a sinistra e la usiamo direttamente
+  const legend = new AgentsLegend(
+    scene, 
+    20, 
+    20, 
+    agentTypesConfig
+  );
+  
+  // Aggiungi un metodo per controllare la visibilità
+  const toggleButton = scene.add.text(
+    20, 
+    scene.cameras.main.height - 40, 
+    'Toggle Legenda', 
+    { 
+      fontSize: '14px',
+      backgroundColor: '#43A047',
+      padding: { left: 10, right: 10, top: 5, bottom: 5 }
+    }
+  );
+  toggleButton.setInteractive({ useHandCursor: true });
+  toggleButton.on('pointerdown', () => {
+    legend.toggleVisibility();
+  });
+  toggleButton.setScrollFactor(0);
+  toggleButton.setDepth(100);
+  
+  console.log('Agents legend created with inline config');
+  
+  // Esporti legend come proprietà della scena per usarlo altrove
+  (scene as any).agentsLegend = legend;
+}
+
+/**
+ * Esempio di come aggiungere la funzionalità a BlekingeLabScene
+ * 
+ * Nel tuo file BlekingeLabScene.ts, aggiungi queste modifiche:
+ * 
+ * 1. Importa la funzione
+ * ```
+ * import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
+ * ```
+ * 
+ * 2. Chiamala nel metodo create()
+ * ```
+ * create() {
+ *   // Codice esistente...
+ *   
+ *   // Aggiungi la legenda degli agenti
+ *   integrateAgentsLegend(this);
+ *   
+ *   // Resto del codice...
+ * }
+ * ```
+ * 
+ * 3. Assicurati che il file JSON sia stato copiato in assets/config/
+ */

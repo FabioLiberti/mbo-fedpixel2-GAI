@@ -1,0 +1,180 @@
+// frontend/src/phaser/sprites/agentFactory.ts
+import { Agent, AgentState } from './Agent';
+import { ResearcherAgent, ResearcherType, Specialization } from './ResearcherAgent';
+import { MedicalResearcher } from './MedicalResearcher';
+
+/**
+ * Interfaccia per la configurazione base degli agenti
+ */
+export interface BaseAgentConfig {
+  type: string;
+  name: string;
+  position: { x: number, y: number };
+  role?: string;
+  speed?: number;
+  scale?: number; // Nuovo parametro opzionale
+  state?: AgentState;
+}
+
+/**
+ * Interfaccia per la configurazione dei ricercatori
+ */
+export interface ResearcherAgentConfig extends BaseAgentConfig {
+  specialization: Specialization;
+  researcherType: ResearcherType;
+}
+
+/**
+ * Interfaccia per la configurazione dei ricercatori medici
+ */
+export interface MedicalResearcherConfig extends BaseAgentConfig {
+  specialization?: Specialization;
+  medicalField?: string;
+}
+
+/**
+ * Funzione per creare un agente generico
+ * @param scene La scena Phaser in cui creare l'agente
+ * @param config Configurazione dell'agente
+ * @returns Un'istanza di Agent
+ */
+export function createAgent(scene: Phaser.Scene, config: BaseAgentConfig): Agent {
+  const { type, name, position, role, speed, scale, state } = config;
+  
+  // Verifica se la texture esiste
+  if (!scene.textures.exists(type)) {
+    console.warn(`Texture ${type} not found, using placeholder`);
+    createPlaceholderTexture(scene, type);
+  }
+  
+  return new Agent(
+    scene,
+    position.x,
+    position.y,
+    type,
+    {
+      role: role || type,
+      name: name,
+      speed: speed || 50,
+      scale: scale || 1, // Usa il valore di scala fornito o 1 come default
+      state: state
+    }
+  );
+}
+
+/**
+ * Funzione per creare un ricercatore specializzato
+ * @param scene La scena Phaser in cui creare il ricercatore
+ * @param config Configurazione del ricercatore
+ * @returns Un'istanza di ResearcherAgent
+ */
+export function createResearcherAgent(scene: Phaser.Scene, config: ResearcherAgentConfig): ResearcherAgent {
+  const { type, name, position, role, speed, scale, state, specialization, researcherType } = config;
+  
+  // Verifica se la texture esiste
+  if (!scene.textures.exists(type)) {
+    console.warn(`Texture ${type} not found, using placeholder`);
+    createPlaceholderTexture(scene, type);
+  }
+  
+  return new ResearcherAgent(
+    scene,
+    position.x,
+    position.y,
+    type,
+    {
+      role: role || type,
+      name: name,
+      speed: speed || 50,
+      scale: scale || 1, // Usa il valore di scala fornito o 1 come default
+      state: state,
+      specialization: specialization,
+      researcherType: researcherType
+    }
+  );
+}
+
+/**
+ * Funzione per creare un ricercatore medico
+ * @param scene La scena Phaser in cui creare il ricercatore medico
+ * @param config Configurazione del ricercatore medico
+ * @returns Un'istanza di MedicalResearcher
+ */
+export function createMedicalResearcher(scene: Phaser.Scene, config: MedicalResearcherConfig): MedicalResearcher {
+  const { type, name, position, role, speed, scale, state, specialization, medicalField } = config;
+  
+  // Verifica se la texture esiste
+  if (!scene.textures.exists(type)) {
+    console.warn(`Texture ${type} not found, using placeholder`);
+    createPlaceholderTexture(scene, type);
+  }
+  
+  return new MedicalResearcher(
+    scene,
+    position.x,
+    position.y,
+    type,
+    {
+      role: role || type,
+      name: name,
+      speed: speed || 50,
+      scale: scale || 1, // Usa il valore di scala fornito o 1 come default
+      state: state,
+      specialization: specialization || 'clinical-data' as Specialization,
+      medicalField: medicalField || 'General'
+    }
+  );
+}
+
+/**
+ * Funzione per creare una texture placeholder se la texture originale non esiste
+ * @param scene La scena Phaser in cui creare la texture
+ * @param textureKey La chiave della texture
+ */
+function createPlaceholderTexture(scene: Phaser.Scene, textureKey: string): void {
+  // Crea un graphics object per disegnare un placeholder
+  const graphics = scene.add.graphics();
+  
+  // Disegna un rettangolo colorato
+  graphics.fillStyle(0xff00ff); // Magenta
+  graphics.fillRect(0, 0, 32, 48); // Dimensioni standard di un personaggio
+  
+  // Aggiungi un contorno
+  graphics.lineStyle(2, 0xffffff);
+  graphics.strokeRect(0, 0, 32, 48);
+  
+  // Aggiungi il testo "?" al centro
+  graphics.fillStyle(0xffffff);
+  graphics.fillTriangle(16, 10, 8, 30, 24, 30);
+  
+  // Crea una texture dal graphics
+  const renderTexture = scene.add.renderTexture(0, 0, 32, 48);
+  renderTexture.draw(graphics, 0, 0);
+  
+  // Salva la texture con la chiave specificata
+  renderTexture.saveTexture(textureKey);
+  
+  // Pulisci la memoria
+  renderTexture.destroy();
+  graphics.destroy();
+}
+
+/**
+ * Funzione di utility per creare più agenti in base a una configurazione
+ * @param scene La scena Phaser
+ * @param agents Array di configurazioni di agenti
+ * @returns Array di agenti creati
+ */
+export function createAgents(scene: Phaser.Scene, agents: BaseAgentConfig[]): Agent[] {
+  return agents.map(config => createAgent(scene, config));
+}
+
+/**
+ * Funzione di utility per creare più ricercatori in base a una configurazione
+ * @param scene La scena Phaser
+ * @param researchers Array di configurazioni di ricercatori
+ * @returns Array di ricercatori creati
+ */
+export function createResearchers(scene: Phaser.Scene, researchers: ResearcherAgentConfig[]): ResearcherAgent[] {
+  return researchers.map(config => createResearcherAgent(scene, config));
+}

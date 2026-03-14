@@ -1,0 +1,285 @@
+import Phaser from 'phaser';
+
+export default class SplashScene extends Phaser.Scene {
+  private splashVideo: Phaser.GameObjects.Video | null = null;
+  private clickText: Phaser.GameObjects.Text | null = null;
+  private isTransitioning: boolean = false;
+  private videoLoaded: boolean = false;
+  private videoDuration: number = 5000; // 5 secondi in millisecondi
+  private autoTransitionTimer: Phaser.Time.TimerEvent | null = null;
+
+  constructor() {
+    super('SplashScene');
+  }
+
+  preload() {
+    try {
+      // Precarica il video di splash screen con audio
+      // Nota: percorso corretto e opzioni di precaricamento modificate
+      this.load.video('splash-intro', 'assets/video/splash-intro.mp4', 'canplaythrough', true);
+      
+      // Precarica anche l'altro video come alternativa
+      this.load.video('mbo-fedpixel', 'assets/video/MBO-FedPixel_VideoAnimation.mp4', 'canplaythrough', true);
+      
+      // Debug: stampa messaggio di preload
+      console.log('Preloading videos...');
+    } catch (error) {
+      console.error('Error in preload:', error);
+    }
+  }
+
+  create() {
+    // Debug: stampa messaggio all'inizio di create
+    console.log('SplashScene create started');
+    
+    // Imposta lo sfondo nero
+    this.cameras.main.setBackgroundColor('#000000');
+    
+    // Crea il testo di click che sarà visibile immediatamente
+    this.createClickText();
+    
+    // Configura gli ascoltatori di eventi prima di tutto
+    this.setupEventListeners();
+    
+    // Prova a creare e riprodurre il video con un po' di ritardo per assicurare che sia caricato
+    this.time.delayedCall(100, () => {
+      this.createSplashVideo();
+    });
+    
+    // Imposta un timer di fallback per la transizione automatica
+    this.autoTransitionTimer = this.time.delayedCall(10000, () => {
+      if (!this.isTransitioning) {
+        console.log('Auto transition triggered (fallback)');
+        this.startTransition();
+      }
+    });
+    
+    // Emetti un evento personalizzato per notificare che la splash screen è pronta
+    const customEvent = new CustomEvent('splashScreenReady');
+    window.dispatchEvent(customEvent);
+    
+    // Debug: stampa messaggio alla fine di create
+    console.log('SplashScene create completed');
+  }
+
+  private createSplashVideo() {
+    try {
+      console.log('Attempting to create splash video...');
+      
+      // Prima prova con splash-intro.mp4
+      try {
+        this.splashVideo = this.add.video(
+          this.cameras.main.centerX,
+          this.cameras.main.centerY,
+          'splash-intro'
+        );
+        console.log('Created video with splash-intro.mp4');
+      } catch (error) {
+        console.warn('Could not create video with splash-intro.mp4, trying alternate video:', error);
+        
+        // Se fallisce, prova con l'altro video
+        this.splashVideo = this.add.video(
+          this.cameras.main.centerX,
+          this.cameras.main.centerY,
+          'mbo-fedpixel'
+        );
+        console.log('Created video with MBO-FedPixel_VideoAnimation.mp4');
+      }
+      
+      if (this.splashVideo) {
+        // Imposta il video per adattarsi alla dimensione della finestra
+        const scaleX = this.cameras.main.width / this.splashVideo.width;
+        const scaleY = this.cameras.main.height / this.splashVideo.height;
+        const scale = Math.max(scaleX, scaleY);
+        this.splashVideo.setScale(scale);
+        
+        // Imposta l'alpha a 0 per la dissolvenza in entrata
+        this.splashVideo.setAlpha(0);
+        
+        // Assicurati che l'audio sia attivo
+        this.splashVideo.setMute(true);
+        this.splashVideo.setVolume(1);
+        
+        // Registra un handler per l'evento quando il video è pronto
+        this.splashVideo.on('ready', () => {
+          console.log('Video is ready to play');
+          this.videoLoaded = true;
+          
+          // Crea una dissolvenza in entrata per il video
+          this.tweens.add({
+            targets: this.splashVideo,
+            alpha: 1,
+            duration: 1000, // 1 secondo di dissolvenza in entrata
+            ease: 'Power2'
+          });
+          
+          // Avvia la riproduzione del video con audio
+          this.splashVideo?.play(true);
+          console.log('Video playback started');
+        });
+        
+        // Configura l'evento per quando il video termina
+        this.splashVideo.on('complete', () => {
+          console.log('Video playback completed');
+          
+          // Inizia la dissolvenza in uscita
+          this.tweens.add({
+            targets: this.splashVideo,
+            alpha: 0,
+            duration: 1000, // 1 secondo di dissolvenza in uscita
+            ease: 'Power2',
+            delay: 500, // Piccolo ritardo prima della dissolvenza in uscita
+            onComplete: () => {
+              if (!this.isTransitioning) {
+                this.startTransition();
+              }
+            }
+          });
+        });
+        
+        // Aggiungi un handler per errori durante la riproduzione
+        this.splashVideo.on('error', (error: any) => {
+          console.error('Video playback error:', error);
+          // Se c'è un errore nella riproduzione, passa alla prossima scena dopo un breve ritardo
+          this.time.delayedCall(2000, () => {
+            if (!this.isTransitioning) {
+              this.startTransition();
+            }
+          });
+        });
+        
+        console.log('Video setup completed');
+      } else {
+        console.error('Failed to create video object');
+        // Se non è possibile creare l'oggetto video, passa alla prossima scena
+        this.time.delayedCall(2000, () => {
+          if (!this.isTransitioning) {
+            this.startTransition();
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error creating splash video:', error);
+      // Se c'è un errore, passa alla prossima scena
+      this.time.delayedCall(2000, () => {
+        if (!this.isTransitioning) {
+          this.startTransition();
+        }
+      });
+    }
+  }
+
+  private createClickText() {
+    this.clickText = this.add.text(
+      this.cameras.main.centerX,
+      this.cameras.main.height - 40,
+      'Click anywhere to skip',
+      {
+        fontFamily: 'Arial',
+        fontSize: '16px',
+        color: '#ffffff'
+      }
+    );
+    
+    if (this.clickText) {
+      this.clickText.setOrigin(0.5);
+      this.clickText.setAlpha(0.7);
+      
+      // Crea un'animazione di pulsazione per il testo
+      this.tweens.add({
+        targets: this.clickText,
+        alpha: { from: 0.5, to: 1 },
+        duration: 1000,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1
+      });
+    }
+  }
+
+  private setupEventListeners() {
+    // Aggiungi un listener per il click per passare alla prossima scena
+    this.input.on('pointerdown', () => {
+      console.log('Click detected');
+      if (!this.isTransitioning) {
+        this.startTransition();
+      }
+    });
+    
+    // Aggiungi un listener per il tasto spazio e invio per passare alla prossima scena
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      console.log('Space key pressed');
+      if (!this.isTransitioning) {
+        this.startTransition();
+      }
+    });
+    
+    this.input.keyboard?.on('keydown-ENTER', () => {
+      console.log('Enter key pressed');
+      if (!this.isTransitioning) {
+        this.startTransition();
+      }
+    });
+  }
+
+  private startTransition() {
+    if (this.isTransitioning) return;
+    
+    console.log('Starting transition to next scene');
+    this.isTransitioning = true;
+    
+    // Cancella il timer di transizione automatica se esistente
+    if (this.autoTransitionTimer) {
+      this.autoTransitionTimer.remove();
+      this.autoTransitionTimer = null;
+    }
+    
+    // Interrompi il video se è in riproduzione
+    if (this.splashVideo && this.videoLoaded) {
+      // Facciamo una dissolvenza in uscita più veloce se l'utente salta manualmente
+      this.tweens.add({
+        targets: this.splashVideo,
+        alpha: 0,
+        duration: 500,
+        ease: 'Power2'
+      });
+      
+      // Fermiamo l'audio impostando il volume a 0
+      this.splashVideo.setVolume(0);
+      this.splashVideo.stop();
+    }
+    
+    // Crea una dissolvenza in uscita per il testo di click
+    if (this.clickText) {
+      this.tweens.add({
+        targets: this.clickText,
+        alpha: 0,
+        duration: 500,
+        ease: 'Power2'
+      });
+    }
+    
+    // Aspetta un momento per permettere alle animazioni di completarsi
+    this.time.delayedCall(600, () => {
+      // Cambia alla scena WorldMap
+      console.log('Transitioning to WorldMapScene');
+      this.scene.start('WorldMapScene');
+      
+      // Emetti un evento personalizzato per notificare che la splash screen è completata
+      const customEvent = new CustomEvent('splashScreenComplete');
+      window.dispatchEvent(customEvent);
+    });
+  }
+
+  update() {
+    // Possiamo usare update per controllare lo stato del video
+    if (this.splashVideo && !this.videoLoaded) {
+      // Controlla se il video è pronto ma l'evento 'ready' non è stato attivato
+      if (this.splashVideo.getVideoKey() && !this.splashVideo.isPaused() && !this.splashVideo.isPlaying()) {
+        console.log('Video detected as ready in update loop');
+        this.videoLoaded = true;
+        this.splashVideo.play(true);
+      }
+    }
+  }
+}

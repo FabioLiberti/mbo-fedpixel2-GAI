@@ -1,0 +1,50 @@
+{
+    "llm": {
+      "enabled": true,
+      "model": "qwen3.5:4b",
+      "base_url": "http://localhost:11434",
+      "timeout": 30,
+      "parameters": {
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 200
+      }
+    },
+    "dialog_generation": {
+      "enable_caching": true,
+      "cache_expiry_seconds": 3600,
+      "fallback_dialogs": {
+        "phd_student": "I'm working on optimizing our federated learning algorithm for better privacy preservation.",
+        "researcher": "I've been analyzing the convergence properties of our model with non-IID data.",
+        "professor": "Let me show you the theoretical guarantees for our federated learning approach.",
+        "ml_engineer": "This implementation allows for more efficient communication between federated nodes.",
+        "data_engineer": "I've structured the data pipeline to handle heterogeneous sources efficiently.",
+        "privacy_specialist": "Our approach provides strong privacy guarantees with minimal accuracy loss.",
+        "default": "I'm currently focused on my federated learning research."
+      }
+    },
+    "prompt_templates": {
+      "researcher_dialog": "Sei un {researcher_type} specializzato in {specialization}.\nIl tuo obiettivo è fare ricerca su federated learning.\n\nContesto attuale:\n- Stato laboratorio: {lab_state}\n- Agenti vicini: {nearby_agents}\n- Progresso ricerca FL: {fl_progress}\n- Conoscenze attuali: {knowledge_base}\n\nSituazione: {current_situation}\n\nRispondi con un breve dialogo realistico (1-2 frasi) che questo ricercatore potrebbe dire in questa situazione.\nIl dialogo deve essere chiaro, conciso e in prima persona.",
+      
+      "fl_decision": "Sei un {researcher_type} specializzato in {specialization} che lavora su algoritmi di federated learning.\n\nContesto attuale:\n- Stato attuale algoritmo FL: {fl_state}\n- Sfide correnti: {fl_challenges}\n- Requisiti: {requirements}\n- Vincoli: {constraints}\n- Metriche da ottimizzare: {optimization_metrics}\n\nDevi prendere una decisione su {decision_type} per il sistema di federated learning.\nOpzioni disponibili: {available_options}\n\nRispondi con una decisione concisa che includa:\n1. La scelta specifica\n2. Una breve motivazione (1 frase)\n3. Parametri suggeriti (se applicabile)\n\nMantieni la risposta breve e tecnica.",
+      
+      "action_plan": "Sei un {researcher_type} specializzato in {specialization}.\n\nContesto attuale:\n- Stato laboratorio: {lab_state}\n- Stato FL: {fl_state}\n- Compiti in sospeso: {pending_tasks}\n- Priorità: {priorities}\n- Risorse disponibili: {available_resources}\n\nObiettivo: {goal}\n\nPianifica le prossime azioni che intraprenderai per raggiungere questo obiettivo.\nRispondi con un piano d'azione conciso che includa:\n1. Azione immediata (cosa farai ora)\n2. Prossimi passi (2-3 azioni successive in ordine)\n3. Risorse necessarie\n\nMantieni il piano breve e pratico.",
+      
+      "event_reaction": "Sei un {researcher_type} specializzato in {specialization}.\n\nContesto attuale:\n- Stato laboratorio: {lab_state}\n- Attività corrente: {current_activity}\n- Interazioni recenti: {recent_interactions}\n\nUn evento è appena accaduto: {event_description}\n\nCome reagisci a questo evento? Considera:\n- Il tuo ruolo e specializzazione\n- L'impatto potenziale sul tuo lavoro di ricerca\n- Le opportunità o minacce che presenta\n\nRispondi con:\n1. La tua reazione immediata (1 frase)\n2. Cosa farai di conseguenza (1-2 frasi)\n\nMantieni la risposta breve e realistica.",
+      
+      "collaboration_proposal": "Sei un {researcher_type} specializzato in {specialization}.\n\nContesto attuale:\n- Tuo progetto di ricerca: {research_project}\n- Tuoi punti di forza: {strengths}\n- Tue esigenze: {needs}\n\nPotenziale collaboratore: {collaborator_type} specializzato in {collaborator_specialization}\n- Loro progetto: {collaborator_project}\n- Loro punti di forza: {collaborator_strengths}\n- Potenziale sinergia: {potential_synergy}\n\nFormula una proposta di collaborazione che:\n1. Evidenzi il beneficio reciproco\n2. Definisca un obiettivo comune concreto\n3. Suggerisca un primo passo pratico\n\nLa proposta deve essere concisa, specifica e convincente."
+    },
+    "memory_settings": {
+      "short_term_capacity": 10,
+      "episodic_capacity": 20,
+      "semantic_capacity": 50,
+      "importance_threshold": 0.5
+    },
+    "advanced_settings": {
+      "enable_debug_logging": false,
+      "batch_processing": false,
+      "max_concurrent_requests": 5,
+      "retry_attempts": 3,
+      "retry_delay_ms": 1000
+    }
+  }

@@ -1,0 +1,314 @@
+"""
+Test avanzato di integrazione per il sistema LLM di Agent Laboratory.
+Questo test verifica scenari complessi di interazione tra agenti autonomi
+e l'integrazione con i processi di federated learning.
+"""
+
+import os
+import asyncio
+import logging
+import json
+from typing import Dict, Any, List
+import unittest
+
+# Importazioni dal backend
+from ai.llm_connector import LLMConnector
+from simulation.controller import SimulationController
+from models.agents.researcher import ResearcherAgent
+from fl.federated import FLSystem
+
+# Configurazione logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("llm_advanced_integration_test")
+
+class AdvancedLLMIntegrationTest:
+    """Test avanzati per l'integrazione LLM con gli agenti e il federated learning."""
+    
+    def __init__(self):
+        self.connector = None
+        self.controller = None
+        self.fl_system = None
+    
+    async def setup(self):
+        """Inizializza le componenti necessarie per i test."""
+        logger.info("Setting up advanced integration test environment")
+        
+        # Inizializza il connettore LLM
+        self.connector = LLMConnector()
+        
+        # Inizializza il controller di simulazione
+        self.controller = SimulationController()
+        if not self.controller.initialize_model():
+            logger.error("Failed to initialize simulation controller")
+            return False
+        
+        # Assicura che LLM sia abilitato
+        self.controller.enable_llm(True)
+        
+        # Inizializza il sistema FL (se necessario)
+        try:
+            self.fl_system = FLSystem()
+            logger.info("FL system initialized")
+        except Exception as e:
+            logger.warning(f"Could not initialize FL system: {str(e)}")
+            logger.warning("Some tests involving FL integration might be skipped")
+        
+        return True
+    
+    async def teardown(self):
+        """Pulisce le risorse dopo i test."""
+        logger.info("Tearing down test environment")
+        
+        if self.connector:
+            await self.connector.close()
+        
+        logger.info("Test environment cleaned up")
+    
+    async def test_multi_agent_interaction(self):
+        """Testa l'interazione tra più agenti usando LLM."""
+        logger.info("=== Test Multi-Agent Interaction ===")
+        
+        try:
+            # Crea una simulazione di laboratorio con alcuni agenti
+            lab_id = "test_lab"
+            agent_types = ["PhD Student", "Professor", "ML Engineer"]
+            agent_ids = []
+            
+            # Crea gli agenti per il test
+            for idx, agent_type in enumerate(agent_types):
+                agent_id = f"{agent_type.lower().replace(' ', '_')}_{idx}"
+                agent_ids.append(agent_id)
+                
+                specialization = "Data Science" if idx % 2 == 0 else "Privacy Engineering"
+                
+                # Registra l'agente nel controller
+                success = self.controller.register_agent(
+                    agent_id=agent_id,
+                    agent_type=agent_type,
+                    lab_id=lab_id,
+                    specialization=specialization
+                )
+                
+                if not success:
+                    logger.error(f"Failed to register agent {agent_id}")
+                    return False
+            
+            logger.info(f"Created test agents: {agent_ids}")
+            
+            # Simula una conversazione tra agenti
+            # Primo agente inizia la conversazione
+            situation = "Discussing new findings in federated learning algorithms"
+            initial_dialog = await self.controller.generate_agent_dialog(agent_ids[0], situation)
+            
+            if not initial_dialog or initial_dialog.startswith("Error"):
+                logger.error(f"Failed to generate initial dialog: {initial_dialog}")
+                return False
+                
+            logger.info(f"Initial dialog from {agent_ids[0]}: '{initial_dialog}'")
+            
+            # Secondo agente risponde al primo
+            response_context = {
+                "previous_dialog": initial_dialog,
+                "initiator": agent_ids[0]
+            }
+            
+            response_dialog = await self.controller.generate_agent_response(
+                agent_ids[1], 
+                situation, 
+                response_context
+            )
+            
+            if not response_dialog or response_dialog.startswith("Error"):
+                logger.error(f"Failed to generate response dialog: {response_dialog}")
+                return False
+                
+            logger.info(f"Response dialog from {agent_ids[1]}: '{response_dialog}'")
+            
+            # Verifica che ci sia coerenza tra i dialoghi
+            coherence_score = await self.connector.evaluate_dialog_coherence(
+                initial_dialog, 
+                response_dialog,
+                context=situation
+            )
+            
+            logger.info(f"Dialog coherence score: {coherence_score}")
+            
+            if coherence_score < 0.5:  # Soglia arbitraria
+                logger.warning("Dialog coherence seems low")
+            
+            logger.info("Multi-agent interaction test completed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Multi-agent interaction test failed: {str(e)}")
+            return False
+    
+    async def test_fl_decision_making(self):
+        """Testa il processo decisionale degli agenti sul federated learning."""
+        logger.info("=== Test FL Decision Making ===")
+        
+        if not self.fl_system:
+            logger.warning("FL system not available, skipping FL decision making test")
+            return None
+        
+        try:
+            # Simula una decisione FL da parte di un agente esperto
+            agent_id = "fl_expert_professor"
+            
+            # Registra l'agente specializzato in FL
+            success = self.controller.register_agent(
+                agent_id=agent_id,
+                agent_type="Professor",
+                lab_id="test_lab",
+                specialization="FL Systems Architecture"
+            )
+            
+            if not success:
+                logger.error(f"Failed to register FL expert agent")
+                return False
+            
+            # Scenario di test: scelta di un algoritmo FL per dati non-IID
+            fl_scenario = {
+                "data_distribution": "non-IID",
+                "client_resources": "heterogeneous",
+                "privacy_requirements": "high",
+                "communication_constraints": "moderate"
+            }
+            
+            # Genera decisione usando LLM
+            decision = await self.controller.generate_fl_decision(
+                agent_id=agent_id,
+                scenario=fl_scenario
+            )
+            
+            if not decision:
+                logger.error("Failed to generate FL decision")
+                return False
+            
+            logger.info(f"FL decision from {agent_id}: {decision}")
+            
+            # Verifica che la decisione sia applicabile
+            if "algorithm" in decision and "rationale" in decision:
+                logger.info(f"Selected algorithm: {decision['algorithm']}")
+                logger.info(f"Rationale: {decision['rationale']}")
+                
+                # Simula l'applicazione della decisione al sistema FL
+                if self.fl_system:
+                    success = self.fl_system.configure_algorithm(decision["algorithm"])
+                    logger.info(f"Algorithm configuration success: {success}")
+            else:
+                logger.warning("Decision format unexpected")
+            
+            logger.info("FL decision making test completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"FL decision making test failed: {str(e)}")
+            return False
+    
+    async def test_adaptive_behavior(self):
+        """Testa il comportamento adattivo degli agenti in risposta a cambiamenti."""
+        logger.info("=== Test Adaptive Behavior ===")
+        
+        try:
+            # Crea un agente per il test
+            agent_id = "adaptive_researcher"
+            
+            # Registra l'agente
+            success = self.controller.register_agent(
+                agent_id=agent_id,
+                agent_type="Researcher",
+                lab_id="test_lab",
+                specialization="Non-IID Data Handling"
+            )
+            
+            if not success:
+                logger.error(f"Failed to register adaptive agent")
+                return False
+            
+            # Serie di eventi a cui l'agente deve adattarsi
+            events = [
+                "Normal working conditions",
+                "Privacy breach detected in the system",
+                "New dataset with extreme non-IID distribution introduced",
+                "Communication failure between labs"
+            ]
+            
+            responses = []
+            
+            # Genera risposte a ciascun evento
+            for event in events:
+                logger.info(f"Testing adaptation to event: '{event}'")
+                
+                response = await self.controller.generate_agent_dialog(
+                    agent_id=agent_id,
+                    situation=event
+                )
+                
+                if not response or response.startswith("Error"):
+                    logger.error(f"Failed to generate response to event: {event}")
+                    continue
+                
+                logger.info(f"Response to '{event}': '{response}'")
+                responses.append(response)
+            
+            # Verifica la variabilità delle risposte
+            if len(set(responses)) < len(responses) * 0.8:  # Almeno 80% uniche
+                logger.warning("Low response variability detected")
+            else:
+                logger.info("Good response variability observed")
+            
+            # Verifica l'adattamento alle condizioni
+            event_consistency = await self.connector.evaluate_response_appropriateness(
+                events=events,
+                responses=responses
+            )
+            
+            logger.info(f"Event-response consistency score: {event_consistency}")
+            
+            logger.info("Adaptive behavior test completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Adaptive behavior test failed: {str(e)}")
+            return False
+
+async def run_all_tests():
+    """Esegue tutti i test avanzati di integrazione."""
+    logger.info("Starting advanced LLM integration tests")
+    
+    test_suite = AdvancedLLMIntegrationTest()
+    
+    try:
+        setup_success = await test_suite.setup()
+        if not setup_success:
+            logger.error("Test environment setup failed")
+            return False
+        
+        # Esegui i test
+        results = {
+            "multi_agent_interaction": await test_suite.test_multi_agent_interaction(),
+            "fl_decision_making": await test_suite.test_fl_decision_making(),
+            "adaptive_behavior": await test_suite.test_adaptive_behavior()
+        }
+        
+        # Riepilogo risultati
+        logger.info("=== Advanced Test Results ===")
+        for test_name, result in results.items():
+            status = "PASS" if result else "FAIL" if result is False else "SKIPPED"
+            logger.info(f"{test_name}: {status}")
+        
+        all_passed = all(result is True or result is None for result in results.values())
+        return all_passed
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in test suite: {str(e)}")
+        return False
+    finally:
+        await test_suite.teardown()
+
+if __name__ == "__main__":
+    asyncio.run(run_all_tests())

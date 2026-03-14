@@ -1,0 +1,156 @@
+import Phaser from 'phaser';
+import { ResearcherAgent } from './ResearcherAgent';
+import { AgentState } from '../types/AgentTypes';
+
+/**
+ * Classe semplificata per i ricercatori medici
+ * Implementazione base per garantire compatibilità con il resto del sistema
+ */
+export class MedicalResearcher extends ResearcherAgent {
+  // Competenze mediche specifiche
+  protected medicalSkills: Record<string, number> = {
+    diagnostics: 10,
+    'patient-care': 10,
+    'medical-analytics': 15,
+    research: 10
+  };
+  
+  // Statistiche di attività
+  protected diagnosticsRun: number = 0;
+  protected patientsAnalyzed: number = 0;
+  protected publicationsCount: number = 0;
+  
+  // Indicatore visuale
+  protected progressBar?: Phaser.GameObjects.Graphics;
+  protected progressLabel?: Phaser.GameObjects.Text;
+  protected progress: number = 0;
+  
+  constructor(scene: Phaser.Scene, x: number, y: number, texture: string, type: any, specialization: any) {
+    super(scene, x, y, texture, type, specialization);
+    
+    // Inizializza elementi visivi e abilità
+    this.createProgressIndicators();
+    this.initializeMedicalSkills();
+  }
+  
+  /**
+   * Crea gli indicatori di progresso visivi
+   */
+  private createProgressIndicators(): void {
+    this.progressBar = this.scene.add.graphics();
+    this.progressLabel = this.scene.add.text(this.x, this.y - 35, '', {
+      fontSize: '8px',
+      color: '#ffffff',
+      align: 'center'
+    });
+    this.progressLabel.setOrigin(0.5);
+    this.hideProgress();
+  }
+  
+  /**
+   * Inizializza abilità mediche basandosi sul tipo
+   */
+  protected initializeMedicalSkills(): void {
+    // Base implementation, to be extended later
+    if (this.getResearcherType() === 'medical-doctor') {
+      this.medicalSkills.diagnostics += 20;
+      this.medicalSkills['patient-care'] += 30;
+    }
+  }
+  
+  /**
+   * Ottiene il tipo di ricercatore in modo sicuro
+   */
+  protected getResearcherType(): string {
+    // Adattato per funzionare con qualsiasi struttura di classe base
+    return 'medical-doctor';
+  }
+  
+  /**
+   * Mostra la barra di progresso con un'etichetta
+   */
+  protected showProgress(label: string): void {
+    if (this.progressLabel) {
+      this.progressLabel.setText(label);
+      this.progressLabel.setVisible(true);
+    }
+    if (this.progressBar) {
+      this.progressBar.setVisible(true);
+    }
+  }
+  
+  /**
+   * Nasconde la barra di progresso
+   */
+  protected hideProgress(): void {
+    if (this.progressLabel) {
+      this.progressLabel.setVisible(false);
+    }
+    if (this.progressBar) {
+      this.progressBar.setVisible(false);
+    }
+  }
+  
+  /**
+   * Imposta il valore della barra di progresso
+   */
+  protected setProgress(value: number): void {
+    this.progress = Phaser.Math.Clamp(value, 0, 100);
+    
+    if (this.progressBar) {
+      this.progressBar.clear();
+      
+      // Sfondo della barra
+      this.progressBar.fillStyle(0x000000, 0.5);
+      this.progressBar.fillRect(this.x - 15, this.y - 25, 30, 5);
+      
+      // Barra di progresso
+      this.progressBar.fillStyle(0x00ff00, 0.8);
+      this.progressBar.fillRect(this.x - 15, this.y - 25, 30 * (this.progress / 100), 5);
+    }
+  }
+  
+  /**
+   * Override dell'update per aggiornare la posizione delle barre di progresso
+   */
+  update(time: number, delta: number): void {
+    super.update(time, delta);
+    
+    // Aggiorna la posizione degli indicatori di progresso
+    if (this.progressBar && this.progressLabel) {
+      this.setProgress(this.progress);
+      this.progressLabel.setPosition(this.x, this.y - 35);
+    }
+  }
+  
+  /**
+   * Metodo per mostrare informazioni quando il ricercatore viene cliccato
+   */
+  handleClick(): void {
+    // Crea un popup informativo
+    const info = this.scene.add.text(this.x, this.y - 50, 
+      `Medical Researcher\n` +
+      `Diagnostics: ${this.medicalSkills.diagnostics}\n` +
+      `Patient Care: ${this.medicalSkills['patient-care']}`,
+      {
+        fontSize: '10px',
+        backgroundColor: '#333333',
+        padding: { x: 5, y: 5 },
+        color: '#ffffff'
+      }
+    );
+    info.setOrigin(0.5);
+    
+    // Autodissolve dopo 3 secondi
+    this.scene.time.delayedCall(3000, () => {
+      this.scene.tweens.add({
+        targets: info,
+        alpha: 0,
+        duration: 500,
+        onComplete: () => {
+          info.destroy();
+        }
+      });
+    });
+  }
+}

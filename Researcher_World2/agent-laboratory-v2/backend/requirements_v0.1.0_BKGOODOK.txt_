@@ -1,0 +1,87 @@
+absl-py @ file:///home/conda/feedstock_root/build_artifacts/absl-py_1742562417367/work
+annotated-types @ file:///home/conda/feedstock_root/build_artifacts/annotated-types_1733247046149/work
+anyio @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_anyio_1742243108/work
+astunparse @ file:///home/conda/feedstock_root/build_artifacts/astunparse_1736248061654/work
+Brotli @ file:///Users/runner/miniforge3/conda-bld/brotli-split_1725267563793/work
+cached-property @ file:///home/conda/feedstock_root/build_artifacts/cached_property_1615209429212/work
+certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1739515848642/work/certifi
+cffi @ file:///Users/runner/miniforge3/conda-bld/cffi_1725560578465/work
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1735929714516/work
+click @ file:///home/conda/feedstock_root/build_artifacts/click_1734858813237/work
+dnspython @ file:///home/conda/feedstock_root/build_artifacts/dnspython_1733256735222/work
+email_validator @ file:///home/conda/feedstock_root/build_artifacts/email-validator-meta_1733300719943/work
+exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1733208806608/work
+fastapi @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_fastapi_1742822207/work
+fastapi-cli @ file:///home/conda/feedstock_root/build_artifacts/fastapi-cli_1734302308128/work
+flatbuffers @ file:///home/conda/feedstock_root/build_artifacts/python-flatbuffers_1739279199749/work
+gast @ file:///home/conda/feedstock_root/build_artifacts/gast_1733299680490/work
+google-pasta @ file:///home/conda/feedstock_root/build_artifacts/google-pasta_1733852499742/work
+grpcio @ file:///Users/runner/miniforge3/conda-bld/grpc-split_1740784252780/work
+h11 @ file:///home/conda/feedstock_root/build_artifacts/h11_1733327467879/work
+h2 @ file:///home/conda/feedstock_root/build_artifacts/h2_1738578511449/work
+h5py @ file:///Users/runner/miniforge3/conda-bld/h5py_1739952812377/work
+hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1737618293087/work
+httpcore @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_httpcore_1731707562/work
+httptools @ file:///Users/runner/miniforge3/conda-bld/httptools_1732707689010/work
+httpx @ file:///home/conda/feedstock_root/build_artifacts/httpx_1733663348460/work
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1733211830134/work
+importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1737420181517/work
+Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/jinja2_1741263328855/work
+keras @ file:///home/conda/feedstock_root/build_artifacts/keras_1741854587245/work
+Markdown @ file:///home/conda/feedstock_root/build_artifacts/markdown_1710435156458/work
+markdown-it-py @ file:///home/conda/feedstock_root/build_artifacts/markdown-it-py_1733250460757/work
+MarkupSafe @ file:///Users/runner/miniforge3/conda-bld/markupsafe_1733219728782/work
+mdurl @ file:///home/conda/feedstock_root/build_artifacts/mdurl_1733255585584/work
+Mesa==3.1.5
+ml-dtypes @ file:///Users/runner/miniforge3/conda-bld/ml_dtypes_1725475050009/work
+namex @ file:///home/conda/feedstock_root/build_artifacts/namex_1733858070416/work
+numpy @ file:///Users/runner/miniforge3/conda-bld/numpy_1742254909247/work/dist/numpy-2.2.4-cp312-cp312-macosx_11_0_arm64.whl#sha256=0d8fba56a4047fed12f3935375f8e330e0a2f24420ffaeaa05ab556e39edc34b
+opt_einsum @ file:///home/conda/feedstock_root/build_artifacts/opt_einsum_1733687912731/work
+optree @ file:///Users/runner/miniforge3/conda-bld/optree_1744035209329/work
+packaging @ file:///home/conda/feedstock_root/build_artifacts/packaging_1733203243479/work
+pandas==2.2.3
+protobuf @ file:///Users/runner/miniforge3/conda-bld/protobuf_1731365513768/work/bazel-bin/python/dist/protobuf-5.28.3-cp312-abi3-macosx_11_0_arm64.whl#sha256=aac4425bec324c872c01ce2fed0b88e69797312e846bdd7c171fbebcd619d858
+pycparser @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pycparser_1733195786/work
+pydantic @ file:///home/conda/feedstock_root/build_artifacts/pydantic_1743701108924/work
+pydantic_core @ file:///Users/runner/miniforge3/conda-bld/bld/rattler-build_pydantic-core_1743607651/work
+Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1736243443484/work
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1733217236728/work
+python-dateutil==2.9.0.post0
+python-dotenv @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_python-dotenv_1742948348/work
+python-multipart @ file:///home/conda/feedstock_root/build_artifacts/python-multipart_1734420773152/work
+pytz==2025.2
+PyYAML @ file:///Users/runner/miniforge3/conda-bld/pyyaml_1737454693669/work
+requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1733217035951/work
+rich @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_rich_1743371105/work/dist
+rich-toolkit @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_rich-toolkit_1733750834/work
+scipy==1.15.2
+setuptools==78.1.0
+shellingham @ file:///home/conda/feedstock_root/build_artifacts/shellingham_1733300899265/work
+six @ file:///home/conda/feedstock_root/build_artifacts/six_1733380938961/work
+sniffio @ file:///home/conda/feedstock_root/build_artifacts/sniffio_1733244044561/work
+starlette @ file:///home/conda/feedstock_root/build_artifacts/starlette_1741450612959/work
+tensorboard @ file:///home/conda/feedstock_root/build_artifacts/tensorboard_1733820672324/work/tensorboard-2.18.0-py3-none-any.whl#sha256=107ca4821745f73e2aefa02c50ff70a9b694f39f790b11e6f682f7d326745eab
+tensorboard_data_server @ file:///Users/runner/miniforge3/conda-bld/tensorboard-data-server_1728639727952/work/tensorboard_data_server-0.7.0-py3-none-any.whl#sha256=73ea95609b36e88bee42dddabc1609c4a10374c0021e163ff18688c3e5643d34
+tensorflow @ file:///Users/isuruf/projects/tensorflow-feedstock/miniforge3/conda-bld/tensorflow-split_1739885214455/work/tensorflow_pkg/tensorflow-2.18.0-cp312-cp312-macosx_11_0_arm64.whl#sha256=c67f2f954391ee7ee1ed3280475c564d7d5d63a533dfe0e09ce98b27e50048ba
+tensorflow_estimator @ file:///Users/isuruf/projects/tensorflow-feedstock/miniforge3/conda-bld/tensorflow-split_1739885214455/work/tensorflow-estimator/wheel_dir/tensorflow_estimator-2.15.0-py2.py3-none-any.whl#sha256=beb5db75d4d73b3ff014ebab3b710cc8e05e030194a13d3310df24bb80c965c9
+termcolor @ file:///home/conda/feedstock_root/build_artifacts/termcolor_1743676967121/work
+tqdm==4.67.1
+typer==0.15.2
+typer-slim==0.15.2
+typing-inspection @ file:///home/conda/feedstock_root/build_artifacts/typing-inspection_1741438046699/work
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1743820059/work
+tzdata==2025.2
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1734859416348/work
+uvicorn @ file:///home/conda/feedstock_root/build_artifacts/uvicorn_1734292939144/work
+uvloop @ file:///Users/runner/miniforge3/conda-bld/uvloop_1730214386743/work
+watchfiles @ file:///Users/runner/miniforge3/conda-bld/watchfiles_1736550510723/work
+websockets @ file:///Users/runner/miniforge3/conda-bld/websockets_1741285531809/work
+Werkzeug @ file:///home/conda/feedstock_root/build_artifacts/werkzeug_1733160440960/work
+wheel==0.45.1
+wrapt @ file:///Users/runner/miniforge3/conda-bld/wrapt_1736869483984/work
+zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1732827521216/work
+zstandard==0.23.0
+//httpx>=0.24.0  # Client HTTP asincrono
+//tenacity>=8.2.0  # Per gestione dei retry
+//pydantic>=2.0.0  # Per la validazione dei dati

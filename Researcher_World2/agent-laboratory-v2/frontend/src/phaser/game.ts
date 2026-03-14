@@ -1,0 +1,297 @@
+// src/phaser/game.ts
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
+
+import Phaser from 'phaser';
+import { MercatorumLabScene } from './scenes/Mercatorum/MercatorumLabScene';
+import { BlekingeLabScene } from './scenes/BlekingeLabScene';
+import { OPBGLabScene } from './scenes/OPBGLabScene';
+import { WorldMapScene } from './scenes/WorldMapScene';
+
+import { safeStorage, isLocalStorageAvailable } from '../utils/StorageUtils';
+import { debugScenes } from '../utils/debugScenes';
+import { applyAssetLoaderFix } from './utils/AssetLoader';
+
+import { FLEventHandler } from './fl/FLEventHandler';
+import { AudioManager } from './utils/audioManager';
+
+/* -------------------------------------------------------------------------- */
+/*                        Chiavi costanti delle nostre scene                  */
+/* -------------------------------------------------------------------------- */
+export const SCENE_KEYS = {
+  MERCATORUM: 'MercatorumLabScene',
+  BLEKINGE:   'BlekingeLabScene',
+  OPBG:       'OPBGLabScene',
+  WORLD_MAP:  'WorldMapScene',  // Aggiunta chiave per la mappa mondiale
+} as const;
+
+/* -------------------------------------------------------------------------- */
+/*                 Estensione dell'interfaccia Phaser.Game                    */
+/* -------------------------------------------------------------------------- */
+export interface Game extends Phaser.Game {
+  getSceneKeys?: () => string[];
+  startLabScene?: (key: string) => void;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                         Configurazione base di Phaser                      */
+/* -------------------------------------------------------------------------- */
+const gameConfig: Phaser.Types.Core.GameConfig = {
+    type: Phaser.AUTO,
+    parent: 'phaser-game',
+    width: 800,
+    height: 600,
+    backgroundColor: '#4b4b4b',
+    pixelArt: true,
+    physics: {
+      default: 'arcade',
+      arcade: {
+        gravity: { x: 0, y: 0 },
+        debug: process.env.NODE_ENV === 'development',
+      },
+    },
+    scene: [WorldMapScene, MercatorumLabScene, BlekingeLabScene, OPBGLabScene], // Aggiunta WorldMapScene come prima scena
+    scale: {
+      mode: Phaser.Scale.RESIZE,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
+    render: {
+      antialias: false,
+      pixelArt: true,
+      roundPixels: true,
+    },
+    // Disabilita completamente l'audio per evitare problemi con AudioContext
+    audio: {
+      noAudio: true
+    },
+    callbacks: {
+      postBoot: (game: any) => {
+        console.log('[Phaser] Boot completato');
+  
+        if (process.env.NODE_ENV === 'development') {
+          const keys = game.scene.scenes.map((s: any) => s.scene.key);
+          console.table(keys, ['Scene disponibili dopo il boot']);
+        }
+      },
+    },
+  };
+
+/* -------------------------------------------------------------------------- */
+/*                            Singleton dell'istanza                          */
+/* -------------------------------------------------------------------------- */
+let gameInstance: Game | null = null;
+let flEventHandler: FLEventHandler | null = null;
+
+/* -------------------------------------------------------------------------- */
+/*                  Funzione per abilitare l'audio con interazione utente     */
+/* -------------------------------------------------------------------------- */
+function enableAudioAfterUserInteraction(): void {
+  const unlockAudio = () => {
+    if (gameInstance) {
+      AudioManager.resumeAudioContext(gameInstance);
+    }
+    
+    // Rimuovi i listener dopo che l'audio è stato sbloccato
+    document.removeEventListener('click', unlockAudio);
+    document.removeEventListener('touchstart', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
+  };
+
+  document.addEventListener('click', unlockAudio, false);
+  document.addEventListener('touchstart', unlockAudio, false);
+  document.addEventListener('keydown', unlockAudio, false);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                              API pubbliche                                 */
+/* -------------------------------------------------------------------------- */
+export function initGame(containerId?: string): Game {
+  if (gameInstance) return gameInstance;
+
+  applyAssetLoaderFix();
+  if (containerId) gameConfig.parent = containerId;
+
+  patchStorageForPhaser();
+
+  // 1. Creo l'istanza
+  gameInstance = new Phaser.Game(gameConfig) as Game;
+
+  // 2. Estendo con utilità custom
+  enhanceGameInstance(gameInstance);
+
+  // 3. Debug (solo in dev) – ORA con argomento corretto
+  if (process.env.NODE_ENV === 'development') {
+    debugScenes(gameInstance);
+  }
+
+  // 4. Inizializza il gestore eventi FL
+  flEventHandler = new FLEventHandler(gameInstance);
+
+  // 5. Abilito l'audio dopo interazione utente
+  enableAudioAfterUserInteraction();
+
+  // 6. Safe-guard
+  window.addEventListener('error', (e) => {
+    if (
+      e.error?.message?.includes('WebGL context') ||
+      e.error?.message?.includes('Phaser')
+    ) {
+      console.error('[Phaser] Global error catched:', e.error);
+    }
+    
+    // Gestione specifica per errori AudioContext
+    if (e.error?.message?.includes('AudioContext')) {
+      console.warn('[Phaser] Audio context error:', e.error);
+      // Evita di propagare l'errore in produzione
+      if (process.env.NODE_ENV !== 'development') {
+        e.preventDefault();
+      }
+    }
+  });
+
+  return gameInstance;
+}
+
+export function sceneExists(sceneKey: string): boolean {
+  try {
+    return !!gameInstance?.scene.getScene(sceneKey);
+  } catch {
+    return false;
+  }
+}
+
+export function reloadScene(sceneKey: string): boolean {
+  if (!gameInstance) return false;
+  if (sceneExists(sceneKey)) return true;
+
+  console.log(`[Phaser] "${sceneKey}" non trovata, la aggiungo al volo…`);
+
+  let SceneClass: any = null;
+  switch (sceneKey) {
+    case SCENE_KEYS.MERCATORUM:
+      SceneClass = MercatorumLabScene;
+      break;
+    case SCENE_KEYS.BLEKINGE:
+      SceneClass = BlekingeLabScene;
+      break;
+    case SCENE_KEYS.OPBG:
+      SceneClass = OPBGLabScene;
+      break;
+    case SCENE_KEYS.WORLD_MAP:  // Aggiungiamo il case per la WorldMapScene
+      SceneClass = WorldMapScene;
+      break;
+  }
+
+  if (!SceneClass) {
+    console.error(`[Phaser] Nessuna classe corrisponde alla key ${sceneKey}`);
+    return false;
+  }
+
+  try {
+    gameInstance.scene.add(sceneKey, new SceneClass(), false);
+    console.log(`[Phaser] Scene "${sceneKey}" aggiunta con successo`);
+    return true;
+  } catch (err) {
+    console.error(`[Phaser] Errore nell'aggiungere "${sceneKey}":`, err);
+    return false;
+  }
+}
+
+export function destroyGame(): void {
+  if (!gameInstance) return;
+
+  try {
+    // Disattiva l'audio in modo sicuro prima di distruggere il gioco
+    if (gameInstance.sound && gameInstance.sound.context) {
+      try {
+        // Tenta di silenziare prima di chiudere
+        gameInstance.sound.mute = true;
+      } catch (e) {
+        console.warn('[Phaser] Error muting sound before destroy:', e);
+      }
+    }
+    
+    // Pulisce il gestore eventi FL
+    if (flEventHandler) {
+      flEventHandler.destroy();
+      flEventHandler = null;
+    }
+    
+    gameInstance.destroy(true);
+    console.log('[Phaser] Istanza distrutta');
+  } finally {
+    gameInstance = null;
+  }
+}
+
+export function getGameInstance(): Game | null {
+  return gameInstance;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                    Funzioni di supporto (private)                          */
+/* -------------------------------------------------------------------------- */
+function enhanceGameInstance(game: Game): void {
+  game.getSceneKeys = () => game.scene.scenes.map((s: any) => s.scene.key);
+
+  game.startLabScene = function (key: string): void {
+    if (!this.scene.getScene(key)) {
+      console.warn(`[Phaser] La scena "${key}" non esiste – abort`);
+      return;
+    }
+
+    /* 1. fermo ciò che è attivo */
+    this.scene.scenes.forEach((s: any) => {
+      if (s.scene.isActive()) {
+        // Usa AudioManager per operazioni audio sicure prima di fermare la scena
+        AudioManager.safeAudioOperation(s, (sound) => {
+          // Operazioni audio sicure se necessarie
+        });
+        s.scene.stop();
+      }
+    });
+
+    /* 1.5 Diamo un po' più di tempo per la pulizia */
+    setTimeout(() => {
+        /* 2. avvio la nuova */
+        this.scene.start(key);
+
+        /* 3. verifichiamo che sia davvero attiva */
+        setTimeout(() => {
+        const active = this.scene.isActive(key);
+        console.log(`[Phaser] "${key}" attiva?`, active);
+        if (!active) {
+            const forced = this.scene.getScene(key);
+            forced.scene.setActive(true).setVisible(true);
+        }
+        }, 250); // Aumentato da 120ms
+    }, 100); // Aggiungiamo un breve ritardo prima di avviare la nuova scena
+    };
+}
+
+function patchStorageForPhaser() {
+  if (isLocalStorageAvailable()) return;
+
+  console.warn('[Phaser] localStorage non disponibile – uso safeStorage');
+
+  const proxy = {
+    getItem: (k: string) => safeStorage.getItem(k),
+    setItem: (k: string, v: string) => safeStorage.setItem(k, v),
+    removeItem: (k: string) => safeStorage.removeItem(k),
+    clear: () => safeStorage.clear(),
+    key: (i: number) => safeStorage.key(i),
+    get length() {
+      return safeStorage.length;
+    },
+  };
+
+  try {
+    // @ts-ignore – overwrite non sempre permessa
+    window.localStorage = proxy;
+  } catch {
+    Object.defineProperty(window, 'localStorage', {
+      get() {
+        return proxy;
+      },
+    });
+  }
+}

@@ -1,0 +1,278 @@
+// frontend/src/phaser/game.ts
+
+import Phaser from 'phaser';
+import { MercatorumLab } from './scenes/MercatorumLab';
+import { BlekingeLabScene } from './scenes/BlekingeLabScene';
+import { OPBGLabScene } from './scenes/OPBGLabScene';
+// Importa l'utility di storage
+import { safeStorage, isLocalStorageAvailable } from '../utils/StorageUtils';
+// Importa utility di debug per gli asset
+import { debugAssets } from '../utils/assetDebug';
+
+// Definizione delle chiavi delle scene per un accesso sicuro
+export const SCENE_KEYS = {
+  MERCATORUM: 'MercatorumLab',
+  BLEKINGE: 'BlekingeLabScene',
+  OPBG: 'OPBGLabScene'
+} as const;
+
+// Estensione dell'interfaccia Game per accessibilità migliore
+export interface Game extends Phaser.Game {
+  // Proprietà aggiuntive specifiche della nostra implementazione
+  getSceneKeys?: () => string[];
+  startLabScene?: (key: string) => void;
+}
+
+// Configurazione del gioco
+const gameConfig: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  parent: 'phaser-game',
+  width: 800,
+  height: 600,
+  backgroundColor: '#4b4b4b',
+  pixelArt: true,
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { x: 0, y: 0 },
+      debug: process.env.NODE_ENV === 'development'
+    }
+  },
+  // Definizione delle scene
+  scene: [MercatorumLab, BlekingeLabScene, OPBGLabScene],
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  render: {
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true
+  },
+  callbacks: {
+    postBoot: (game) => {
+      // Eseguito dopo l'inizializzazione del gioco
+      console.log('Phaser game booted successfully');
+      
+      // Debug delle scene se in ambiente di sviluppo
+      if (process.env.NODE_ENV === 'development') {
+        const sceneKeys = game.scene.scenes.map(scene => scene.scene.key);
+        console.log('Available scenes after boot:', sceneKeys);
+      }
+    }
+  }
+};
+
+// Variabile per l'istanza singleton del gioco
+let gameInstance: Game | null = null;
+
+/**
+ * Inizializza il gioco Phaser
+ * @param containerId ID del container DOM
+ * @returns L'istanza del gioco
+ */
+export function initGame(containerId?: string): Game {
+  // Se l'istanza esiste già, restituiscila
+  if (gameInstance !== null) {
+    return gameInstance;
+  }
+  
+  // Modifica il container se specificato
+  if (containerId) {
+    gameConfig.parent = containerId;
+  }
+  
+  try {
+    // Patch localStorage per Phaser prima di inizializzare il gioco
+    patchStorageForPhaser();
+    
+    // Debug asset in ambiente di sviluppo
+    if (process.env.NODE_ENV === 'development') {
+      debugAssets();
+    }
+    
+    // Crea una nuova istanza del gioco
+    gameInstance = new Phaser.Game(gameConfig) as Game;
+    
+    // Aggiungi funzioni di utilità all'istanza
+    enhanceGameInstance(gameInstance);
+    
+    // Gestione errori a livello globale
+    window.addEventListener('error', (event) => {
+      if (event.error && event.error.message && 
+          (event.error.message.includes('WebGL context') || 
+           event.error.message.includes('Phaser'))) {
+        console.error('Phaser error caught:', event.error);
+      }
+    });
+    
+    return gameInstance;
+  } catch (error) {
+    console.error('Failed to initialize Phaser game:', error);
+    throw error;
+  }
+}
+
+/**
+ * Estende l'istanza del gioco con metodi di utilità
+ */
+function enhanceGameInstance(game: Game): void {
+  // Metodo per ottenere tutte le chiavi delle scene disponibili
+  game.getSceneKeys = function(): string[] {
+    return this.scene.scenes.map(scene => scene.scene.key);
+  };
+  
+  // Metodo semplificato per avviare una scena di laboratorio
+  game.startLabScene = function(key: string): void {
+    // Verifica se la scena esiste
+    if (!this.scene.getScene(key)) {
+      console.error(`Scene "${key}" does not exist in the game`);
+      
+      // Stampa tutte le scene disponibili per debug
+      if (this.getSceneKeys && typeof this.getSceneKeys === 'function') {
+        console.log('Available scenes:', this.getSceneKeys());
+      }
+      return;
+    }
+    
+    try {
+      // Stoppa tutte le scene attive
+      this.scene.scenes.forEach(scene => {
+        if (scene && scene.scene && typeof scene.scene.isActive === 'function' && scene.scene.isActive()) {
+          console.log(`Stopping scene: ${scene.scene.key}`);
+          scene.scene.stop();
+        }
+      });
+      
+      // Avvia la scena richiesta
+      console.log(`Starting scene: ${key}`);
+      this.scene.start(key);
+    } catch (error) {
+      console.error(`Error while switching to scene "${key}":`, error);
+    }
+  };
+}
+
+/**
+ * Applica una patch per sostituire localStorage con il nostro safeStorage
+ * Questo previene errori di "Access to storage is not allowed from this context"
+ */
+function patchStorageForPhaser() {
+  // Verifica se localStorage è disponibile
+  if (!isLocalStorageAvailable()) {
+    console.log('Patching localStorage for Phaser with safe storage...');
+    
+    try {
+      // Crea un proxy per localStorage che utilizza il nostro safeStorage
+      const localStorageProxy = {
+        getItem: (key: string) => safeStorage.getItem(key),
+        setItem: (key: string, value: string) => safeStorage.setItem(key, value),
+        removeItem: (key: string) => safeStorage.removeItem(key),
+        clear: () => safeStorage.clear(),
+        key: (index: number) => safeStorage.key(index),
+        get length() { return safeStorage.length; }
+      };
+      
+      // Cerca di sostituire localStorage con il nostro proxy
+      // Questo potrebbe non funzionare in alcuni browser per motivi di sicurezza
+      try {
+        // @ts-ignore - Tentativo di sovrascrittura (potrebbe non essere permesso)
+        window.localStorage = localStorageProxy;
+      } catch (e) {
+        console.warn('Could not replace localStorage directly:', e);
+        
+        // Alternativa: inietta proprietà singolarmente
+        Object.defineProperty(window, 'localStorage', {
+          get: function() { return localStorageProxy; }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to patch localStorage for Phaser:', error);
+    }
+  }
+}
+
+/**
+ * Verifica se una scena esiste nel gioco
+ * @param sceneKey La chiave della scena da verificare
+ * @returns True se la scena esiste, false altrimenti
+ */
+export function sceneExists(sceneKey: string): boolean {
+  if (!gameInstance) return false;
+  
+  try {
+    return gameInstance.scene.getScene(sceneKey) !== null;
+  } catch (error) {
+    console.error(`Error checking if scene "${sceneKey}" exists:`, error);
+    return false;
+  }
+}
+
+/**
+ * Ricarica manualmente una scena se necessario
+ * @param sceneKey La chiave della scena da ricaricare
+ */
+export function reloadScene(sceneKey: string): boolean {
+  if (!gameInstance) return false;
+  
+  // Verifica se la scena esiste
+  if (!sceneExists(sceneKey)) {
+    console.log(`Scene "${sceneKey}" does not exist, attempting to add it...`);
+    
+    try {
+      // Determina quale classe di scena creare in base alla chiave
+      let sceneClass = null;
+      
+      switch (sceneKey) {
+        case SCENE_KEYS.MERCATORUM:
+          sceneClass = MercatorumLab;
+          break;
+        case SCENE_KEYS.BLEKINGE:
+          sceneClass = BlekingeLabScene;
+          break;
+        case SCENE_KEYS.OPBG:
+          sceneClass = OPBGLabScene;
+          break;
+      }
+      
+      if (sceneClass) {
+        // Crea una nuova istanza della scena e aggiungila al gioco
+        const newScene = new sceneClass();
+        gameInstance.scene.add(sceneKey, newScene, false);
+        console.log(`Scene "${sceneKey}" added successfully`);
+        return true;
+      } else {
+        console.error(`No scene class found for key "${sceneKey}"`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`Error adding scene "${sceneKey}":`, error);
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Distrugge l'istanza del gioco
+ */
+export function destroyGame(): void {
+  if (gameInstance) {
+    try {
+      gameInstance.destroy(true);
+      gameInstance = null;
+      console.log('Phaser game instance destroyed');
+    } catch (error) {
+      console.error('Error destroying Phaser game:', error);
+    }
+  }
+}
+
+/**
+ * Ottiene l'istanza corrente del gioco
+ * @returns L'istanza del gioco o null se non inizializzata
+ */
+export function getGameInstance(): Game | null {
+  return gameInstance;
+}

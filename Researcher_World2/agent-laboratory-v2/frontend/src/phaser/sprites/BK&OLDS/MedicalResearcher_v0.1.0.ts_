@@ -1,0 +1,357 @@
+import { ResearcherAgent, ResearcherState, ResearcherSpecialization } from './ResearcherAgent';
+
+// Stati specifici per ricercatori medici
+export type MedicalResearcherState = 
+  ResearcherState | 
+  'clinical-care' | 'diagnostics' | 'patient-consultation' | 'secure-access';
+
+// Tipi di ricercatori medici
+export type MedicalResearcherType = 
+  'doctor' | 'biomedical-engineer';
+
+// Specializzazioni mediche
+export type MedicalSpecialization = 
+  ResearcherSpecialization |
+  'clinical-data' | 'diagnostic-model' | 'patient-specific' |
+  'medical-imaging' | 'biosignal-processing' | 'medical-device';
+
+/**
+ * Classe che rappresenta un ricercatore medico nel laboratorio OPBG.
+ * Estende la classe ResearcherAgent con comportamenti specifici per l'ambito medico.
+ */
+export class MedicalResearcher extends ResearcherAgent {
+  // Stato corrente specifico per medici
+  protected state: MedicalResearcherState = 'idle';
+  
+  // Tipo specifico di ricercatore medico
+  protected medicalType: MedicalResearcherType;
+  
+  // Specializzazione medica
+  protected medicalSpecialization: MedicalSpecialization;
+  
+  // Livello di abilità in ambito medico (0-100)
+  protected medicalSkills: Record<string, number> = {
+    'diagnosis': 50,
+    'patient-care': 50,
+    'medical-knowledge': 50,
+    'research': 50,
+    'ethics': 50
+  };
+  
+  /**
+   * Costruttore del ricercatore medico
+   * @param scene La scena a cui appartiene il ricercatore
+   * @param x Posizione X iniziale
+   * @param y Posizione Y iniziale
+   * @param texture Chiave della texture da utilizzare
+   * @param type Tipo di ricercatore medico
+   * @param specialization Specializzazione del ricercatore
+   * @param frame Frame iniziale dello spritesheet
+   */
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    texture: string,
+    type: MedicalResearcherType,
+    specialization: MedicalSpecialization,
+    frame?: string | number
+  ) {
+    // Mappiamo i tipi medici a tipi di ricercatori per la classe base
+    let researcherType: any = 'researcher'; // default
+    if (type === 'doctor') {
+      researcherType = 'professor';
+    } else if (type === 'biomedical-engineer') {
+      researcherType = 'ml-engineer';
+    }
+    
+    // Chiamiamo il costruttore della classe base
+    super(scene, x, y, texture, researcherType, specialization as ResearcherSpecialization, frame);
+    
+    // Salviamo i tipi specifici per i medici
+    this.medicalType = type;
+    this.medicalSpecialization = specialization;
+    
+    // Inizializzazione delle abilità mediche
+    this.initializeMedicalSkills();
+  }
+  
+  /**
+   * Override del metodo update
+   */
+  update(time: number, delta: number): void {
+    // Chiamare update della classe base
+    super.update(time, delta);
+    
+    // Comportamenti specifici per ricercatori medici
+    this.updateMedicalBehavior(time, delta);
+  }
+  
+  /**
+   * Inizializza le abilità mediche in base al tipo e specializzazione
+   */
+  private initializeMedicalSkills(): void {
+    // Base abilità in base al tipo
+    switch (this.medicalType) {
+      case 'doctor':
+        this.medicalSkills['diagnosis'] = 80;
+        this.medicalSkills['patient-care'] = 90;
+        this.medicalSkills['medical-knowledge'] = 85;
+        this.medicalSkills['research'] = 60;
+        this.medicalSkills['ethics'] = 70;
+        break;
+        
+      case 'biomedical-engineer':
+        this.medicalSkills['diagnosis'] = 50;
+        this.medicalSkills['patient-care'] = 40;
+        this.medicalSkills['medical-knowledge'] = 70;
+        this.medicalSkills['research'] = 85;
+        this.medicalSkills['ethics'] = 60;
+        break;
+    }
+    
+    // Modifica in base alla specializzazione
+    this.adjustMedicalSkillsBySpecialization();
+  }
+  
+  /**
+   * Modifica le abilità mediche in base alla specializzazione
+   */
+  private adjustMedicalSkillsBySpecialization(): void {
+    // Ogni specializzazione dà un bonus in aree specifiche
+    switch (this.medicalSpecialization) {
+      case 'clinical-data':
+        this.medicalSkills['diagnosis'] += 15;
+        this.medicalSkills['research'] += 10;
+        break;
+        
+      case 'diagnostic-model':
+        this.medicalSkills['diagnosis'] += 20;
+        this.medicalSkills['medical-knowledge'] += 5;
+        break;
+        
+      case 'patient-specific':
+        this.medicalSkills['patient-care'] += 15;
+        this.medicalSkills['ethics'] += 10;
+        break;
+        
+      case 'medical-imaging':
+        this.medicalSkills['diagnosis'] += 10;
+        this.medicalSkills['research'] += 15;
+        break;
+        
+      case 'biosignal-processing':
+        this.medicalSkills['diagnosis'] += 5;
+        this.medicalSkills['research'] += 20;
+        break;
+        
+      case 'medical-device':
+        this.medicalSkills['research'] += 15;
+        this.medicalSkills['patient-care'] += 10;
+        break;
+    }
+    
+    // Limita i valori tra 0 e 100
+    Object.keys(this.medicalSkills).forEach(key => {
+      this.medicalSkills[key] = Math.min(100, Math.max(0, this.medicalSkills[key]));
+    });
+  }
+  
+  /**
+   * Comportamenti specifici per ricercatori medici
+   */
+  private updateMedicalBehavior(time: number, delta: number): void {
+    // Diversi comportamenti in base allo stato
+    switch (this.state) {
+      case 'clinical-care':
+        // Fornisce cure cliniche
+        if (Phaser.Math.Between(0, 1000) < 10) { // 1% probabilità ogni secondo
+          this.gainMedicalSkill('patient-care', 0.2);
+          this.showCareIndicator();
+        }
+        break;
+        
+      case 'secure-access':
+        // Accede ai dati protetti dei pazienti
+        if (Phaser.Math.Between(0, 1000) < 5) { // 0.5% probabilità ogni secondo
+          this.gainMedicalSkill('ethics', 0.1);
+          this.gainKnowledge('privacy', 0.1);
+        }
+        break;
+        
+      case 'diagnostics':
+        // Fa diagnosi e analisi
+        if (Phaser.Math.Between(0, 1000) < 7) { // 0.7% probabilità ogni secondo
+          this.gainMedicalSkill('diagnosis', 0.2);
+          this.showDiagnosticIndicator();
+        }
+        break;
+    }
+  }
+  
+  /**
+   * Aumenta l'abilità medica in un'area specifica
+   */
+  private gainMedicalSkill(area: string, amount = 0.1): void {
+    // Verifica che l'area esista
+    if (this.medicalSkills[area] !== undefined) {
+      // Aumenta la competenza di una piccola quantità
+      this.medicalSkills[area] += amount;
+      
+      // Limita a 100
+      this.medicalSkills[area] = Math.min(100, this.medicalSkills[area]);
+    }
+  }
+  
+  /**
+   * Mostra un indicatore di cura
+   */
+  private showCareIndicator(): void {
+    // Crea un'icona di cura sopra il medico
+    const careIcon = this.scene.add.text(this.x, this.y - 40, '❤️', { fontSize: '16px' });
+    
+    // Animazione di fade out
+    this.scene.tweens.add({
+      targets: careIcon,
+      y: careIcon.y - 20,
+      alpha: { from: 1, to: 0 },
+      duration: 1000,
+      onComplete: () => {
+        careIcon.destroy();
+      }
+    });
+  }
+  
+  /**
+   * Mostra un indicatore di diagnosi
+   */
+  private showDiagnosticIndicator(): void {
+    // Crea un'icona di diagnosi sopra il medico
+    const diagIcon = this.scene.add.text(this.x, this.y - 40, '🔬', { fontSize: '16px' });
+    
+    // Animazione di fade out
+    this.scene.tweens.add({
+      targets: diagIcon,
+      y: diagIcon.y - 20,
+      alpha: { from: 1, to: 0 },
+      duration: 1000,
+      onComplete: () => {
+        diagIcon.destroy();
+      }
+    });
+  }
+  
+  /**
+   * Override per personalizzare la creazione della bolla di stato
+   */
+  protected createOrUpdateStatusBubble(): void {
+    // Se esiste già una bolla, rimuovila
+    if (this.statusBubble) {
+      this.statusBubble.destroy();
+    }
+    
+    // Crea un nuovo container per la bolla
+    this.statusBubble = this.scene.add.container(this.x, this.y - 30);
+    
+    // Sfondo della bolla - per i medici usiamo uno sfondo leggermente diverso
+    const background = this.scene.add.graphics();
+    background.fillStyle(0xf0f0ff, 0.8); // Sfondo leggermente bluastro
+    background.fillRoundedRect(-20, -10, 40, 20, 5);
+    background.lineStyle(1, 0x0000ff, 0.4); // Bordo blu
+    background.strokeRoundedRect(-20, -10, 40, 20, 5);
+    
+    // Icona o testo in base allo stato
+    let icon;
+    switch (this.state) {
+      case 'clinical-care':
+        icon = this.scene.add.text(0, 0, '🏥', { fontSize: '12px' });
+        break;
+      case 'secure-access':
+        icon = this.scene.add.text(0, 0, '🔒', { fontSize: '12px' });
+        break;
+      case 'diagnostics':
+        icon = this.scene.add.text(0, 0, '📊', { fontSize: '12px' });
+        break;
+      case 'patient-consultation':
+        icon = this.scene.add.text(0, 0, '👥', { fontSize: '12px' });
+        break;
+      default:
+        // Per altri stati usiamo gli stati base
+        switch (this.state) {
+          case 'idle':
+            icon = this.scene.add.text(0, 0, '💤', { fontSize: '12px' });
+            break;
+          case 'moving':
+            icon = this.scene.add.text(0, 0, '🚶', { fontSize: '12px' });
+            break;
+          case 'working':
+            icon = this.scene.add.text(0, 0, '💻', { fontSize: '12px' });
+            break;
+          case 'resting':
+            icon = this.scene.add.text(0, 0, '☕', { fontSize: '12px' });
+            break;
+          case 'analyzing':
+            icon = this.scene.add.text(0, 0, '📈', { fontSize: '12px' });
+            break;
+          default:
+            icon = this.scene.add.text(0, 0, '❓', { fontSize: '12px' });
+        }
+    }
+    
+    // Centra l'icona
+    icon.setOrigin(0.5, 0.5);
+    
+    // Aggiungi gli elementi al container
+    this.statusBubble.add([background, icon]);
+  }
+  
+  /**
+   * Override per picking di stati casuali specifici per ricercatori medici
+   */
+  protected pickRandomState(): void {
+    // Stati possibili per un ricercatore medico
+    const possibleStates: MedicalResearcherState[] = [
+      'idle', 'moving', 'working', 'resting', 
+      'clinical-care', 'diagnostics', 'analyzing'
+    ];
+    
+    // Stati specifici per il tipo di medico
+    if (this.medicalType === 'doctor') {
+      possibleStates.push('patient-consultation');
+    }
+    
+    if (this.medicalSpecialization === 'clinical-data' || 
+        this.medicalSpecialization === 'medical-imaging') {
+      possibleStates.push('secure-access');
+    }
+    
+    // Evita di selezionare lo stesso stato attuale
+    let filteredStates = possibleStates.filter(s => s !== this.state);
+    
+    // Se non ci sono stati disponibili, usa tutti
+    if (filteredStates.length === 0) {
+      filteredStates = possibleStates;
+    }
+    
+    // Seleziona uno stato casuale
+    const newState = Phaser.Utils.Array.GetRandom(filteredStates);
+    
+    // Imposta il nuovo stato
+    this.setState(newState as MedicalResearcherState);
+  }
+  
+  /**
+   * Override per impostare lo stato
+   */
+  setState(newState: MedicalResearcherState): void {
+    // Chiama il metodo della classe base
+    super.setState(newState as ResearcherState);
+  }
+  
+  /**
+   * Override per ottenere lo stato
+   */
+  getState(): MedicalResearcherState {
+    return this.state as MedicalResearcherState;
+  }
+}

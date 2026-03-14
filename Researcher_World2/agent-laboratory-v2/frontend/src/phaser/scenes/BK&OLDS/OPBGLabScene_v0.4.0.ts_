@@ -1,0 +1,471 @@
+// frontend/src/phaser/scenes/OPBGLabScene.ts
+
+import { BaseLabScene, LabTheme } from './BaseLabScene';
+import { ResearcherAgent, Specialization } from '../sprites/ResearcherAgent';
+import type { ResearcherType } from '../sprites/ResearcherAgent';
+import { AgentState } from '../sprites/Agent';
+import { SCENE_KEYS } from '../game';
+import { ASSETS } from '../assetConfig';
+
+export class OPBGLabScene extends BaseLabScene {
+  // Tema specifico per il laboratorio OPBG
+  protected theme: LabTheme = {
+    name: 'OPBG Lab',
+    backgroundColor: 0xffffff,
+    tilesetKey: 'opbg-tileset',
+    colorPalette: {
+      primary: 0x00b8d4,    // Verde acqua
+      secondary: 0xffb6c1,  // Rosa pallido
+      accent: 0x4fc7ff,     // Blu cielo
+      background: 0xf0f0f0  // Bianco
+    }
+  };
+
+  // Agenti specifici per OPBG
+  private medicalResearchers: ResearcherAgent[] = [];
+
+  constructor() {
+    super('OPBGLabScene');
+    console.log('OPBGLabScene constructor called');
+  }
+  
+  init(): void {
+    console.log('OPBGLabScene init START');
+    try {
+      super.init();
+      this.medicalResearchers = [];
+      console.log('OPBGLabScene init COMPLETE');
+    } catch (error) {
+      console.error('Error in OPBGLabScene init:', error);
+    }
+  }
+  
+  preload(): void {
+    console.log('OPBGLabScene preload START');
+    try {
+      // Carica asset base dalla classe genitore
+      super.preload();
+      
+      // Carica asset specifici per OPBG
+      this.assetLoader.loadImage('opbg-logo', ASSETS.labs.opbg);
+      this.assetLoader.loadImage('opbg-tileset', ASSETS.tilesets.opbg);
+      
+      // Carica sprites dei medici e ricercatori medici
+      this.assetLoader.loadSpritesheet('medical-doctor', ASSETS.characters.researcher.path, {
+        frameWidth: 32, 
+        frameHeight: 32
+      });
+      
+      this.assetLoader.loadSpritesheet('biomedical-engineer', ASSETS.characters.professor.path, {
+        frameWidth: 32, 
+        frameHeight: 32
+      });
+      
+      console.log('OPBGLabScene preload COMPLETE');
+    } catch (error) {
+      console.error('Error in OPBGLabScene preload:', error);
+    }
+  }
+
+  // Override del metodo create dalla classe base
+  create(): void {
+    console.log('OPBGLabScene create START');
+    
+    try {
+      // Chiamata al metodo della classe base
+      super.create();
+      
+      // Elementi specifici di OPBG
+      this.createHospitalElements();
+      
+      // Crea agenti specifici
+      this.createAgents();
+      
+      console.log('OPBGLabScene create COMPLETE');
+      
+      // Forza l'attivazione della scena se non è già attiva
+      if (!this.scene.isActive()) {
+        console.log('OPBGLabScene not active, attempting to force activation');
+        this.scene.setActive(true);
+        this.scene.setVisible(true);
+      }
+    } catch (error) {
+      console.error('Error in OPBGLabScene create:', error);
+      this.createFallbackScene();
+    }
+  }
+  
+  // Implementazione concreta del metodo astratto della classe base
+  protected createMap(): void {
+    console.log('Creating OPBG map');
+    try {
+      // In una versione più avanzata, qui verrebbe caricata la mappa dal file Tiled
+      // Per ora, creiamo un ambiente di base
+      
+      // Crea sfondo ospedaliero
+      this.createHospitalBackground();
+    } catch (error) {
+      console.error('Error in createMap:', error);
+    }
+  }
+  
+  // Metodo specifico per creare elementi ospedalieri
+  private createHospitalElements(): void {
+    try {
+      console.log('Creating hospital elements');
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      
+      // Area server room (dati sensibili)
+      this.add.rectangle(
+        width / 2, 
+        height / 2, 
+        120, 
+        80, 
+        this.theme.colorPalette.primary,
+        0.2
+      );
+      
+      // Aggiungi confini visivi all'area server
+      const serverBorder = this.add.graphics();
+      serverBorder.lineStyle(2, this.theme.colorPalette.primary, 1);
+      serverBorder.strokeRect(
+        width / 2 - 60,
+        height / 2 - 40,
+        120,
+        80
+      );
+      
+      // Testo identificativo
+      this.add.text(
+        width / 2,
+        height / 2,
+        'Server Room\nDati Sensibili',
+        {
+          fontSize: '14px',
+          color: '#333333',
+          align: 'center'
+        }
+      ).setOrigin(0.5);
+      
+      // Crea postazioni di lavoro
+      this.createWorkstations();
+      
+      // Crea area clinica
+      this.createClinicalArea();
+      
+      // Aggiungi pulsante per tornare al lab Mercatorum
+      const backButton = this.add.text(
+        100, 
+        100, 
+        '← Torna a Mercatorum', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#' + this.theme.colorPalette.primary.toString(16),
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      backButton.setInteractive({ useHandCursor: true });
+      backButton.on('pointerdown', () => {
+        this.scene.start(SCENE_KEYS.MERCATORUM);
+      });
+      
+      // Pulsante per passare a Blekinge Lab
+      const blekingeButton = this.add.text(
+        100, 
+        140, 
+        '→ Vai a Blekinge Lab', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#' + this.theme.colorPalette.primary.toString(16),
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      blekingeButton.setInteractive({ useHandCursor: true });
+      blekingeButton.on('pointerdown', () => {
+        this.scene.start(SCENE_KEYS.BLEKINGE);
+      });
+      
+      // Imposta profondità per assicurarsi che i pulsanti siano sopra altri elementi
+      backButton.setDepth(100);
+      blekingeButton.setDepth(100);
+    } catch (error) {
+      console.error('Error in createHospitalElements:', error);
+    }
+  }
+  
+  // Crea le postazioni di lavoro
+  private createWorkstations(): void {
+    try {
+      console.log('Creating workstations');
+      const positions = [
+        { x: 200, y: 150 },
+        { x: 300, y: 150 },
+        { x: 200, y: 250 },
+        { x: 300, y: 250 }
+      ];
+      
+      positions.forEach(pos => {
+        const { x, y } = pos;
+        
+        // Crea la scrivania
+        this.add.rectangle(x, y, 100, 40, this.theme.colorPalette.secondary);
+        
+        // Crea monitor doppi
+        this.add.rectangle(x - 20, y - 30, 30, 25, 0x333333);
+        this.add.rectangle(x + 20, y - 30, 30, 25, 0x333333);
+        
+        // Schermi dei monitor
+        this.add.rectangle(x - 20, y - 30, 26, 21, 0x88ccff);
+        this.add.rectangle(x + 20, y - 30, 26, 21, 0x88ccff);
+      });
+    } catch (error) {
+      console.error('Error in createWorkstations:', error);
+    }
+  }
+  
+  // Crea l'area clinica
+  private createClinicalArea(): void {
+    try {
+      console.log('Creating clinical area');
+      const width = this.cameras.main.width;
+      const height = this.cameras.main.height;
+      
+      // Area clinica con letti ospedalieri
+      this.add.rectangle(
+        width - 150,
+        height / 2 + 50,
+        200,
+        150,
+        this.theme.colorPalette.secondary,
+        0.2
+      );
+      
+      // Bordo area clinica
+      const clinicalBorder = this.add.graphics();
+      clinicalBorder.lineStyle(2, this.theme.colorPalette.secondary, 1);
+      clinicalBorder.strokeRect(
+        width - 250,
+        height / 2 - 25,
+        200,
+        150
+      );
+      
+      // Testo identificativo
+      this.add.text(
+        width - 150,
+        height / 2 - 15,
+        'Area Clinica',
+        {
+          fontSize: '14px',
+          color: '#333333',
+          align: 'center'
+        }
+      ).setOrigin(0.5);
+      
+      // Crea letti ospedalieri stilizzati
+      const bedPositions = [
+        { x: width - 200, y: height / 2 + 30 },
+        { x: width - 100, y: height / 2 + 30 },
+        { x: width - 200, y: height / 2 + 80 },
+        { x: width - 100, y: height / 2 + 80 }
+      ];
+      
+      bedPositions.forEach(pos => {
+        // Base del letto
+        this.add.rectangle(pos.x, pos.y, 60, 30, 0xffffff);
+        
+        // Cornice del letto
+        this.add.rectangle(pos.x, pos.y, 56, 26, 0xdeeaee);
+        
+        // Cuscino
+        this.add.rectangle(pos.x - 15, pos.y, 20, 20, 0xf8f8f8);
+      });
+    } catch (error) {
+      console.error('Error in createClinicalArea:', error);
+    }
+  }
+  
+  private createHospitalBackground(): void {
+    try {
+      console.log('Creating hospital background');
+      // Crea un background a tema ospedaliero pediatrico
+      const graphics = this.add.graphics();
+      
+      // Sfondo bianco
+      graphics.fillStyle(0xffffff, 1);
+      graphics.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+      
+      // Pattern a griglia leggera (simile a piastrelle)
+      graphics.lineStyle(1, 0xdddddd, 1);
+      
+      for (let x = 0; x < this.cameras.main.width; x += 32) {
+        graphics.moveTo(x, 0);
+        graphics.lineTo(x, this.cameras.main.height);
+      }
+      
+      for (let y = 0; y < this.cameras.main.height; y += 32) {
+        graphics.moveTo(0, y);
+        graphics.lineTo(this.cameras.main.width, y);
+      }
+      
+      // Bande decorative colorate in stile "child-friendly"
+      const colors = [0x4caf50, 0x03a9f4, 0xffc107, 0xe91e63];
+      
+      for (let i = 0; i < 5; i++) {
+        const y = i * 100 + 50;
+        const color = colors[i % colors.length];
+        
+        graphics.fillStyle(color, 0.1);
+        graphics.fillRect(0, y, this.cameras.main.width, 20);
+      }
+      
+      graphics.strokePath();
+    } catch (error) {
+      console.error('Error in createHospitalBackground:', error);
+    }
+  }
+  
+  // Override del metodo per creare gli agenti specifici di OPBG
+  protected createAgents(): void {
+    try {
+      console.log('Creating OPBG agents');
+      // Crea ricercatori medici
+      this.createMedicalResearchers();
+      
+      // In una versione più avanzata, si potrebbero creare altri tipi di agenti specifici
+    } catch (error) {
+      console.error('Error in createAgents:', error);
+    }
+  }
+  
+  // Crea ricercatori medici
+  private createMedicalResearchers(): void {
+    try {
+      console.log('Creating medical researchers');
+      const positions = [
+        { x: 200, y: 200 },
+        { x: 300, y: 300 },
+        { x: 400, y: 200 },
+        { x: 500, y: 300 }
+      ];
+      
+      // Definizione dei tipi di ricercatori medici
+      const researcherTypes = [
+        { 
+          type: 'medical-doctor' as ResearcherType, 
+          specialization: 'clinical-data' as Specialization,
+          name: 'Dr. Rossi' 
+        },
+        { 
+          type: 'medical-doctor' as ResearcherType, 
+          specialization: 'diagnostic-model' as Specialization,
+          name: 'Dr. Bianchi'
+        },
+        { 
+          type: 'biomedical-engineer' as ResearcherType, 
+          specialization: 'medical-imaging' as Specialization,
+          name: 'Ing. Verdi'
+        },
+        { 
+          type: 'biomedical-engineer' as ResearcherType, 
+          specialization: 'biosignal-processing' as Specialization,
+          name: 'Ing. Bruno'
+        }
+      ];
+      
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        const researcherInfo = researcherTypes[i];
+        
+        // Verifica se la texture esiste
+        const spriteKey = researcherInfo.type;
+        if (!this.textures.exists(spriteKey)) {
+          console.warn(`[OPBGLabScene] Texture ${spriteKey} not found, using placeholder`);
+          this.assetLoader.loadPlaceholder(spriteKey, 'spritesheet', 32, 48);
+        }
+        
+        // Crea un ricercatore medico con configurazione aggiornata
+        const agent = new ResearcherAgent(
+          this, 
+          pos.x, 
+          pos.y, 
+          researcherInfo.type, // Usa il tipo corretto di ricercatore per lo sprite
+          {
+            role: researcherInfo.type,
+            name: researcherInfo.name,
+            speed: 50,
+            state: AgentState.IDLE,
+            specialization: researcherInfo.specialization,
+            researcherType: researcherInfo.type
+          }
+        );
+        
+        // Aggiungi al gruppo di agenti
+        this.agents.push(agent);
+        this.medicalResearchers.push(agent);
+      }
+    } catch (error) {
+      console.error('Error in createMedicalResearchers:', error);
+    }
+  }
+
+  // Override del metodo per gli aggiornamenti specifici di OPBG
+  protected updateLabSpecific(time: number, delta: number): void {
+    try {
+      // Aggiornamenti specifici per OPBG (in futuro)
+    } catch (error) {
+      console.error('Error in updateLabSpecific:', error);
+    }
+  }
+  
+  update(time: number, delta: number): void {
+    try {
+      // Aggiorna tutti gli agenti
+      super.update(time, delta);
+      
+      // Aggiornamenti specifici del laboratorio
+      this.updateLabSpecific(time, delta);
+    } catch (error) {
+      console.error('Error in OPBGLabScene update:', error);
+    }
+  }
+  
+  /**
+   * Crea una scena di fallback in caso di errori gravi
+   */
+  private createFallbackScene(): void {
+    // Pulisci la scena
+    this.children.removeAll();
+    
+    // Aggiungi uno sfondo base
+    this.add.rectangle(0, 0, 800, 600, 0x222222).setOrigin(0, 0);
+    
+    // Aggiungi messaggio di errore
+    this.add.text(400, 250, 'Error loading OPBG Lab', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      color: '#ff0000'
+    }).setOrigin(0.5);
+    
+    this.add.text(400, 300, 'Please check console for details', {
+      fontFamily: 'Arial',
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    // Aggiungi pulsante per ricaricare
+    const reloadButton = this.add.rectangle(400, 350, 200, 40, 0x444444).setInteractive();
+    this.add.text(400, 350, 'Reload Scene', {
+      fontFamily: 'Arial',
+      fontSize: '16px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+    
+    reloadButton.on('pointerup', () => {
+      this.scene.restart();
+    });
+  }
+}

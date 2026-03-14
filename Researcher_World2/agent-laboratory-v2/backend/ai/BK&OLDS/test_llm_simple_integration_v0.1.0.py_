@@ -1,0 +1,327 @@
+"""
+Test di integrazione semplificato per il connettore LLM di Agent Laboratory.
+Questo test verifica le funzionalità principali del connettore LLM senza dipendere
+dal framework Mesa completo.
+"""
+
+import os
+import asyncio
+import logging
+import json
+from typing import Dict, Any, List
+import sys
+
+# Configurazione logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("llm_simple_integration_test")
+
+# Importazioni dirette solo dei moduli necessari
+from ai.llm_connector import LLMConnector
+
+class LLMIntegrationTest:
+    """Test di integrazione per le funzionalità LLM."""
+
+    def __init__(self):
+        self.connector = None
+        
+    async def setup(self):
+        """Inizializza le componenti necessarie per i test."""
+        logger.info("Setting up LLM integration test environment")
+        try:
+            self.connector = LLMConnector()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM connector: {e}")
+            return False
+    
+    async def teardown(self):
+        """Pulisce le risorse dopo i test."""
+        if self.connector:
+            await self.connector.close()
+        logger.info("Test environment cleaned up")
+    
+    async def test_researcher_dialog(self):
+        """Testa la generazione di dialoghi per ricercatori."""
+        logger.info("=== Test Researcher Dialog Generation ===")
+        
+        researcher_types = ["PhD Student", "Professor", "Researcher", "ML Engineer"]
+        specializations = ["Privacy Engineering", "FL Systems Architecture", "Data Science"]
+        
+        results = []
+        
+        for r_type in researcher_types:
+            for spec in specializations:
+                logger.info(f"Testing dialog for {r_type} specializing in {spec}")
+                
+                context = {
+                    "lab_state": "attivo",
+                    "nearby_agents": ["Professor di Theoretical Guarantees", "PhD Student di Optimization Theory"],
+                    "fl_progress": "fase intermedia",
+                    "knowledge_base": "Secure Aggregation, Differential Privacy"
+                }
+                
+                situation = "Hai appena trovato un modo per migliorare l'efficienza della comunicazione nel sistema FL"
+                
+                try:
+                    dialog = await self.connector.generate_researcher_dialog(
+                        researcher_type=r_type,
+                        specialization=spec,
+                        context=context,
+                        current_situation=situation
+                    )
+                    
+                    if not dialog or dialog.startswith("Error"):
+                        logger.warning(f"Failed to generate dialog for {r_type}/{spec}")
+                        results.append(False)
+                        continue
+                    
+                    logger.info(f"Generated dialog: '{dialog}'")
+                    results.append(True)
+                    
+                except Exception as e:
+                    logger.error(f"Error generating dialog: {e}")
+                    results.append(False)
+        
+        success_rate = sum(results) / len(results) if results else 0
+        logger.info(f"Dialog generation success rate: {success_rate:.2f}")
+        return success_rate >= 0.8  # 80% dei dialoghi devono essere generati con successo
+    
+    async def test_fl_decisions(self):
+        """Testa la generazione di decisioni per il federated learning."""
+        logger.info("=== Test FL Decision Generation ===")
+        
+        scenarios = [
+            "Devi scegliere un algoritmo FL per dati altamente non-IID",
+            "I client hanno risorse computazionali molto eterogenee",
+            "C'è un problema di privacy in uno dei client partecipanti",
+            "La connessione di rete è instabile tra i client",
+            "Devi bilanciare accuratezza e comunicazione efficiente"
+        ]
+        
+        results = []
+        
+        for scenario in scenarios:
+            logger.info(f"Testing FL decision for scenario: {scenario}")
+            
+            try:
+                decision = await self.connector.generate_fl_decision(
+                    researcher_type="Professor",
+                    specialization="FL Systems Architecture",
+                    context={
+                        "lab_state": "attivo",
+                        "nearby_agents": ["Data Engineer", "Privacy Specialist"],
+                        "fl_progress": "avanzato",
+                        "knowledge_base": "FedAvg, FedProx, Secure Aggregation"
+                    },
+                    current_situation=scenario
+                )
+                
+                if not decision or decision.startswith("Error"):
+                    logger.warning(f"Failed to generate decision for scenario: {scenario}")
+                    results.append(False)
+                    continue
+                
+                logger.info(f"Generated decision: '{decision}'")
+                results.append(True)
+                
+            except Exception as e:
+                logger.error(f"Error generating FL decision: {e}")
+                results.append(False)
+        
+        success_rate = sum(results) / len(results) if results else 0
+        logger.info(f"FL decision generation success rate: {success_rate:.2f}")
+        return success_rate >= 0.8
+    
+    async def test_action_planning(self):
+        """Testa la generazione di piani d'azione."""
+        logger.info("=== Test Action Planning Generation ===")
+        
+        situations = [
+            "Pianificare un esperimento per valutare la robustezza dell'algoritmo FL",
+            "Organizzare una collaborazione tra laboratori per un nuovo paper",
+            "Preparare una presentazione dei risultati per una conferenza",
+            "Migliorare la performance del sistema FL su dispositivi edge",
+            "Rispondere a una possibile violazione della privacy nei dati"
+        ]
+        
+        results = []
+        
+        for situation in situations:
+            logger.info(f"Testing action planning for situation: {situation}")
+            
+            try:
+                plan = await self.connector.generate_action_plan(
+                    researcher_type="Researcher",
+                    specialization="Communication Efficiency",
+                    context={
+                        "lab_state": "attivo",
+                        "nearby_agents": ["Professor", "PhD Student"],
+                        "fl_progress": "intermedio",
+                        "knowledge_base": "Compression Techniques, Quantization"
+                    },
+                    current_situation=situation
+                )
+                
+                if not plan or plan.startswith("Error"):
+                    logger.warning(f"Failed to generate action plan for situation: {situation}")
+                    results.append(False)
+                    continue
+                
+                logger.info(f"Generated action plan: '{plan}'")
+                results.append(True)
+                
+            except Exception as e:
+                logger.error(f"Error generating action plan: {e}")
+                results.append(False)
+        
+        success_rate = sum(results) / len(results) if results else 0
+        logger.info(f"Action planning success rate: {success_rate:.2f}")
+        return success_rate >= 0.8
+    
+    async def test_event_reactions(self):
+        """Testa la generazione di reazioni agli eventi."""
+        logger.info("=== Test Event Reaction Generation ===")
+        
+        events = [
+            "Un nuovo dataset è stato condiviso dal laboratorio partner",
+            "Il sistema FL ha subito un attacco di model inversion",
+            "La deadline per la sottomissione del paper è stata anticipata",
+            "Un altro laboratorio ha pubblicato risultati simili ai tuoi",
+            "Il budget computazionale è stato ridotto del 30%"
+        ]
+        
+        results = []
+        
+        for event in events:
+            logger.info(f"Testing reaction to event: {event}")
+            
+            try:
+                reaction = await self.connector.generate_event_reaction(
+                    researcher_type="ML Engineer",
+                    specialization="Model Optimization",
+                    context={
+                        "lab_state": "attivo",
+                        "nearby_agents": ["Professor", "PhD Student"],
+                        "fl_progress": "avanzato",
+                        "knowledge_base": "Model Compression, Pruning"
+                    },
+                    current_situation=event
+                )
+                
+                if not reaction or reaction.startswith("Error"):
+                    logger.warning(f"Failed to generate reaction for event: {event}")
+                    results.append(False)
+                    continue
+                
+                logger.info(f"Generated reaction: '{reaction}'")
+                results.append(True)
+                
+            except Exception as e:
+                logger.error(f"Error generating event reaction: {e}")
+                results.append(False)
+        
+        success_rate = sum(results) / len(results) if results else 0
+        logger.info(f"Event reaction success rate: {success_rate:.2f}")
+        return success_rate >= 0.8
+    
+    async def test_memory_consistency(self):
+        """Testa la coerenza delle risposte con la memoria."""
+        logger.info("=== Test Memory Consistency ===")
+        
+        # Simula una conversazione in più turni
+        conversation = [
+            "Sto lavorando a un sistema FL con dati altamente non-IID",
+            "Ho trovato un modo per migliorare l'algoritmo FedAvg per questo caso",
+            "Sto considerando di pubblicare i risultati in una conferenza",
+            "Devo decidere se collaborare con un altro laboratorio per estendere la ricerca"
+        ]
+        
+        context = {
+            "lab_state": "attivo",
+            "nearby_agents": ["Professor", "PhD Student"],
+            "fl_progress": "avanzato",
+            "knowledge_base": "FedAvg, Non-IID Data Handling"
+        }
+        
+        # Sistema di test della memoria
+        responses = []
+        memory_context = ""
+        
+        for i, turn in enumerate(conversation):
+            logger.info(f"Testing memory consistency - turn {i+1}: {turn}")
+            
+            # Aggiorna il contesto con la memoria delle conversazioni precedenti
+            if i > 0:
+                context["memory"] = memory_context
+            
+            try:
+                response = await self.connector.generate_researcher_dialog(
+                    researcher_type="Researcher",
+                    specialization="Non-IID Data Handling",
+                    context=context,
+                    current_situation=turn
+                )
+                
+                if not response or response.startswith("Error"):
+                    logger.warning(f"Failed to generate response for turn {i+1}")
+                    return False
+                
+                logger.info(f"Generated response: '{response}'")
+                responses.append(response)
+                
+                # Aggiorna la memoria per il prossimo turno
+                memory_context += f"Situazione: {turn}\nRisposta: {response}\n"
+                
+            except Exception as e:
+                logger.error(f"Error in memory consistency test: {e}")
+                return False
+        
+        # Verifica la coerenza tra le risposte
+        coherence = True  # Qui si potrebbe implementare una metrica di coerenza
+        logger.info(f"Memory consistency test completed")
+        return coherence
+
+async def run_tests():
+    """Esegue tutti i test di integrazione LLM."""
+    logger.info("Starting LLM integration tests")
+    
+    test_suite = LLMIntegrationTest()
+    
+    try:
+        success = await test_suite.setup()
+        if not success:
+            logger.error("Test environment setup failed")
+            return False
+        
+        # Esegui i test
+        results = {
+            "researcher_dialog": await test_suite.test_researcher_dialog(),
+            "fl_decisions": await test_suite.test_fl_decisions(),
+            "action_planning": await test_suite.test_action_planning(),
+            "event_reactions": await test_suite.test_event_reactions(),
+            "memory_consistency": await test_suite.test_memory_consistency()
+        }
+        
+        # Riepilogo risultati
+        logger.info("=== Test Results ===")
+        for test_name, result in results.items():
+            status = "PASS" if result else "FAIL"
+            logger.info(f"{test_name}: {status}")
+        
+        all_passed = all(results.values())
+        overall_status = "PASSED" if all_passed else "FAILED"
+        logger.info(f"Overall test suite: {overall_status}")
+        
+        return all_passed
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in test suite: {e}")
+        return False
+    finally:
+        await test_suite.teardown()
+
+if __name__ == "__main__":
+    asyncio.run(run_tests())

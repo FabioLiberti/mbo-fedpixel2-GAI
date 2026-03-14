@@ -1,0 +1,285 @@
+import React, { useState, useEffect } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import ReactMarkdown from 'react-markdown';
+import './DocumentationViewer.css';
+
+// Inizializzazione della libreria PDF.js con il worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
+// Definizione delle interfacce
+interface DocumentItem {
+  id: string;
+  title: string;
+  type: 'pdf' | 'md';
+  path: string;
+  category: string;
+  icon: string; // Percorso all'icona pixel art
+}
+
+interface DocumentationViewerProps {
+  onClose: () => void; // Callback per tornare alla schermata principale
+}
+
+// Documenti di esempio
+const sampleDocuments: DocumentItem[] = [
+  {
+    id: 'architecture',
+    title: 'Architettura di Sistema',
+    type: 'pdf',
+    path: '/docs/agent-laboratory-architecture.pdf',
+    category: 'Tecnico',
+    icon: '/assets/ui/doc-pdf-icon.png'
+  },
+  {
+    id: 'user-guide',
+    title: 'Guida Utente',
+    type: 'md',
+    path: '/docs/user-guide.md',
+    category: 'Guida',
+    icon: '/assets/ui/doc-md-icon.png'
+  },
+  {
+    id: 'fl-explanation',
+    title: 'Federated Learning',
+    type: 'md',
+    path: '/docs/federated-learning.md',
+    category: 'Tecnico',
+    icon: '/assets/ui/doc-md-icon.png'
+  },
+  {
+    id: 'labs-description',
+    title: 'Laboratori Virtuali',
+    type: 'pdf',
+    path: '/docs/virtual-labs.pdf',
+    category: 'Descrizione',
+    icon: '/assets/ui/doc-pdf-icon.png'
+  },
+  {
+    id: 'agents-system',
+    title: 'Sistema Agenti',
+    type: 'md',
+    path: '/docs/agent-system.md',
+    category: 'Tecnico',
+    icon: '/assets/ui/doc-md-icon.png'
+  }
+];
+
+const DocumentationViewer: React.FC<DocumentationViewerProps> = ({ onClose }) => {
+  // Stati del componente
+  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
+  const [pdfNumPages, setPdfNumPages] = useState<number | null>(null);
+  const [pdfPageNumber, setPdfPageNumber] = useState<number>(1);
+  const [markdownContent, setMarkdownContent] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Tutti');
+
+  // All'avvio estrai le categorie uniche dai documenti
+  useEffect(() => {
+    // Versione corretta che evita l'uso diretto del Set per compatibilità
+    const categoriesSet: {[key: string]: boolean} = {};
+    sampleDocuments.forEach(doc => {
+      categoriesSet[doc.category] = true;
+    });
+    const uniqueCategories = Object.keys(categoriesSet);
+    setCategories(['Tutti', ...uniqueCategories]);
+  }, []);
+
+  // Quando cambia il documento selezionato, carica il contenuto
+  useEffect(() => {
+    if (!selectedDoc) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    if (selectedDoc.type === 'md') {
+      // Simula il caricamento di un file markdown
+      // In produzione, questo sarebbe una chiamata fetch
+      setTimeout(() => {
+        // Contenuto markdown di esempio
+        const content = `# ${selectedDoc.title}\n\n## Introduzione\n\nQuesto documento fornisce una panoramica dettagliata del componente ${selectedDoc.title} all'interno del progetto Agent Laboratory.\n\n## Caratteristiche principali\n\n- Simulazione realistica di agenti autonomi\n- Integrazione con algoritmi di federated learning\n- Visualizzazione interattiva dei processi di ricerca\n\n## Implementazione\n\n\`\`\`typescript\n// Esempio di codice per ${selectedDoc.title}\nclass Agent {\n  constructor(type, behavior) {\n    this.type = type;\n    this.behavior = behavior;\n  }\n  \n  update() {\n    // Logica di aggiornamento\n  }\n}\n\`\`\`\n\n## Diagramma di architettura\n\nUn diagramma dettagliato dell'architettura sarebbe visualizzato qui.\n\n## Conclusioni\n\nIl sistema ${selectedDoc.title} è un componente fondamentale dell'ecosistema Agent Laboratory che permette...`;
+        
+        setMarkdownContent(content);
+        setIsLoading(false);
+      }, 500);
+    }
+    
+    // Per PDF, resetta lo stato del visualizzatore
+    if (selectedDoc.type === 'pdf') {
+      setPdfPageNumber(1);
+    }
+  }, [selectedDoc]);
+
+  // Gestisce il cambiamento di pagina nel PDF
+  const handlePdfPageChange = (newPage: number) => {
+    if (pdfNumPages && newPage >= 1 && newPage <= pdfNumPages) {
+      setPdfPageNumber(newPage);
+    }
+  };
+
+  // Documento selezionato in base alla categoria
+  const filteredDocuments = selectedCategory === 'Tutti' 
+    ? sampleDocuments 
+    : sampleDocuments.filter(doc => doc.category === selectedCategory);
+
+  // Funzione per il caricamento documento PDF
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setPdfNumPages(numPages);
+    setIsLoading(false);
+  }
+
+  // Rendering condizionale per i diversi tipi di documenti
+  const renderDocumentContent = () => {
+    if (!selectedDoc) {
+      return (
+        <div className="doc-placeholder">
+          <div className="pixel-art-placeholder"></div>
+          <p>Seleziona un documento dalla libreria</p>
+        </div>
+      );
+    }
+
+    if (isLoading) {
+      return <div className="loading-indicator">Caricamento...</div>;
+    }
+
+    if (error) {
+      return <div className="error-message">Errore: {error}</div>;
+    }
+
+    if (selectedDoc.type === 'pdf') {
+      return (
+        <div className="pdf-container">
+          <Document
+            file={selectedDoc.path}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={(error: Error) => {
+              console.error("Errore caricamento PDF", error);
+              setError("Impossibile caricare il documento PDF");
+              setIsLoading(false);
+            }}
+            className="pdf-document"
+          >
+            <Page 
+              pageNumber={pdfPageNumber} 
+              renderTextLayer={false}
+              renderAnnotationLayer={false}
+              className="pdf-page"
+            />
+          </Document>
+          
+          {pdfNumPages && (
+            <div className="pdf-controls">
+              <button 
+                className="pixel-button" 
+                onClick={() => handlePdfPageChange(pdfPageNumber - 1)}
+                disabled={pdfPageNumber <= 1}
+              >
+                ◀
+              </button>
+              <span className="page-indicator">
+                Pagina {pdfPageNumber} di {pdfNumPages}
+              </span>
+              <button 
+                className="pixel-button" 
+                onClick={() => handlePdfPageChange(pdfPageNumber + 1)}
+                disabled={pdfPageNumber >= pdfNumPages}
+              >
+                ▶
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (selectedDoc.type === 'md') {
+      return (
+        <div className="markdown-container">
+          <ReactMarkdown className="markdown-content">
+            {markdownContent}
+          </ReactMarkdown>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="documentation-viewer">
+      <div className="documentation-header">
+        <h1 className="pixel-title">DOCUMENTAZIONE DI PROGETTO</h1>
+        <button className="close-button" onClick={onClose}>X</button>
+      </div>
+      
+      <div className="documentation-content">
+        <div className="documents-sidebar">
+          <div className="category-selector">
+            <div className="pixel-select-wrapper">
+              <select 
+                className="pixel-select"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="documents-shelf">
+            {filteredDocuments.map(doc => (
+              <div 
+                key={doc.id}
+                className={`document-item ${selectedDoc?.id === doc.id ? 'selected' : ''}`}
+                onClick={() => setSelectedDoc(doc)}
+              >
+                <div className="document-icon">
+                  <div className={`pixel-icon ${doc.type}`}></div>
+                </div>
+                <div className="document-info">
+                  <div className="document-title">{doc.title}</div>
+                  <div className="document-type">{doc.type.toUpperCase()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="document-viewer">
+          <div className="viewer-inner">
+            {renderDocumentContent()}
+          </div>
+          
+          {selectedDoc && (
+            <div className="viewer-footer">
+              <button className="pixel-button">
+                <div className="button-icon home-icon"></div>
+                Indietro
+              </button>
+              
+              <button className="pixel-button">
+                <div className="button-icon download-icon"></div>
+                Download
+              </button>
+              
+              <button className="pixel-button">
+                <div className="button-icon print-icon"></div>
+                Stampa
+              </button>
+              
+              <div className="document-title-display">
+                {selectedDoc.title}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default DocumentationViewer;

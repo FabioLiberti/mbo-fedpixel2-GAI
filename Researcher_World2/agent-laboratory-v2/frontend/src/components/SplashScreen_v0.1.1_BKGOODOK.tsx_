@@ -1,0 +1,135 @@
+import React, { useEffect, useState, useRef } from 'react';
+import './SplashScreen.css';
+
+interface SplashScreenProps {
+  onComplete: () => void;
+}
+
+const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isFallbackActive, setIsFallbackActive] = useState(false);
+  const [phaserLoaded, setPhaserLoaded] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    console.log('SplashScreen component mounted');
+    
+    // Imposta un timer di fallback nel caso Phaser non si carichi
+    const fallbackTimer = setTimeout(() => {
+      if (!phaserLoaded) {
+        console.warn('Phaser splash screen not detected after timeout, activating HTML/CSS fallback');
+        setIsFallbackActive(true);
+        
+        // Avvia il video fallback se disponibile
+        if (videoRef.current) {
+          videoRef.current.play().catch(error => {
+            console.error('Error playing fallback video:', error);
+          });
+        }
+      }
+    }, 5000); // Aumentato a 5 secondi per dare più tempo a Phaser
+
+    // Ascoltatore per l'evento di caricamento della splash screen Phaser
+    const handleSplashReady = () => {
+      console.log('Phaser splash screen ready event received');
+      setPhaserLoaded(true);
+      setIsFallbackActive(false);
+      clearTimeout(fallbackTimer);
+    };
+
+    // Ascoltatore per l'evento di completamento della splash screen Phaser
+    const handleSplashComplete = () => {
+      console.log('Phaser splash screen complete event received');
+      setIsVisible(false);
+      setTimeout(() => {
+        onComplete();
+      }, 500);
+    };
+
+    // Aggiungi gli ascoltatori di eventi
+    window.addEventListener('splashScreenReady', handleSplashReady);
+    window.addEventListener('splashScreenComplete', handleSplashComplete);
+    
+    // Pulizia
+    return () => {
+      console.log('SplashScreen component unmounting');
+      window.removeEventListener('splashScreenReady', handleSplashReady);
+      window.removeEventListener('splashScreenComplete', handleSplashComplete);
+      clearTimeout(fallbackTimer);
+    };
+  }, [onComplete, phaserLoaded]);
+
+  // Gestore click per il fallback HTML/CSS
+  const handleClick = () => {
+    console.log('Fallback screen clicked');
+    if (isFallbackActive) {
+      // Ferma il video fallback
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.volume = 0;
+      }
+      
+      // Avvia la dissolvenza in uscita
+      setIsVisible(false);
+      
+      setTimeout(() => {
+        onComplete();
+      }, 500);
+    }
+  };
+
+  // Gestore per la fine del video fallback
+  const handleVideoEnded = () => {
+    console.log('Fallback video ended');
+    if (isFallbackActive) {
+      // Avvia la dissolvenza in uscita con un piccolo ritardo
+      setTimeout(() => {
+        setIsVisible(false);
+        setTimeout(() => {
+          onComplete();
+        }, 500);
+      }, 1000);
+    }
+  };
+
+  if (!isVisible) {
+    return null;
+  }
+
+  return (
+    <div 
+      className={`splash-screen ${!isVisible ? 'fade-out' : ''}`} 
+      onClick={handleClick}
+    >
+      {isFallbackActive && (
+        <div className="fallback-content">
+          {/* Video fallback HTML - tenta prima splash-intro, poi mbo-fedpixel */}
+          <video 
+            ref={videoRef}
+            className="splash-video-fallback"
+            playsInline
+            muted={false}
+            controls={false}
+            onEnded={handleVideoEnded}
+            onError={(e) => {
+              console.error('Fallback video error:', e);
+              // Se il primo video fallisce, tenta di caricare il secondo
+              if (videoRef.current) {
+                videoRef.current.src = "assets/video/MBO-FedPixel_VideoAnimation.mp4";
+                videoRef.current.load();
+                videoRef.current.play().catch(err => console.error('Error playing alternate video:', err));
+              }
+            }}
+          >
+            <source src="assets/video/splash-intro.mp4" type="video/mp4" />
+            <source src="assets/video/MBO-FedPixel_VideoAnimation.mp4" type="video/mp4" />
+          </video>
+          
+          <div className="click-text-fallback">Click anywhere to skip</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SplashScreen;

@@ -1,0 +1,390 @@
+// frontend/src/phaser/controllers/DialogEventTracker.ts
+
+/**
+ * Classe per tracciare e categorizzare i dialoghi generati nella simulazione
+ * Si integra con gli eventi di dialogo e aggiorna i contatori
+ */
+export class DialogEventTracker {
+    private scene: Phaser.Scene;
+    private isInitialized: boolean = false;
+    
+    // Contatori
+    private llmDialogCount: number = 0;
+    private simulatedDialogCount: number = 0;
+    private standardDialogCount: number = 0;
+    
+    // Mappa delle origini dialoghi per tracciare quali agenti usano LLM
+    private dialogSources: Map<string, string> = new Map();
+    
+    // Flag di debug
+    private debugMode: boolean = false;
+    
+    constructor(scene: Phaser.Scene) {
+      this.scene = scene;
+      this.debugMode = true; // Forziamo il debug mode per il test
+      console.log('[DialogEventTracker] Starting initialization...');
+      this.loadState();
+      this.registerEvents();
+      
+      console.log('[DialogEventTracker] Initialized with counters:', 
+        {llm: this.llmDialogCount, simulated: this.simulatedDialogCount, standard: this.standardDialogCount});
+    }
+    
+    /**
+     * Carica lo stato del tracker dal localStorage
+     */
+    private loadState(): void {
+      try {
+        console.log('[DialogEventTracker] Loading state from localStorage...');
+        const savedState = localStorage.getItem('dialog_tracker_state');
+        if (savedState) {
+          const state = JSON.parse(savedState);
+          this.llmDialogCount = state.llmDialogCount || 0;
+          this.simulatedDialogCount = state.simulatedDialogCount || 0;
+          this.standardDialogCount = state.standardDialogCount || 0;
+          
+          console.log('[DialogEventTracker] Successfully loaded state:', state);
+        } else {
+          console.log('[DialogEventTracker] No saved state found in localStorage');
+        }
+      } catch (error) {
+        console.error('[DialogEventTracker] Error loading state:', error);
+      }
+    }
+    
+    /**
+     * Salva lo stato del tracker nel localStorage
+     */
+    private saveState(): void {
+      try {
+        const state = {
+          llmDialogCount: this.llmDialogCount,
+          simulatedDialogCount: this.simulatedDialogCount,
+          standardDialogCount: this.standardDialogCount
+        };
+        localStorage.setItem('dialog_tracker_state', JSON.stringify(state));
+        
+        if (this.debugMode) {
+          console.log('[DialogEventTracker] Saved state:', state);
+        }
+      } catch (error) {
+        console.error('[DialogEventTracker] Error saving state:', error);
+      }
+    }
+    
+    /**
+     * Registra gli eventi per intercettare e classificare i dialoghi
+     */
+    private registerEvents(): void {
+      if (this.isInitialized) {
+        console.log('[DialogEventTracker] Already initialized, skipping event registration');
+        return;
+      }
+      
+      console.log('[DialogEventTracker] Registering event listeners...');
+      
+      // Intercetta l'evento di creazione dialogo
+      this.scene.game.events.on('dialog-created', this.handleDialogCreated, this);
+      
+      // Intercetta i dialoghi API
+      this.scene.game.events.on('api-dialog-response', this.handleAPIDialogResponse, this);
+      
+      // Intercetta eventi di interazione agenti
+      this.scene.game.events.on('agent-interaction', this.handleAgentInteraction, this);
+      this.scene.game.events.on('agent-reaction', this.handleAgentReaction, this);
+      this.scene.game.events.on('agent-thinking', this.handleAgentThinking, this);
+      this.scene.game.events.on('agent-decision', this.handleAgentDecision, this);
+      
+      // Intercetta eventi di dialogo direttamente dalla scena
+      this.scene.events.on('mercatorum-dialog-created', this.handleMercatorumDialog, this);
+      
+      this.isInitialized = true;
+      console.log('[DialogEventTracker] Event listeners registered successfully');
+    }
+    
+    /**
+     * Gestisce i dialoghi creati direttamente nella scena Mercatorum
+     */
+    private handleMercatorumDialog(data: any): void {
+      if (!data) {
+        console.log('[DialogEventTracker] Received empty mercatorum dialog data');
+        return;
+      }
+      
+      console.log('[DialogEventTracker] Mercatorum dialog detected:', data);
+      
+      // Incrementa il contatore appropriato (standard se non specificato)
+      const type = data.type || 'standard';
+      this.incrementCounter(type);
+    }
+    
+    /**
+     * Gestisce esplicitamente gli eventi dialog-created
+     */
+    private handleDialogCreated(data: any): void {
+      if (!data) {
+        console.log('[DialogEventTracker] Received empty dialog created data');
+        return;
+      }
+      
+      console.log('[DialogEventTracker] Dialog created event received:', data);
+      
+      // Categorizza il dialogo
+      if (data.type === 'llm') {
+        this.incrementCounter('llm');
+      } else if (data.type === 'simulated') {
+        this.incrementCounter('simulated');
+      } else {
+        this.incrementCounter('standard');
+      }
+    }
+    
+    /**
+     * Gestisce le risposte API per i dialoghi
+     */
+    private handleAPIDialogResponse(data: any): void {
+      if (!data || !data.response) return;
+      
+      if (this.debugMode) {
+        console.log('[DialogEventTracker] API dialog response received:', data);
+      }
+      
+      const response = data.response;
+      const agentId = data.agentId;
+      
+      // Registra la fonte del dialogo
+      if (response.isLLMGenerated) {
+        this.dialogSources.set(agentId, 'llm');
+        this.incrementCounter('llm');
+        
+        // Previeni il doppio conteggio
+        if (!data.counted) {
+          data.counted = true;
+        }
+      } else {
+        this.dialogSources.set(agentId, 'fallback');
+        this.incrementCounter('simulated');
+        
+        // Previeni il doppio conteggio
+        if (!data.counted) {
+          data.counted = true;
+        }
+      }
+    }
+    
+    /**
+     * Gestisce eventi di interazione tra agenti
+     */
+    private handleAgentInteraction(data: any): void {
+      if (!data) return;
+      
+      if (this.debugMode) {
+        console.log('[DialogEventTracker] Agent interaction event received:', data);
+      }
+      
+      // Se l'interazione non ha già un flag llm esplicito, analizziamo la fonte
+      if (data.llm === undefined) {
+        // Controlla se uno degli agenti è registrato come utente LLM
+        const isLLM = this.dialogSources.get(data.agentId1) === 'llm' || 
+                      this.dialogSources.get(data.agentId2) === 'llm';
+        
+        if (isLLM) {
+          this.incrementCounter('llm');
+          // Aggiorna l'evento con l'informazione LLM
+          data.llm = true;
+          
+          // Previeni il doppio conteggio
+          if (!data.counted) {
+            data.counted = true;
+          }
+        } else {
+          // Dialogo standard (non LLM)
+          this.incrementCounter('standard');
+          
+          // Previeni il doppio conteggio
+          if (!data.counted) {
+            data.counted = true;
+          }
+        }
+      } else if (data.llm === true && !data.counted) {
+        // Se è un dialogo LLM ma non ancora conteggiato
+        this.incrementCounter(data.isSimulated ? 'simulated' : 'llm');
+        data.counted = true;
+      }
+    }
+    
+    /**
+     * Gestisce eventi di reazione degli agenti
+     */
+    private handleAgentReaction(data: any): void {
+      this.processAgentEvent(data);
+    }
+    
+    /**
+     * Gestisce eventi di pensiero degli agenti
+     */
+    private handleAgentThinking(data: any): void {
+      this.processAgentEvent(data);
+    }
+    
+    /**
+     * Gestisce eventi di decisione degli agenti
+     */
+    private handleAgentDecision(data: any): void {
+      this.processAgentEvent(data);
+    }
+    
+    /**
+     * Processa un evento generico di agente
+     */
+    private processAgentEvent(data: any): void {
+      if (!data) return;
+      
+      if (this.debugMode) {
+        console.log('[DialogEventTracker] Processing agent event:', data);
+      }
+      
+      // Skip counting if there's no actual dialog content
+      if (!data.text && !data.message) {
+        console.log('[DialogEventTracker] Skipping event - no dialog content');
+        return;
+      }
+      
+      // Se l'evento non ha già un flag llm esplicito, analizziamo la fonte
+      if (data.llm === undefined) {
+        // Controlla se l'agente è registrato come utente LLM
+        const isLLM = this.dialogSources.get(data.agentId) === 'llm';
+        
+        if (isLLM) {
+          this.incrementCounter('llm');
+          // Aggiorna l'evento con l'informazione LLM
+          data.llm = true;
+          
+          // Previeni il doppio conteggio
+          if (!data.counted) {
+            data.counted = true;
+          }
+        } else {
+          // Dialogo standard (non LLM)
+          this.incrementCounter('standard');
+          
+          // Previeni il doppio conteggio
+          if (!data.counted) {
+            data.counted = true;
+          }
+        }
+      } else if (data.llm === true && !data.counted) {
+        // Se è un dialogo LLM ma non ancora conteggiato
+        this.incrementCounter(data.isSimulated ? 'simulated' : 'llm');
+        data.counted = true;
+      }
+    }
+    
+    /**
+     * Registra manualmente un dialogo
+     */
+    public trackDialog(type: 'llm' | 'simulated' | 'standard', agentId?: string): void {
+      console.log(`[DialogEventTracker] Tracking dialog: type=${type}, agentId=${agentId || 'none'}`);
+      
+      this.incrementCounter(type);
+      
+      if (agentId) {
+        this.dialogSources.set(agentId, type === 'llm' ? 'llm' : type === 'simulated' ? 'fallback' : 'standard');
+        console.log(`[DialogEventTracker] Updated dialog source for agent ${agentId} to ${type}`);
+      }
+    }
+    
+    /**
+     * Incrementa un contatore specifico
+     */
+    private incrementCounter(type: 'llm' | 'simulated' | 'standard'): void {
+      console.log(`[DialogEventTracker] Incrementing counter for type: ${type}`);
+      
+      if (type === 'llm') {
+        this.llmDialogCount++;
+      } else if (type === 'simulated') {
+        this.simulatedDialogCount++;
+      } else {
+        this.standardDialogCount++;
+      }
+      
+      console.log(`[DialogEventTracker] New counter values:`, {
+        llm: this.llmDialogCount,
+        simulated: this.simulatedDialogCount,
+        standard: this.standardDialogCount
+      });
+      
+      // Emetti evento di aggiornamento contatori
+      this.scene.game.events.emit('dialog-counter-updated', {
+        llm: this.llmDialogCount,
+        simulated: this.simulatedDialogCount,
+        standard: this.standardDialogCount
+      });
+      
+      // Salva lo stato
+      this.saveState();
+    }
+    
+    /**
+     * Restituisce i contatori attuali
+     */
+    public getCounters(): { llm: number, simulated: number, standard: number } {
+      return {
+        llm: this.llmDialogCount,
+        simulated: this.simulatedDialogCount,
+        standard: this.standardDialogCount
+      };
+    }
+    
+    /**
+     * Resetta tutti i contatori
+     */
+    public resetCounters(): void {
+      if (this.debugMode) {
+        console.log('[DialogEventTracker] Resetting counters');
+      }
+      
+      this.llmDialogCount = 0;
+      this.simulatedDialogCount = 0;
+      this.standardDialogCount = 0;
+      
+      // Emetti evento di aggiornamento contatori
+      this.scene.game.events.emit('dialog-counter-updated', {
+        llm: 0,
+        simulated: 0,
+        standard: 0
+      });
+      
+      // Salva lo stato
+      this.saveState();
+    }
+    
+    /**
+     * Attiva/disattiva la modalità debug
+     */
+    public setDebugMode(enabled: boolean): void {
+      this.debugMode = enabled;
+      localStorage.setItem('dialog_tracker_debug', String(enabled));
+      console.log(`[DialogEventTracker] Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+    }
+    
+    /**
+     * Distrugge il tracker e pulisce le risorse
+     */
+    public destroy(): void {
+      if (this.debugMode) {
+        console.log('[DialogEventTracker] Destroying tracker');
+      }
+      
+      // Rimuovi gli event listener
+      this.scene.game.events.off('dialog-created', this.handleDialogCreated, this);
+      this.scene.game.events.off('api-dialog-response', this.handleAPIDialogResponse, this);
+      this.scene.game.events.off('agent-interaction', this.handleAgentInteraction, this);
+      this.scene.game.events.off('agent-reaction', this.handleAgentReaction, this);
+      this.scene.game.events.off('agent-thinking', this.handleAgentThinking, this);
+      this.scene.game.events.off('agent-decision', this.handleAgentDecision, this);
+      this.scene.events.off('mercatorum-dialog-created', this.handleMercatorumDialog, this);
+      
+      this.isInitialized = false;
+    }
+  }

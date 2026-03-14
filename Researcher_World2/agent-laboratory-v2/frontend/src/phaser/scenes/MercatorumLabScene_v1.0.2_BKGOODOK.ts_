@@ -1,0 +1,2096 @@
+// frontend/src/phaser/scenes/MercatorumLabScenev1.0.2BKGOODOK.ts_
+
+import { BaseScene } from './BaseScene';
+import { Agent, AgentState } from '../sprites/Agent';
+import { LabTheme } from './BaseLabScene';
+import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
+import { createAgent } from '../sprites/agentFactory';
+import { AgentsLegend } from '../ui/AgentsLegend';
+import { LabAgentsLoader } from '../utils/LabAgentsLoader';
+import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
+import { addLabInfoButton } from '../examples/AgentsLegendIntegration';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { LAB_TYPES } from '../types/LabTypeConstants';
+
+// Definizione temporanea della configurazione degli agenti finché non viene creato il file corretto
+const AGENT_CONFIG = {
+  mercatorum: {
+    agents: [
+      {
+        type: 'professor',
+        name: 'Prof. Rossi',
+        position: { x: 150, y: 200 },
+        specialization: 'business_intelligence'
+      },
+      {
+        type: 'researcher',
+        name: 'Dr. Bianchi',
+        position: { x: 300, y: 250 },
+        specialization: 'data_privacy'
+      },
+      {
+        type: 'student',
+        name: 'Dott. Verdi',
+        position: { x: 200, y: 150 },
+        specialization: 'financial_analytics'
+      }
+    ]
+  }
+};
+
+export class MercatorumLabScene extends BaseScene {
+  // Agenti e interazioni
+  protected agents: Agent[] = [];
+  protected interactionZones: Phaser.GameObjects.Zone[] = [];
+  
+  // Grid per il pathfinding
+  protected grid: number[][] = [];
+  
+  // Elementi di debug
+  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  private debugText: Phaser.GameObjects.Text | null = null;
+  private assetsLoaded: boolean = false;
+  private textureTestContainers: Phaser.GameObjects.Container[] = [];
+  private rawSprites: Phaser.GameObjects.Sprite[] = [];
+  
+  // Dichiarazione aggiuntiva per la legenda
+  private agentsLegend: AgentsLegend | null = null;
+  
+  // Controller per gestire i dialoghi
+  private agentController: GlobalAgentController | null = null;
+
+
+
+  // Tema del laboratorio Mercatorum
+  protected theme: LabTheme = {
+    name: "Università Mercatorum Lab",
+    backgroundColor: 0xd2691e, // Tonalità terracotta
+    tilesetKey: 'tiles_mercatorum',
+    colorPalette: {
+      primary: 0xd2691e,   // Tonalità terracotta
+      secondary: 0x1a365d, // Blu navy
+      accent: 0xf5f5dc,    // Crema
+      background: 0xd2691e  // Tonalità terracotta
+    }
+  };
+
+  constructor() {
+    super('MercatorumLabScene');
+    console.log('MercatorumLabScene constructor called');
+  }
+
+  init(): void {
+    console.log('MercatorumLabScene init START');
+    try {
+      super.init();
+      this.grid = [];
+      this.agents = [];
+      this.interactionZones = [];
+      this.assetsLoaded = false;
+      this.textureTestContainers = [];
+      this.rawSprites = [];
+      console.log('MercatorumLabScene init COMPLETE');
+    } catch (error) {
+      console.error('Error in MercatorumLabScene init:', error);
+    }
+  }
+
+  preload() {
+    console.log('MercatorumLabScene preload START');
+    try {
+      // Chiama il preload del padre per caricare gli asset comuni
+      super.preload();
+      
+      // Aggiungi listener per tracciare lo stato di caricamento
+      this.load.on('progress', (value: number) => {
+        console.log(`Load progress: ${Math.round(value * 100)}%`);
+        this.updateDebugInfo(`Loading: ${Math.round(value * 100)}%`);
+      });
+      
+      this.load.on('complete', () => {
+        console.log('All assets loaded successfully');
+        this.assetsLoaded = true;
+        this.updateDebugInfo('Assets loaded - creating scene elements');
+      });
+      
+      this.load.on('loaderror', (file: any) => {
+        console.error(`Error loading file: ${file.key} from ${file.url}`);
+        this.updateDebugInfo(`Error loading: ${file.key}`);
+      });
+      
+      // Carica gli sprite dei personaggi
+      this.load.spritesheet('professor', 'assets/characters/professor3.png', { 
+        frameWidth: 32, 
+        frameHeight: 48 
+      });
+      
+      this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { 
+        frameWidth: 32, 
+        frameHeight: 48 
+      });
+      
+      this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { 
+        frameWidth: 32, 
+        frameHeight: 48 
+      });
+      
+      // Aggiungi questi eventi di debug:
+      this.load.on('filecomplete-spritesheet-student', () => {
+          console.log("Student spritesheet caricato con successo!");
+      });
+    
+      this.load.on('loaderror', (file: any) => {
+          if (file.key === 'student') {
+          console.error("Errore caricamento spritesheet studente:", file.url);
+          }
+      });
+
+      // Carica risorse specifiche per questo laboratorio
+      this.load.image('mercatorum_background', 'assets/labs/mercatorum/background.png');
+      this.load.image('mercatorum_furniture', 'assets/labs/mercatorum/furniture.png');
+      
+      // Carica tileset specifico
+      this.load.image(this.theme.tilesetKey, 'assets/tileset/mercatorum-tiles.png');
+      
+      // Carica la mappa
+      this.load.tilemapJSON('mercatorum-map', 'assets/tilemaps/mercatorum-map.json');
+      
+      // Carica il file di configurazione degli agenti specifici per laboratorio
+      this.load.json('labAgentTypesConfig', 'assets/config/labAgentTypes.json');
+      
+      // Carica il logo Mercatorum
+      this.load.image('mercatorum-logo', 'assets/ui/mercatorum-logo.png');
+      
+      // Carica le texture per i dialoghi
+      this.load.image('bubble-background', 'assets/ui/dialog/bubble-background.png');
+      this.load.image('bubble-tail', 'assets/ui/dialog/bubble-tail.png');
+      this.load.image('icon-data', 'assets/ui/dialog/icon-data.png');
+      this.load.image('icon-model', 'assets/ui/dialog/icon-model.png');
+      this.load.image('icon-privacy', 'assets/ui/dialog/icon-privacy.png');
+      this.load.image('icon-research', 'assets/ui/dialog/icon-research.png');
+      
+      console.log('MercatorumLabScene preload COMPLETE');
+    } catch (error) {
+      console.error('Error in MercatorumLabScene preload:', error);
+      this.updateDebugInfo(`Preload error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  create() {
+    console.log('MercatorumLabScene create START');
+    
+    // Verifica immediata della texture 'student'
+    if (this.textures.exists('student')) {
+        console.log("Texture 'student' disponibile con", this.textures.get('student').frameTotal, "frames");
+    } else {
+        console.error("Texture 'student' NON disponibile");
+    }
+
+    try {
+      // Inizializza gli elementi di debug
+      this.createDebugElements();
+      
+      // Imposta un colore di sfondo acceso per debug
+      this.cameras.main.setBackgroundColor(0xFF00FF); // Magenta vivace per debug
+      
+      // Crea placeholder per le texture mancanti
+      this.createImprovedPlaceholders();
+      
+      // Esegui il debug completo delle texture
+      this.runTextureDebug();
+      
+      // Visualizza asset disponibili
+      this.displayLoadedAssets();
+      
+      // Crea texture di placeholder se necessario
+      this.createMissingTextures();
+      
+      // Dopo il debug, usa il colore reale
+      setTimeout(() => {
+        this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
+      }, 1000);
+      
+      // Crea animazioni per i personaggi
+      this.createAllCharacterAnimations();
+      
+      // Usa l'immagine di sfondo caricata o crea un background in stile italiano classico
+      if (this.textures.exists('mercatorum_background')) {
+        this.createBackgroundFromImage();
+      } else {
+        this.createItalianClassicBackground();
+      }
+      
+      // Crea una mappa base (temporanea)
+      this.createTemporaryMap();
+      
+      // Inizializza la griglia per il pathfinding
+      this.initializeGrid();
+      
+      // Crea le zone di interazione
+      this.createInteractionZones();
+      
+      // Crea agenti da configurazione
+      this.createAgentsFromConfig();
+      
+      // Setup della camera
+      this.setupCamera();
+      
+      // Aggiungi pulsante per tornare al lab Blekinge
+      this.createNavigationButtons();
+      
+      // Crea la legenda personalizzata per Mercatorum invece di quella generica
+      // this.createMercatorumLegend();
+      integrateAgentsLegend(this);
+      addLabInfoButton(this, 'mercatorum');
+
+      // Titolo del laboratorio con effetto classico italiano
+      // Crea un container per tutto il titolo
+      const titleContainer = this.add.container(this.cameras.main.centerX, 25);
+      titleContainer.setDepth(10);
+
+      // Calcoliamo la dimensione necessaria per il testo
+      const tempText = this.add.text(
+      0, 
+      0,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      // Otteniamo la larghezza del testo e aggiungiamo del padding
+      const textWidth = tempText.width + 60;
+      const textHeight = tempText.height + 20;
+      tempText.destroy(); // Rimuoviamo il testo temporaneo
+
+      // Creiamo uno sfondo con stile italiano classico
+      const titleBackground = this.add.graphics();
+      // Ombra dello sfondo
+      titleBackground.fillStyle(0x7b5c3e, 0.9);
+      titleBackground.fillRoundedRect(-textWidth/2 - 5, -textHeight/2 - 5, textWidth + 10, textHeight + 10, 8);
+      // Sfondo principale in tonalità terracotta
+      titleBackground.fillStyle(0xd2691e, 0.95);
+      titleBackground.fillRoundedRect(-textWidth/2, -textHeight/2, textWidth, textHeight, 8);
+      // Bordo con dettagli ornamentali
+      titleBackground.lineStyle(3, 0xf5f5dc, 1);
+      titleBackground.strokeRoundedRect(-textWidth/2, -textHeight/2, textWidth, textHeight, 8);
+      titleBackground.setDepth(5);
+
+      // Aggiungiamo il background al container
+      titleContainer.add(titleBackground);
+
+      // Ombra molto profonda (livello 4)
+      const textShadow4 = this.add.text(
+      6, 
+      6,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          color: '#3a2915',
+          align: 'center',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      textShadow4.setOrigin(0.5);
+      textShadow4.setDepth(6);
+      textShadow4.setAlpha(0.3);
+      titleContainer.add(textShadow4);
+
+      // Ombra profonda (livello 3)
+      const textShadow3 = this.add.text(
+      4, 
+      4,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          color: '#4f3a20',
+          align: 'center',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      textShadow3.setOrigin(0.5);
+      textShadow3.setDepth(7);
+      textShadow3.setAlpha(0.5);
+      titleContainer.add(textShadow3);
+
+      // Ombra media (livello 2)
+      const textShadow2 = this.add.text(
+      3, 
+      3,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          color: '#644b2b',
+          align: 'center',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      textShadow2.setOrigin(0.5);
+      textShadow2.setDepth(8);
+      textShadow2.setAlpha(0.6);
+      titleContainer.add(textShadow2);
+
+      // Ombra vicina (livello 1)
+      const textShadow = this.add.text(
+      2, 
+      2,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          color: '#7a5e36',
+          align: 'center',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      textShadow.setOrigin(0.5);
+      textShadow.setDepth(9);
+      textShadow.setAlpha(0.7);
+      titleContainer.add(textShadow);
+
+      // Testo principale in color crema
+      const text = this.add.text(
+      0, 
+      0,
+      'Università Mercatorum Lab',
+      { 
+          fontSize: '40px',
+          color: '#f5f5dc',
+          align: 'center',
+          fontFamily: 'serif',
+          fontStyle: 'bold'
+      }
+      );
+      text.setOrigin(0.5);
+      text.setDepth(10);
+      titleContainer.add(text);
+
+      // Aggiungiamo un effetto di brillantezza al testo
+      const glowEffect = this.add.graphics();
+      glowEffect.fillStyle(0xf5f5dc, 0.1);
+
+      // Più strati di glow per un effetto di brillantezza
+      for (let i = 0; i < 3; i++) {
+      const size = 3 + (i * 2);
+      glowEffect.fillCircle(0, 0, size);
+      }
+      glowEffect.setDepth(9);
+      glowEffect.setBlendMode(Phaser.BlendModes.ADD);
+      titleContainer.add(glowEffect);
+
+      // Aggiungiamo decorazioni in stile italiano classico
+      const decorations = this.add.graphics();
+      decorations.fillStyle(0xf5f5dc, 1);
+      
+      // Piccoli dettagli decorativi agli angoli
+      decorations.fillRect(-textWidth/2 + 4, -textHeight/2 + 4, 8, 2);
+      decorations.fillRect(-textWidth/2 + 4, -textHeight/2 + 4, 2, 8);
+      
+      decorations.fillRect(textWidth/2 - 12, -textHeight/2 + 4, 8, 2);
+      decorations.fillRect(textWidth/2 - 6, -textHeight/2 + 4, 2, 8);
+      
+      decorations.fillRect(-textWidth/2 + 4, textHeight/2 - 6, 8, 2);
+      decorations.fillRect(-textWidth/2 + 4, textHeight/2 - 12, 2, 8);
+      
+      decorations.fillRect(textWidth/2 - 12, textHeight/2 - 6, 8, 2);
+      decorations.fillRect(textWidth/2 - 6, textHeight/2 - 12, 2, 8);
+      
+      decorations.setDepth(12);
+      titleContainer.add(decorations);
+      
+      // Pulsante di test per i dialoghi (solo in modalità sviluppo)
+      if (process.env.NODE_ENV !== 'production') {
+        // Crea un container per il pulsante per assicurare la corretta visualizzazione
+        const buttonContainer = this.add.container(80, 200);
+        buttonContainer.setDepth(1000);
+        
+        // Crea lo sfondo del pulsante
+        const buttonBackground = this.add.graphics();
+        buttonBackground.fillStyle(0x333333, 0.8);
+        buttonBackground.fillRoundedRect(-50, -15, 100, 30, 5);
+        buttonBackground.lineStyle(2, 0x555555, 1);
+        buttonBackground.strokeRoundedRect(-50, -15, 100, 30, 5);
+        
+        // Aggiungi il testo al pulsante
+        const buttonText = this.add.text(0, 0, "Test Dialogo", {
+          color: '#fff',
+          fontSize: '16px',
+          fontFamily: 'Arial',
+          align: 'center'
+        });
+        buttonText.setOrigin(0.5);
+        
+        // Aggiungi gli elementi al container
+        buttonContainer.add([buttonBackground, buttonText]);
+        
+        // Rendi il container interattivo
+        buttonContainer.setInteractive(new Phaser.Geom.Rectangle(-50, -15, 100, 30), Phaser.Geom.Rectangle.Contains);
+        
+        // Aggiungi gli eventi per l'interattività
+        buttonContainer.on('pointerover', () => {
+          buttonBackground.clear();
+          buttonBackground.fillStyle(0x555555, 0.9);
+          buttonBackground.fillRoundedRect(-50, -15, 100, 30, 5);
+          buttonBackground.lineStyle(2, 0x777777, 1);
+          buttonBackground.strokeRoundedRect(-50, -15, 100, 30, 5);
+        });
+        
+        buttonContainer.on('pointerout', () => {
+          buttonBackground.clear();
+          buttonBackground.fillStyle(0x333333, 0.8);
+          buttonBackground.fillRoundedRect(-50, -15, 100, 30, 5);
+          buttonBackground.lineStyle(2, 0x555555, 1);
+          buttonBackground.strokeRoundedRect(-50, -15, 100, 30, 5);
+        });
+        
+        buttonContainer.on('pointerdown', () => {
+          buttonBackground.clear();
+          buttonBackground.fillStyle(0x222222, 0.9);
+          buttonBackground.fillRoundedRect(-50, -15, 100, 30, 5);
+          buttonBackground.lineStyle(2, 0x444444, 1);
+          buttonBackground.strokeRoundedRect(-50, -15, 100, 30, 5);
+        });
+        
+        buttonContainer.on('pointerup', () => {
+          buttonBackground.clear();
+          buttonBackground.fillStyle(0x555555, 0.9);
+          buttonBackground.fillRoundedRect(-50, -15, 100, 30, 5);
+          buttonBackground.lineStyle(2, 0x777777, 1);
+          buttonBackground.strokeRoundedRect(-50, -15, 100, 30, 5);
+          
+          // Prendi i primi due agenti per un test
+          if (this.agents.length >= 2) {
+            const agent1 = this.agents[0];
+            const agent2 = this.agents[1];
+            
+            // Stampa informazioni dettagliate per il debug
+            console.log('Dialog test between agents:', {
+              agent1: { id: agent1.getId(), name: agent1.name, x: agent1.x, y: agent1.y },
+              agent2: { id: agent2.getId(), name: agent2.name, x: agent2.x, y: agent2.y }
+            });
+            
+            // Emetti un evento per il sistema di dialogo con un tipo specifico per debug
+            this.game.events.emit('agent-interaction', {
+              agentId1: agent1.getId(),
+              agentId2: agent2.getId(),
+              type: 'test-dialog' // Tipo modificato per debug
+            });
+            
+            console.log('Dialog test triggered between', agent1.name, 'and', agent2.name);
+          } else {
+            console.warn('Not enough agents for dialog test, found:', this.agents.length);
+          }
+        });
+      }
+
+
+      // Inizializza il controller globale per gli agenti con supporto per i dialoghi
+      this.agentController = new GlobalAgentController(this, LAB_TYPES.MERCATORUM);
+
+      // Registra gli agenti creati nel controller
+      this.agentController.setSimulationAgents(this.agents);
+
+      // Inizializza il debugger dei dialoghi
+      this.agentController.initDebugger();
+
+      // Aggiungi un pulsante per aprire il debugger di dialogo
+      const debugDialogButton = this.add.text(
+        this.cameras.main.width - 200, 
+        50, 
+        'Debug Dialoghi (D)', 
+        { 
+          fontSize: '16px',
+          color: '#ffffff',
+          backgroundColor: '#1a365d',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      debugDialogButton.setInteractive({ useHandCursor: true });
+      debugDialogButton.on('pointerdown', () => {
+        if (this.agentController) {
+          this.agentController.toggleDebugger();
+        }
+      });
+      debugDialogButton.setDepth(100);
+
+      // Aggiungi anche un listener per il tasto D per aprire il debugger
+      this.input.keyboard.on('keydown-D', () => {
+        if (this.agentController) {
+          this.agentController.toggleDebugger();
+        }
+      });
+
+      console.log('Dialog controller initialized');
+
+
+      console.log('MercatorumLabScene create COMPLETE');
+      
+      // Forza l'attivazione della scena se non è già attiva
+      if (!this.scene.isActive()) {
+        console.log('MercatorumLabScene not active, attempting to force activation');
+        this.scene.setActive(true);
+        this.scene.setVisible(true);
+      }
+      
+    } catch (error) {
+      console.error('Error in MercatorumLabScene create:', error);
+      this.updateDebugInfo(`Create error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Crea nuove texture placeholder direttamente nel formato corretto
+   */
+  private createMissingTextures(): void {
+    try {
+      const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+      
+      characterTypes.forEach(type => {
+        if (!this.textures.exists(type)) {
+          console.log(`Creating missing texture for ${type}`);
+          this.createDirectPlaceholderTexture(type, 32, 48);
+        } else {
+          console.log(`Texture ${type} already exists`);
+        }
+      });
+    } catch (error) {
+      console.error('Error in createMissingTextures:', error);
+    }
+  }
+
+  /**
+   * Crea un test visivo che confronta le diverse varianti di caricamento degli stessi asset
+   */
+  private createLoadingVariantTest(): void {
+    try {
+      console.log('Creating sprite loading variant test');
+      
+      // Posizione iniziale per la griglia di test
+      const startX = 100;
+      const startY = 300;
+      const colWidth = 150;
+      const rowHeight = 150;
+      
+      // Personaggi da testare
+      const characters = [
+        'professor',
+        'researcher',
+        'student',
+        'doctor'
+      ];
+      
+      // Varianti di caricamento
+      const variants = [
+        { suffix: '', label: 'Spritesheet' },
+        { suffix: '_img', label: 'Image' },
+        { suffix: '_chars', label: 'Characters' },
+        { suffix: '_agent', label: 'Agent/' }
+      ];
+      
+      // Crea una griglia di test per tutte le combinazioni
+      for (let charIndex = 0; charIndex < characters.length; charIndex++) {
+        const char = characters[charIndex];
+        
+        for (let varIndex = 0; varIndex < variants.length; varIndex++) {
+          const variant = variants[varIndex];
+          const textureKey = char + variant.suffix;
+          
+          // Calcola la posizione nella griglia
+          const x = startX + (varIndex * colWidth);
+          const y = startY + (charIndex * rowHeight);
+          
+          // Controlla se la texture esiste
+          if (this.textures.exists(textureKey)) {
+            console.log(`Texture ${textureKey} esiste, creando sprite di test`);
+            
+            // Crea lo sprite
+            const sprite = this.add.sprite(x, y, textureKey);
+            sprite.setDepth(100);
+            
+            // Se è uno spritesheet, prova tutti i frame
+            if (variant.suffix === '') {
+              try {
+                const texture = this.textures.get(textureKey);
+                console.log(`${textureKey} ha ${texture.frameTotal} frame`);
+                
+                // Se ha più frame, crea un'animazione di test
+                if (texture.frameTotal > 1) {
+                  // Crea un'animazione temporanea solo per questo sprite
+                  const animKey = `test_${textureKey}_${Date.now()}`;
+                  this.anims.create({
+                    key: animKey,
+                    frames: this.anims.generateFrameNumbers(textureKey, { 
+                      start: 0, 
+                      end: texture.frameTotal - 1 
+                    }),
+                    frameRate: 5,
+                    repeat: -1
+                  });
+                  
+                  sprite.play(animKey);
+                }
+              } catch (e) {
+                console.error(`Errore nella gestione dei frame per ${textureKey}:`, e);
+              }
+            }
+            
+            // Aggiungi etichetta con nome della texture
+            const text = this.add.text(x, y + 40, `${char}\n${variant.label}`, {
+              fontSize: '12px',
+              color: '#FFFFFF',
+              backgroundColor: '#000000',
+              padding: { left: 3, right: 3, top: 2, bottom: 2 },
+              align: 'center'
+            });
+            text.setOrigin(0.5);
+            text.setDepth(100);
+            
+            // Aggiungi info sulla texture
+            try {
+              const texture = this.textures.get(textureKey);
+              const textureInfo = this.add.text(x, y - 40, 
+                `${texture.frameTotal} frames\n${texture.source[0].width}x${texture.source[0].height}`, {
+                fontSize: '10px',
+                color: '#FFFFFF',
+                backgroundColor: '#444444',
+                padding: { left: 2, right: 2, top: 1, bottom: 1 },
+                align: 'center'
+              });
+              textureInfo.setOrigin(0.5);
+              textureInfo.setDepth(100);
+            } catch (e) {
+              console.error(`Errore nell'ottenere info texture per ${textureKey}:`, e);
+            }
+          } else {
+            console.log(`Texture ${textureKey} non esiste, creando placeholder`);
+            
+            // Crea un placeholder per la texture mancante
+            const text = this.add.text(x, y, `❌\n${char}\n${variant.label}`, {
+              fontSize: '12px',
+              color: '#FFFFFF',
+              backgroundColor: '#FF0000',
+              padding: { left: 5, right: 5, top: 5, bottom: 5 },
+              align: 'center'
+            });
+            text.setOrigin(0.5);
+            text.setDepth(100);
+          }
+        }
+      }
+      
+      // Aggiungi un titolo per il test
+      const title = this.add.text(startX + (colWidth * variants.length / 2), startY - 50, 
+        'TEST CARICAMENTO SPRITE - CONFRONTO VARIANTI', {
+        fontSize: '16px',
+        color: '#FFFFFF',
+        backgroundColor: '#0000AA',
+        padding: { left: 10, right: 10, top: 5, bottom: 5 }
+      });
+      title.setOrigin(0.5);
+      title.setDepth(100);
+      
+      console.log('Sprite loading variant test created');
+    } catch (error) {
+      console.error('Error in createLoadingVariantTest:', error);
+    }
+  }
+
+  /**
+   * Crea texture placeholder migliorate per vari tipi di personaggi
+   */
+  private createImprovedPlaceholders(): void {
+    try {
+      console.log('Creating improved placeholders for missing textures');
+      
+      // Lista dei tipi di personaggi che richiedono placeholder
+      const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+      
+      // Definizione dei colori per tipo
+      const typeColors = {
+        professor: { main: '#d2691e', accent: '#8b4513' },  // Terracotta
+        researcher: { main: '#1a365d', accent: '#0c1b2e' }, // Blu navy
+        student: { main: '#f5f5dc', accent: '#dcdcaa' },    // Crema
+        doctor: { main: '#228b22', accent: '#006400' }      // Verde
+      };
+      
+      // Per ogni tipo, crea una texture placeholder migliorata
+      characterTypes.forEach(type => {
+        // Verifica se la texture esiste già
+        if (this.textures.exists(type)) {
+          console.log(`Texture ${type} già esiste, saltando creazione placeholder`);
+          return;
+        }
+        
+        console.log(`Creando texture placeholder migliorata per ${type}`);
+        
+        // Dimensioni frame
+        const frameWidth = 32;
+        const frameHeight = 48;
+        
+        // Numero di frame
+        const frameCount = 4;
+        
+        // Dimensioni totali texture
+        const canvasWidth = frameWidth;
+        const canvasHeight = frameHeight * frameCount;
+        
+        // Crea un canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error(`Impossibile ottenere contesto 2D per placeholder ${type}`);
+          return;
+        }
+        
+        // Ottieni i colori per questo tipo
+        const colors = typeColors[type as keyof typeof typeColors] || 
+                      { main: '#FF00FF', accent: '#AA00AA' };
+        
+        // Disegna i frame
+        for (let frame = 0; frame < frameCount; frame++) {
+          const frameY = frame * frameHeight;
+          
+          // Pulisci l'area del frame
+          ctx.fillStyle = colors.main;
+          ctx.fillRect(0, frameY, frameWidth, frameHeight);
+          
+          // Disegna il contorno
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(1, frameY + 1, frameWidth - 2, frameHeight - 2);
+          
+          // Disegna forme diverse per frame diversi (per simulare un'animazione)
+          ctx.fillStyle = colors.accent;
+          
+          // Testa stilizzata
+          ctx.beginPath();
+          ctx.arc(frameWidth / 2, frameY + 12, 6, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Corpo stilizzato che varia per frame
+          ctx.fillStyle = '#FFFFFF';
+          if (frame % 2 === 0) {
+            // Frame pari - figura diritta
+            ctx.fillRect(frameWidth / 2 - 5, frameY + 19, 10, 20);
+          } else {
+            // Frame dispari - figura in movimento
+            ctx.fillRect(frameWidth / 2 - 5, frameY + 19, 10, 16);
+            
+            // Gambe in movimento
+            ctx.beginPath();
+            ctx.moveTo(frameWidth / 2 - 4, frameY + 35);
+            ctx.lineTo(frameWidth / 2 - 1, frameY + 45);
+            ctx.lineTo(frameWidth / 2 + 1, frameY + 45);
+            ctx.lineTo(frameWidth / 2 + 4, frameY + 35);
+            ctx.closePath();
+            ctx.fill();
+          }
+          
+          // Etichetta con il tipo
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '6px Arial';
+          ctx.textAlign = 'center';
+          
+          // Visualizza un'etichetta diversa su ciascun frame
+          let label = type;
+          if (frame === 1) label = 'frame ' + frame;
+          if (frame === 2) label = 'walking';
+          if (frame === 3) label = 'moving';
+          
+          ctx.fillText(label, frameWidth / 2, frameY + frameHeight - 5);
+        }
+        
+        // Aggiungi il canvas come texture
+        this.textures.addCanvas(type, canvas);
+        
+        // Definisci esplicitamente i frame
+        const texture = this.textures.get(type);
+        
+        // Aggiungi frame individuali
+        for (let i = 0; i < frameCount; i++) {
+          texture.add(i, 0, 0, i * frameHeight, frameWidth, frameHeight);
+        }
+        
+        // Aggiorna la texture
+        texture.refresh();
+        
+        console.log(`Placeholder per ${type} creato con ${texture.frameTotal} frame`);
+      });
+      
+      // Dopo aver creato i placeholder, crea le animazioni 
+      // (perché le animazioni possono essere create solo dopo che le texture esistono)
+      this.createCharacterAnimations();
+      
+    } catch (error) {
+      console.error('Error in createImprovedPlaceholders:', error);
+    }
+  }
+
+  /**
+   * Crea una texture placeholder direttamente senza RenderTexture
+   */
+  private createDirectPlaceholderTexture(key: string, width: number, height: number): void {
+    try {
+      // Crea un canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height * 4; // Spazio per 4 frame
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      // Colori
+      const colors = {
+        professor: '#d2691e',  // Terracotta
+        researcher: '#1a365d', // Blu navy
+        student: '#f5f5dc',    // Crema
+        doctor: '#228b22'      // Verde
+      };
+      
+      const color = colors[key as keyof typeof colors] || '#FF00FF';
+      
+      // Disegna 4 frame diversi
+      for (let i = 0; i < 4; i++) {
+        // Sfondo
+        ctx.fillStyle = color;
+        ctx.fillRect(0, i * height, width, height);
+        
+        // Bordo
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(2, i * height + 2, width - 4, height - 4);
+        
+        // Texture design
+        ctx.fillStyle = '#FFFFFF';
+        
+        if (i === 0 || i === 2) {
+          // Triangolo per frame 0 e 2 (idle)
+          ctx.beginPath();
+          ctx.moveTo(width / 2, i * height + 10);
+          ctx.lineTo(width / 2 - 8, i * height + 30);
+          ctx.lineTo(width / 2 + 8, i * height + 30);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // Cerchio per frame 1 e 3 (walking)
+          ctx.beginPath();
+          ctx.arc(width / 2, i * height + 20, 8, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        
+        // Testo con tipo personaggio
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '6px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(key, width / 2, i * height + height - 10);
+      }
+      
+      // Crea la texture in Phaser
+      this.textures.addCanvas(key, canvas);
+      
+      // Definisci i frame manualmente 
+      const texture = this.textures.get(key);
+      
+      // Aggiungi i frame
+      for (let i = 0; i < 4; i++) {
+        texture.add(i, 0, 0, i * height, width, height);
+      }
+      
+      // Aggiorna la texture
+      texture.refresh();
+      
+      console.log(`Created direct placeholder texture for ${key} with ${texture.frameTotal} frames`);
+    } catch (error) {
+      console.error(`Error creating direct placeholder for ${key}:`, error);
+    }
+  }
+  
+  /**
+   * Crea animazioni per tutti i tipi di personaggio
+   * utilizzando le texture disponibili (reali o placeholder)
+   */
+  private createCharacterAnimations(): void {
+    try {
+      console.log('Creating animations for all character types');
+      
+      const characters = ['professor', 'researcher', 'student', 'doctor'];
+      
+      characters.forEach(char => {
+        // Verifica se la texture esiste
+        if (!this.textures.exists(char)) {
+          console.error(`Cannot create animations for ${char}: texture does not exist`);
+          return;
+        }
+        
+        const texture = this.textures.get(char);
+        if (!texture || texture.frameTotal <= 0) {
+          console.error(`Cannot create animations for ${char}: texture has no frames`);
+          return;
+        }
+        
+        const frameCount = texture.frameTotal;
+        console.log(`Creating animations for ${char} with ${frameCount} frames`);
+        
+        // Crea animazione 'idle'
+        if (!this.anims.exists(`${char}_idle`)) {
+          this.anims.create({
+            key: `${char}_idle`,
+            frames: this.anims.generateFrameNumbers(char, { 
+              frames: [0] 
+            }),
+            frameRate: 1,
+            repeat: 0
+          });
+          console.log(`Created animation: ${char}_idle`);
+        }
+        
+        // Crea animazione 'walk'
+        if (!this.anims.exists(`${char}_walk`)) {
+          // Per walk, usa tutti i frame disponibili o un subset
+          const walkFrames = frameCount >= 2 
+            ? { start: 0, end: Math.min(3, frameCount - 1) }
+            : { frames: [0] }; // Fallback se c'è un solo frame
+            
+          this.anims.create({
+            key: `${char}_walk`,
+            frames: this.anims.generateFrameNumbers(char, walkFrames),
+            frameRate: 6,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_walk`);
+        }
+        
+        // Crea animazione 'working'
+        if (!this.anims.exists(`${char}_working`)) {
+          const workingFrames = frameCount >= 2 
+            ? { frames: [0, 1] }
+            : { frames: [0] }; // Fallback
+            
+          this.anims.create({
+            key: `${char}_working`,
+            frames: this.anims.generateFrameNumbers(char, workingFrames),
+            frameRate: 3,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_working`);
+        }
+        
+        // Crea animazione 'discussing'
+        if (!this.anims.exists(`${char}_discussing`)) {
+          const discussingFrames = frameCount >= 3 
+            ? { frames: [0, 1, 0, 2] }
+            : (frameCount >= 2 ? { frames: [0, 1] } : { frames: [0] }); // Fallback
+            
+          this.anims.create({
+            key: `${char}_discussing`,
+            frames: this.anims.generateFrameNumbers(char, discussingFrames),
+            frameRate: 4,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_discussing`);
+        }
+      });
+      
+      console.log('All character animations created');
+    } catch (error) {
+      console.error('Error creating character animations:', error);
+    }
+  }
+  
+  /**
+   * Metodo per eseguire un debug approfondito delle texture
+   */
+  private runTextureDebug(): void {
+    try {
+      console.log('Running texture debug checks');
+      
+      // Utilizziamo l'helper per il debug delle texture
+      debugTextures(this);
+      
+      // Debug dettagliato delle texture che ci interessano
+      const textureKeysToDebug = [
+        'professor', 'researcher', 'student', 'doctor'
+      ];
+      
+      textureKeysToDebug.forEach(key => {
+        if (this.textures.exists(key)) {
+          debugTextureKey(this, key);
+        } else {
+          console.warn(`Texture ${key} does not exist for debug`);
+        }
+      });
+      
+      this.updateDebugInfo('Texture debug completed. Check console for details.');
+    } catch (error) {
+      console.error('Error in runTextureDebug:', error);
+    }
+  }
+  
+  /**
+   * Crea animazioni per tutti i tipi di personaggi
+   */
+  private createAllCharacterAnimations(): void {
+    try {
+      console.log('Creating animations for all character types');
+      
+      const characters = ['professor', 'researcher', 'student', 'doctor'];
+      
+      characters.forEach(char => {
+        // Verifica se la texture esiste e ha frame
+        if (!this.textures.exists(char)) {
+          console.warn(`Cannot create animations for ${char}: texture does not exist`);
+          return;
+        }
+        
+        const texture = this.textures.get(char);
+        if (!texture || texture.frameTotal <= 0) {
+          console.warn(`Cannot create animations for ${char}: texture has no frames`);
+          return;
+        }
+        
+        const frameCount = texture.frameTotal;
+        console.log(`Creating animations for ${char} with ${frameCount} frames`);
+        
+        // Crea animazione 'idle'
+        if (!this.anims.exists(`${char}_idle`)) {
+          this.anims.create({
+            key: `${char}_idle`,
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: 0 }),
+            frameRate: 1,
+            repeat: 0
+          });
+          console.log(`Created animation: ${char}_idle`);
+        }
+        
+        // Crea animazione 'walk'
+        if (!this.anims.exists(`${char}_walk`)) {
+          // Per walk, usa almeno 2 frame se disponibili
+          const endWalkFrame = Math.min(3, frameCount - 1);
+          this.anims.create({
+            key: `${char}_walk`,
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: endWalkFrame }),
+            frameRate: 6,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_walk with frames 0-${endWalkFrame}`);
+        }
+        
+        // Crea animazione 'working' 
+        if (!this.anims.exists(`${char}_working`)) {
+          this.anims.create({
+            key: `${char}_working`,
+            frames: this.anims.generateFrameNumbers(char, { start: 0, end: 1 }),
+            frameRate: 3,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_working`);
+        }
+        
+        // Crea animazione 'discussing'
+        if (!this.anims.exists(`${char}_discussing`)) {
+          this.anims.create({
+            key: `${char}_discussing`,
+            frames: this.anims.generateFrameNumbers(char, { 
+              frames: [0, 1, 0, 2] 
+            }),
+            frameRate: 4,
+            repeat: -1
+          });
+          console.log(`Created animation: ${char}_discussing`);
+        }
+      });
+      
+      console.log('All character animations created');
+    } catch (error) {
+      console.error('Error creating character animations:', error);
+    }
+  }
+
+  /**
+   * Crea lo sfondo utilizzando l'immagine caricata
+   */
+  private createBackgroundFromImage() {
+    try {
+      console.log('Creating background from loaded image');
+      
+      const background = this.add.image(
+        this.cameras.main.width / 2, 
+        this.cameras.main.height / 2, 
+        'mercatorum_background'
+      );
+      background.setDepth(-10);
+      
+      // Aggiusta le dimensioni per coprire lo schermo mantenendo le proporzioni
+      if (background.width > 0 && background.height > 0) {
+        // Calcola il fattore di scala appropriato
+        const scaleX = this.cameras.main.width / background.width;
+        const scaleY = this.cameras.main.height / background.height;
+        const scale = Math.max(scaleX, scaleY); // Usa il valore maggiore per coprire tutto lo schermo
+        
+        background.setScale(scale);
+        
+        // Centra l'immagine
+        background.setPosition(this.cameras.main.width / 2, this.cameras.main.height / 2);
+      }
+      
+      this.updateDebugInfo('Using loaded background image');
+    } catch (error) {
+      console.error('Error creating background from image:', error);
+      // Fallback al background generato
+      this.createItalianClassicBackground();
+    }
+  }
+
+  /**
+   * Crea lo sfondo con pattern in stile italiano classico
+   */
+  private createItalianClassicBackground() {
+    try {
+      console.log('Creating Italian classic background');
+      
+      // Se non è disponibile l'immagine, crea un pattern grafico
+      this.updateDebugInfo('Creating fallback background pattern');
+      
+      // Crea un pattern di background in stile italiano classico
+      const graphics = this.add.graphics();
+      
+      // Sfondo terracotta
+      graphics.fillStyle(this.theme.backgroundColor, 1);
+      graphics.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+      
+      // Pattern geometrici in stile classico italiano
+      graphics.lineStyle(2, 0xf5f5dc, 0.3); // Linee color crema
+      
+      // Pattern di archi romani stilizzati
+      const archWidth = 80;
+      const archHeight = 40;
+      for (let x = -archWidth/2; x < this.cameras.main.width + archWidth/2; x += archWidth) {
+        for (let y = 0; y < this.cameras.main.height; y += archHeight*2) {
+          // Arco romano stilizzato
+          graphics.beginPath();
+          graphics.moveTo(x, y + archHeight);
+          graphics.arc(x + archWidth/2, y + archHeight, archWidth/2, Math.PI, 0);
+          graphics.stroke();
+        }
+      }
+      
+      // Dettagli decorativi classici
+      graphics.fillStyle(this.theme.colorPalette.accent, 0.2);
+      
+      // Pattern di foglie di alloro stilizzate 
+      for (let x = 40; x < this.cameras.main.width; x += 120) {
+        for (let y = 60; y < this.cameras.main.height; y += 120) {
+          // Foglia stilizzata
+          graphics.fillCircle(x, y, 15);
+          graphics.fillCircle(x + 10, y - 5, 10);
+          graphics.fillCircle(x - 10, y - 5, 10);
+        }
+      }
+      
+      graphics.strokePath();
+      graphics.setDepth(-10);
+    } catch (error) {
+      console.error('Error in createItalianClassicBackground:', error);
+      this.updateDebugInfo(`Background error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Crea una mappa temporanea fino a quando non abbiamo un tilemap
+   */
+  private createTemporaryMap() {
+    try {
+      console.log('Creating temporary map');
+      
+      // Prima verifica se l'immagine del mobilio è stata caricata
+      if (this.textures.exists('mercatorum_furniture')) {
+        console.log('Using loaded furniture image');
+        const furniture = this.add.image(
+          this.cameras.main.width / 2, 
+          this.cameras.main.height / 2, 
+          'mercatorum_furniture'
+        );
+        furniture.setDepth(-5);
+        
+        // Impostazioni per debug
+        this.updateDebugInfo('Using loaded furniture image');
+        
+        // Creazione di una griglia di base per il pathdinding
+        this.createGridFromImage(furniture);
+        return;
+      }
+      
+      this.updateDebugInfo('Creating fallback furniture graphics');
+      
+      // Creazione di una griglia di base per il laboratorio
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      
+      // Crea una griglia vuota
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+      
+      // Aggiungi alcuni "mobili" al laboratorio come esempio
+      const furniture = this.add.graphics();
+      furniture.fillStyle(this.theme.colorPalette.secondary, 0.7);
+      
+      // Tavolo centrale grande con forma rettangolare arrotondata (stile italiano classico)
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      
+      // Tavolo grande al centro con bordi decorativi
+      furniture.fillStyle(0x8b4513, 0.8); // Marrone scuro per il bordo
+      furniture.fillRoundedRect(
+        centerX * gridSize - 85, 
+        centerY * gridSize - 45, 
+        170, 
+        90,
+        10
+      );
+      
+      furniture.fillStyle(0xd2691e, 0.8); // Tonalità terracotta per l'interno
+      furniture.fillRoundedRect(
+        centerX * gridSize - 80, 
+        centerY * gridSize - 40, 
+        160, 
+        80,
+        8
+      );
+      
+      // Marca il tavolo come non percorribile nella griglia
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) {
+            this.grid[y][x] = 1;
+          }
+        }
+      }
+      
+      // Postazioni di lavoro lungo i bordi con dettagli italiani classici
+      furniture.fillStyle(0x8b4513, 0.7); // Marrone scuro
+      
+      // Postazioni sul lato sinistro
+      for (let y = 2; y < height - 2; y += 3) {
+        // Cornice decorativa
+        furniture.fillRoundedRect(gridSize - 2, y * gridSize - 2, gridSize * 2 + 4, gridSize + 4, 5);
+        // Scrivania
+        furniture.fillStyle(0xcd853f, 0.8); // Marrone più chiaro
+        furniture.fillRoundedRect(gridSize, y * gridSize, gridSize * 2, gridSize, 3);
+        furniture.fillStyle(0x8b4513, 0.7); // Ripristina il colore
+        
+        // Marca come non percorribile
+        if (y >= 0 && y < height) {
+          this.grid[y][1] = 1;
+          this.grid[y][2] = 1;
+        }
+      }
+      
+      // Postazioni sul lato destro
+      for (let y = 2; y < height - 2; y += 3) {
+        // Cornice decorativa
+        furniture.fillRoundedRect(width * gridSize - gridSize * 3 - 2, y * gridSize - 2, gridSize * 2 + 4, gridSize + 4, 5);
+        // Scrivania
+        furniture.fillStyle(0xcd853f, 0.8); // Marrone più chiaro
+        furniture.fillRoundedRect(width * gridSize - gridSize * 3, y * gridSize, gridSize * 2, gridSize, 3);
+        furniture.fillStyle(0x8b4513, 0.7); // Ripristina il colore
+        
+        // Marca come non percorribile
+        if (y >= 0 && y < height) {
+          this.grid[y][width - 2] = 1;
+          this.grid[y][width - 3] = 1;
+        }
+      }
+      
+      // Libreria con testi di economia lungo la parete superiore
+      furniture.fillStyle(0x8b4513, 0.9); // Marrone scuro
+      furniture.fillRect(0, 0, width * gridSize, gridSize);
+      
+      // Dettagli libreria
+      for (let x = gridSize; x < width * gridSize - gridSize; x += gridSize) {
+        furniture.fillStyle(0xcd853f, 0.8); // Marrone più chiaro
+        furniture.fillRect(x, 0, gridSize - 8, gridSize);
+      }
+      
+      // Marca la libreria come non percorribile
+      for (let x = 0; x < width; x++) {
+        this.grid[0][x] = 1;
+      }
+      
+      furniture.setDepth(-5);
+    } catch (error) {
+      console.error('Error in createTemporaryMap:', error);
+      this.updateDebugInfo(`Map error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  
+  /**
+   * Crea una griglia di pathfinding basata su un'immagine
+   */
+  private createGridFromImage(image: Phaser.GameObjects.Image): void {
+    try {
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      
+      // Crea una griglia base
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+      
+      // In una versione avanzata, qui analizzeremmo i pixel dell'immagine
+      // Per semplicità, creiamo solo una zona non attraversabile al centro
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      
+      // Marca un'area centrale come non attraversabile (es. il tavolo)
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) {
+            this.grid[y][x] = 1;
+          }
+        }
+      }
+      
+      // Marca una zona superiore come non attraversabile (es. libreria)
+      for (let x = 0; x < width; x++) {
+        this.grid[0][x] = 1;
+      }
+    } catch (error) {
+      console.error('Error in createGridFromImage:', error);
+    }
+  }
+  
+  /**
+   * Inizializza la griglia per il pathfinding
+   */
+  protected initializeGrid(): void {
+    try {
+      // Nota: in una versione completa, qui leggeremmo da un tilemap
+      // Per ora utilizziamo la griglia creata in createTemporaryMap
+      console.log('Grid initialized with dimensions:', this.grid.length, 'x', this.grid[0]?.length);
+    } catch (error) {
+      console.error('Error in initializeGrid:', error);
+    }
+  }
+  
+  /**
+   * Crea le zone di interazione nel laboratorio
+   */
+  protected createInteractionZones(): void {
+    try {
+      console.log('Creating interaction zones');
+      const gridSize = 32;
+      
+      // Area centrale per tavolo meeting
+      const meetingZone = this.add.zone(
+        this.cameras.main.width / 2, 
+        this.cameras.main.height / 2, 
+        gridSize * 4, 
+        gridSize * 3
+      );
+      meetingZone.setName('meeting_table');
+      meetingZone.setInteractive();
+      
+      // Debug: visualizza la zona
+      const zoneGraphics = this.add.graphics();
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.strokeRect(
+        meetingZone.x - meetingZone.width / 2, 
+        meetingZone.y - meetingZone.height / 2, 
+        meetingZone.width, 
+        meetingZone.height
+      );
+      
+      this.interactionZones.push(meetingZone);
+      
+      // Area biblioteca - zona di ricerca
+      const libraryZone = this.add.zone(
+        this.cameras.main.width / 2, 
+        gridSize, 
+        this.cameras.main.width - 100, 
+        gridSize * 2
+      );
+      libraryZone.setName('library');
+      libraryZone.setInteractive();
+      
+      // Debug: visualizza la zona
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.strokeRect(
+        libraryZone.x - libraryZone.width / 2, 
+        libraryZone.y - libraryZone.height / 2, 
+        libraryZone.width, 
+        libraryZone.height
+      );
+      
+      this.interactionZones.push(libraryZone);
+      
+      // Area per visualizzazione dati finanziari
+      const dataZone = this.add.zone(
+        100, 
+        300, 
+        gridSize * 4, 
+        gridSize * 4
+      );
+      dataZone.setName('financial_data');
+      dataZone.setInteractive();
+      
+      // Debug: visualizza la zona
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.strokeRect(
+        dataZone.x - dataZone.width / 2, 
+        dataZone.y - dataZone.height / 2, 
+        dataZone.width, 
+        dataZone.height
+      );
+      
+      this.interactionZones.push(dataZone);
+    } catch (error) {
+      console.error('Error in createInteractionZones:', error);
+    }
+  }
+  
+  /**
+   * Configura la camera
+   */
+  protected setupCamera(): void {
+    try {
+      console.log('Setting up camera');
+      // Imposta i limiti della camera alle dimensioni del canvas
+      this.cameras.main.setBounds(0, 0, this.cameras.main.width, this.cameras.main.height);
+      
+      // Zoom iniziale
+      this.cameras.main.setZoom(1);
+      
+      // Posiziona la camera al centro
+      this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+      
+      // Aggiungi controlli di zoom (mousewheel)
+      this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
+        const currentZoom = this.cameras.main.zoom;
+        let newZoom = currentZoom;
+        
+        if (deltaY > 0) {
+          newZoom = Math.max(0.8, currentZoom - 0.1);
+        } else {
+          newZoom = Math.min(2, currentZoom + 0.1);
+        }
+        
+        this.cameras.main.setZoom(newZoom);
+      });
+      
+      // Aggiungi controlli di trascinamento per la camera
+      this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+        if (pointer.isDown) {
+          this.cameras.main.scrollX -= pointer.velocity.x / 10;
+          this.cameras.main.scrollY -= pointer.velocity.y / 10;
+        }
+      });
+    } catch (error) {
+      console.error('Error in setupCamera:', error);
+    }
+  }
+  
+  /**
+   * Crea i pulsanti di navigazione tra laboratori
+   */
+  private createNavigationButtons(): void {
+    try {
+      console.log('Creating navigation buttons');
+      // Pulsante per andare al lab Blekinge
+      const blekingeButton = this.add.text(
+        100, 
+        100, 
+        '→ Vai a Blekinge Lab', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#1a365d',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      blekingeButton.setInteractive({ useHandCursor: true });
+      blekingeButton.on('pointerdown', () => {
+        this.scene.start('BlekingeLabScene');
+      });
+      
+      // Pulsante per passare a OPBG Lab
+      const opbgButton = this.add.text(
+        100, 
+        140, 
+        '→ Vai a OPBG Lab', 
+        { 
+          fontSize: '18px',
+          color: '#ffffff',
+          backgroundColor: '#1a365d',
+          padding: { left: 10, right: 10, top: 5, bottom: 5 }
+        }
+      );
+      opbgButton.setInteractive({ useHandCursor: true });
+      opbgButton.on('pointerdown', () => {
+        this.scene.start('OPBGLabScene');
+      });
+      
+      // Imposta profondità per assicurarsi che i pulsanti siano sopra altri elementi
+      blekingeButton.setDepth(100);
+      opbgButton.setDepth(100);
+    } catch (error) {
+      console.error('Error in createNavigationButtons:', error);
+    }
+  }
+  
+  /**
+   * Aggiorna tutti gli agenti
+   */
+  protected updateAgents(time: number, delta: number): void {
+    this.agents.forEach(agent => {
+      if (typeof agent.update === 'function') {
+        agent.update(time, delta);
+      }
+    });
+  }
+  
+  /**
+   * Controlla le interazioni tra agenti e con l'ambiente
+   */
+  protected checkInteractions(): void {
+    try {
+      // Controlla interazioni agente-agente
+      for (let i = 0; i < this.agents.length; i++) {
+        for (let j = i + 1; j < this.agents.length; j++) {
+          const agent1 = this.agents[i];
+          const agent2 = this.agents[j];
+          
+          const distance = Phaser.Math.Distance.Between(
+            agent1.x, agent1.y,
+            agent2.x, agent2.y
+          );
+          
+          // Se gli agenti sono abbastanza vicini, possono interagire
+          if (distance < 32) {
+            this.handleAgentInteraction(agent1, agent2);
+          }
+        }
+      }
+      
+      // Controlla interazioni agente-zona
+      this.agents.forEach(agent => {
+        this.interactionZones.forEach(zone => {
+          const bounds = zone.getBounds();
+          if (bounds.contains(agent.x, agent.y)) {
+            this.handleZoneInteraction(agent, zone);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Error in checkInteractions:', error);
+    }
+  }
+  
+  /**
+   * Gestisce l'interazione tra due agenti
+   */
+  protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
+    try {
+      // Debug: mostra un'interazione tra agenti
+      console.log(`Agent interaction between ${agent1.name} and ${agent2.name}`);
+      
+      // Esempio: crea una bolla di dialogo temporanea
+      const dialogPosition = {
+        x: (agent1.x + agent2.x) / 2,
+        y: Math.min(agent1.y, agent2.y) - 20
+      };
+      
+      const dialogBubble = this.add.graphics();
+      dialogBubble.fillStyle(0xf5f5dc, 0.8); // Crema per la bolla di dialogo
+      dialogBubble.fillRoundedRect(dialogPosition.x - 40, dialogPosition.y - 15, 80, 30, 10);
+      dialogBubble.setDepth(100);
+      
+      // Emoji per la conversazione in base al laboratorio
+      const dialogText = this.add.text(
+        dialogPosition.x, 
+        dialogPosition.y, 
+        '💰', // Emoji relativo a business/economia 
+        { fontSize: '20px' }
+      );
+      dialogText.setOrigin(0.5);
+      dialogText.setDepth(101);
+      
+      // Rimuovi la bolla dopo un po'
+      this.time.delayedCall(2000, () => {
+        dialogBubble.destroy();
+        dialogText.destroy();
+      });
+    } catch (error) {
+      console.error('Error in handleAgentInteraction:', error);
+    }
+  }
+  
+  /**
+   * Gestisce l'interazione tra un agente e una zona
+   */
+  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
+    try {
+      // Debug: mostra un'interazione con la zona
+      console.log(`Agent ${agent.name} interacting with zone ${zone.name}`);
+      
+      // Esempio: mostra un'icona sopra l'agente in base alla zona
+      let iconText = '❓';
+      
+      if (zone.name === 'meeting_table') {
+        iconText = '🗣️';
+      } else if (zone.name === 'library') {
+        iconText = '📚';
+      } else if (zone.name === 'financial_data') {
+        iconText = '📊';
+      }
+      
+      const iconPosition = {
+        x: agent.x,
+        y: agent.y - 30
+      };
+      
+      // Aggiungi l'icona
+      const icon = this.add.text(
+        iconPosition.x, 
+        iconPosition.y, 
+        iconText, 
+        { fontSize: '24px' }
+      );
+      icon.setOrigin(0.5);
+      icon.setDepth(100);
+      
+      // Rimuovi l'icona dopo un po'
+      this.time.delayedCall(1500, () => {
+        icon.destroy();
+      });
+    } catch (error) {
+      console.error('Error in handleZoneInteraction:', error);
+    }
+  }
+  
+  /**
+   * Trova un percorso tra due punti usando una versione semplificata dell'algoritmo A*
+   */
+  protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
+    // Implementazione semplificata che restituisce un percorso diretto
+    // In una versione completa, qui andrebbe implementato l'algoritmo A*
+    const path = [
+      { x: startX, y: startY },
+      { x: targetX, y: targetY }
+    ];
+    
+    return path;
+  }
+
+  /**
+   * Crea agenti utilizzando la configurazione predefinita
+   */
+  private createAgentsFromConfig(): void {
+    try {
+      console.log('Creating agents from configuration');
+      
+      // Ottieni configurazione per Mercatorum
+      const mercatorumConfig = AGENT_CONFIG.mercatorum;
+      
+      if (!mercatorumConfig || !mercatorumConfig.agents || mercatorumConfig.agents.length === 0) {
+        console.warn('No agent configuration found for Mercatorum');
+        return;
+      }
+      
+      // Crea agenti dalla configurazione
+      mercatorumConfig.agents.forEach((agentConfig: {
+        type: string;
+        name: string;
+        position: { x: number; y: number };
+        specialization?: string;
+      }) => {
+        try {
+          console.log(`Creating agent: ${agentConfig.name} (${agentConfig.type})`);
+          
+          // Verifica se la texture esiste
+          if (!this.textures.exists(agentConfig.type)) {
+            console.warn(`Texture for ${agentConfig.type} does not exist, creating placeholder`);
+            this.createDirectPlaceholderTexture(agentConfig.type, 32, 48);
+          }
+          
+          // Crea l'agente con scala 3.5 (ripristinato da 2 a una dimensione più adeguata)
+          const agent = createAgent(this, {
+            type: agentConfig.type,
+            name: agentConfig.name,
+            position: agentConfig.position,
+            role: agentConfig.type,
+            scale: 3.5, // Ripristinato a un valore più adeguato
+            // Riduce la velocità per un movimento più naturale
+            speed: 30  // Velocità ridotta (era il default di 50)
+          });
+          
+          // Aggiungi l'agente alla scena e alla lista
+          this.add.existing(agent);
+          this.agents.push(agent);
+          
+          // Imposta lo stato iniziale
+          agent.changeState(AgentState.IDLE);
+          
+          console.log(`Agent ${agentConfig.name} created successfully`);
+        } catch (error) {
+          console.error(`Error creating agent ${agentConfig.name}:`, error);
+        }
+      });
+      
+      console.log(`Created ${this.agents.length} agents`);
+    } catch (error) {
+      console.error('Error in createAgentsFromConfig:', error);
+    }
+  }
+  
+  /**
+   * Crea elementi per il debug visivo
+   */
+  private createDebugElements(): void {
+    try {
+      // Crea un pannello di debug per mostrare informazioni sugli asset
+      this.debugGraphics = this.add.graphics();
+      
+      if (this.debugGraphics) {
+        this.debugGraphics.fillStyle(0x000000, 0.7);
+        this.debugGraphics.fillRect(10, 10, 400, 200);
+        this.debugGraphics.setDepth(1000);
+        this.debugGraphics.setScrollFactor(0);
+      }
+      
+      // Testo di debug
+      this.debugText = this.add.text(
+        20, 
+        20, 
+        'Debug info loading...', 
+        { 
+          fontSize: '14px',
+          color: '#FFFFFF',
+          fontFamily: 'monospace',
+          wordWrap: { width: 380 }
+        }
+      );
+      
+      if (this.debugText) {
+        this.debugText.setDepth(1001);
+        this.debugText.setScrollFactor(0);
+      }
+      
+      // Pulsante per nascondere/mostrare il debug
+      const toggleButton = this.add.text(
+        410, 
+        10, 
+        'X', 
+        { 
+          fontSize: '16px',
+          color: '#FFFFFF',
+          backgroundColor: '#FF0000',
+          padding: { left: 5, right: 5, top: 2, bottom: 2 }
+        }
+      );
+      
+      if (toggleButton) {
+        toggleButton.setDepth(1001);
+        toggleButton.setScrollFactor(0);
+        toggleButton.setInteractive({ useHandCursor: true });
+        toggleButton.on('pointerdown', () => {
+          // Toggle visibility
+          if (this.debugGraphics !== null && this.debugText !== null) {
+            const visible = !this.debugGraphics.visible;
+            this.debugGraphics.setVisible(visible);
+            this.debugText.setVisible(visible);
+            toggleButton.setText(visible ? 'X' : 'D');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error creating debug elements:', error);
+    }
+  }
+  
+  /**
+   * Aggiorna le informazioni di debug
+   */
+  private updateDebugInfo(text: string): void {
+    // MODIFICATO: verifica che il debugText sia definito e ancora valido
+    if (this.debugText && this.debugText.scene) {
+      try {
+        this.debugText.setText(text);
+      } catch (error) {
+        console.error('Error in updateDebugInfo:', error);
+      }
+    } else {
+      console.log('Debug info update (skipped - no valid debug text):', text);
+    }
+  }
+  
+  /**
+   * Visualizza informazioni sugli asset caricati
+   */
+  private displayLoadedAssets(): void {
+    try {
+      const textureKeys = this.textures.getTextureKeys();
+      const infoText = `
+        Scene: ${this.scene.key}
+        Loaded textures: ${textureKeys.length}
+        Keys: ${textureKeys.slice(0, 5).join(', ')}${textureKeys.length > 5 ? '...' : ''}
+        Animation count: ${this.anims.getAll().length}
+      `;
+      
+      this.updateDebugInfo(infoText);
+      console.log(infoText);
+    } catch (error) {
+      console.error('Error displaying loaded assets:', error);
+    }
+  }
+
+  /**
+   * Crea una legenda specifica per il laboratorio Mercatorum
+   */
+  private createMercatorumLegend(): void {
+    try {
+      console.log('Creating Mercatorum specific legend');
+      
+      // Utilizziamo il loader per ottenere agenti specifici per Mercatorum
+      LabAgentsLoader.loadLabSpecificAgents(this, 'mercatorum')
+        .then(agentTypes => {
+          // Crea la legenda con gli agenti specifici
+          const legend = new AgentsLegend(
+            this,            // riferimento alla scena
+            20,              // posizione X (nell'angolo in alto a sinistra)
+            60,              // posizione Y (sotto il titolo)
+            agentTypes       // configurazione specifica per Mercatorum
+          );
+          
+          // Esponi la legenda come proprietà della scena per usarla altrove
+          this.agentsLegend = legend;
+          
+          // Aggiungi pulsante per info sul laboratorio
+          this.createLabInfoButton();
+          
+          console.log('Mercatorum legend created');
+        })
+        .catch(error => {
+          console.error('Error creating Mercatorum legend:', error);
+        });
+    } catch (error) {
+      console.error('Error in createMercatorumLegend:', error);
+    }
+  }
+  
+  /**
+   * Crea un pulsante per mostrare informazioni sul laboratorio
+   */
+  private createLabInfoButton(): void {
+    const labInfoButton = this.add.text(
+      20, 
+      20, 
+      'ℹ️ Info Laboratorio', 
+      { 
+        fontSize: '16px',
+        color: '#ffffff',
+        backgroundColor: '#d2691e',
+        padding: { left: 10, right: 10, top: 5, bottom: 5 }
+      }
+    );
+    
+    labInfoButton.setInteractive({ useHandCursor: true });
+    labInfoButton.setDepth(500);
+    
+    labInfoButton.on('pointerdown', () => {
+      this.showLabInfo();
+    });
+  }
+
+  /**
+   * Mostra informazioni specifiche sul laboratorio Mercatorum
+   */
+  private showLabInfo(): void {
+    try {
+      // Crea un pannello di informazioni sul laboratorio
+      const infoPanel = this.add.container(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY
+      );
+      infoPanel.setDepth(1000);
+      
+      // Sfondo del pannello
+      const background = this.add.graphics();
+      background.fillStyle(0x1a365d, 0.9); // Blu navy
+      background.fillRoundedRect(-250, -200, 500, 400, 10);
+      background.lineStyle(3, 0xd2691e, 1); // Bordo terracotta
+      background.strokeRoundedRect(-250, -200, 500, 400, 10);
+      infoPanel.add(background);
+      
+      // Titolo
+      const title = this.add.text(
+        0, 
+        -170, 
+        'Università Mercatorum Lab', 
+        { 
+          fontSize: '24px',
+          color: '#f5f5dc', // Crema
+          fontStyle: 'bold',
+          align: 'center'
+        }
+      );
+      title.setOrigin(0.5);
+      infoPanel.add(title);
+      
+      // Descrizione in stile italiano classico
+      const descriptionText = 
+        'Laboratorio di ricerca specializzato in business intelligence ' +
+        'e analisi finanziaria federata. Questo ambiente combina ' +
+        'elementi architettonici classici italiani con tecnologie ' +
+        'all\'avanguardia per la privacy dei dati finanziari.\n\n' +
+        'Specializzazione in:\n' +
+        '• Business intelligence e analisi finanziaria federata\n' +
+        '• Privacy-preserving analytics per dati aziendali sensibili\n' +
+        '• Compliance GDPR e framework regolatori\n' +
+        '• Ottimizzazione di modelli federati per previsioni di mercato';
+      
+      const description = this.add.text(
+        0,
+        -80,
+        descriptionText,
+        {
+          fontSize: '16px',
+          color: '#ffffff',
+          align: 'center',
+          wordWrap: { width: 450 }
+        }
+      );
+      description.setOrigin(0.5, 0);
+      infoPanel.add(description);
+      
+      // Pulsante di chiusura
+      const closeButton = this.add.text(
+        230, 
+        -180, 
+        'X', 
+        { 
+          fontSize: '20px',
+          color: '#ffffff',
+          backgroundColor: '#aa0000',
+          padding: { left: 8, right: 8, top: 5, bottom: 5 }
+        }
+      );
+      closeButton.setInteractive({ useHandCursor: true });
+      closeButton.on('pointerdown', () => {
+        infoPanel.destroy();
+      });
+      infoPanel.add(closeButton);
+      
+      // Logo Mercatorum (se disponibile)
+      if (this.textures.exists('mercatorum-logo')) {
+        const logo = this.add.image(0, 130, 'mercatorum-logo');
+        logo.setScale(0.5);
+        infoPanel.add(logo);
+      }
+      
+    } catch (error) {
+      console.error('Error showing lab info:', error);
+    }
+  }
+
+  update(time: number, delta: number) {
+    try {
+      // Aggiorna tutti gli agenti
+      this.updateAgents(time, delta);
+      
+      // Log periodico per debug (molto meno frequente)
+      if (time % 10000 < 20) { // Log ogni 10 secondi circa
+        console.log(`Updating ${this.agents.length} agents at time ${time}`);
+      }
+      
+      // Stimola occasionalmente i movimenti degli agenti per evitare che restino fermi
+      if (Math.random() < 0.005) { // 0.5% di possibilità per frame
+        const randomAgentIndex = Math.floor(Math.random() * this.agents.length);
+        const agent = this.agents[randomAgentIndex];
+        
+        if (agent && agent.getCurrentState() === AgentState.IDLE) {
+          // Forza un movimento casuale
+          const randomX = Math.random() * this.cameras.main.width;
+          const randomY = Math.random() * this.cameras.main.height;
+          agent.moveTo(randomX, randomY);
+        }
+      }
+      
+      // Controlla le interazioni
+      this.checkInteractions();
+    } catch (error) {
+      console.error('Error in MercatorumLabScene update:', error);
+    }
+  }
+
+  /**
+   * Metodo chiamato quando la scena viene distrutta
+   * Esegue la pulizia di tutte le risorse
+   */
+  destroy(): void {
+    try {
+      // Assicurati che tutti gli elementi siano distrutti
+      if (this.agentsLegend) {
+        this.agentsLegend = null;
+      }
+      
+      // Pulisci tutti gli agenti
+      this.agents.forEach(agent => {
+        if (agent) agent.destroy();
+      });
+      this.agents = [];
+      
+      // Pulisci le zone di interazione
+      this.interactionZones.forEach(zone => {
+        if (zone) zone.destroy();
+      });
+      this.interactionZones = [];
+      
+      // Pulisci gli elementi di debug
+      if (this.debugText) {
+        this.debugText.destroy();
+        this.debugText = null;
+      }
+      
+      if (this.debugGraphics) {
+        this.debugGraphics.destroy();
+        this.debugGraphics = null;
+      }
+      
+      // Pulisci i contenitori di test
+      if (this.textureTestContainers) {
+        this.textureTestContainers.forEach(container => {
+          if (container) container.destroy();
+        });
+        this.textureTestContainers = [];
+      }
+      
+      // Pulisci gli sprite di test
+      if (this.rawSprites) {
+        this.rawSprites.forEach(sprite => {
+          if (sprite) sprite.destroy();
+        });
+        this.rawSprites = [];
+      }
+
+
+      // Distruggi il controller degli agenti
+      if (this.agentController) {
+        this.agentController.destroy();
+        this.agentController = null;
+      }
+
+
+      
+      console.log(`Scene ${this.scene.key} resources cleaned up`);
+    } catch (error) {
+      console.error(`Error cleaning up scene ${this.scene.key}:`, error);
+    }
+  }
+}

@@ -1,0 +1,400 @@
+import { Agent, AgentState } from './Agent';
+
+// Stati specifici per i ricercatori
+export type ResearcherState = 
+  AgentState | 
+  'researching' | 'writing' | 'debugging' | 'secure-computing' | 
+  'consulting' | 'teaching';
+
+// Tipi di ricercatori
+export type ResearcherType = 
+  'phd-student' | 'researcher' | 'professor' | 
+  'ml-engineer' | 'data-engineer' | 'privacy-specialist';
+
+// Specializzazioni
+export type ResearcherSpecialization = 
+  'data-science' | 'privacy-engineering' | 'optimization-theory' |
+  'secure-aggregation' | 'non-iid-data' | 'communication-efficiency' |
+  'fl-architecture' | 'theoretical-guarantees' | 'privacy-economics' |
+  'model-optimization' | 'systems-integration' | 'empirical-evaluation' |
+  'data-pipeline' | 'heterogeneous-data' | 'quality-assurance' |
+  'differential-privacy' | 'attack-simulation' | 'compliance-verification' |
+  'privacy-medical' | 'genetic-data';
+
+/**
+ * Classe che rappresenta un ricercatore nel simulatore.
+ * Estende la classe base Agent con comportamenti specifici per i ricercatori.
+ */
+export class ResearcherAgent extends Agent {
+  // Tipo di ricercatore
+  protected type: ResearcherType;
+  
+  // Specializzazione
+  protected specialization: ResearcherSpecialization;
+  
+  // Stato corrente specifico per ricercatori
+  protected state: ResearcherState = 'idle';
+  
+  // Livello di conoscenza (0-100) nelle diverse aree
+  protected knowledge: Record<string, number> = {
+    'federated-learning': 50,
+    'privacy': 50,
+    'machine-learning': 50,
+    'data-processing': 50,
+    'communication': 50
+  };
+  
+  // Rete di relazioni con altri ricercatori
+  protected relationships: Map<string, number> = new Map();
+  
+  /**
+   * Costruttore del ricercatore
+   * @param scene La scena a cui appartiene il ricercatore
+   * @param x Posizione X iniziale
+   * @param y Posizione Y iniziale
+   * @param texture Chiave della texture da utilizzare
+   * @param type Tipo di ricercatore
+   * @param specialization Specializzazione del ricercatore
+   * @param frame Frame iniziale dello spritesheet
+   */
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    texture: string,
+    type: ResearcherType,
+    specialization: ResearcherSpecialization,
+    frame?: string | number
+  ) {
+    super(scene, x, y, texture, frame);
+    
+    this.type = type;
+    this.specialization = specialization;
+    
+    // Inizializza le conoscenze in base al tipo e specializzazione
+    this.initializeKnowledge();
+    
+    // Imposta la velocità in base al tipo (i PhD sono più veloci, i professori più lenti)
+    this.adjustSpeedByType();
+  }
+  
+  /**
+   * Override del metodo update
+   */
+  update(time: number, delta: number): void {
+    // Chiama il metodo della classe base
+    super.update(time, delta);
+    
+    // Comportamenti specifici per ricercatori
+    this.updateResearcherBehavior(time, delta);
+  }
+  
+  /**
+   * Inizializza le conoscenze in base al tipo e specializzazione
+   */
+  private initializeKnowledge(): void {
+    // Base conoscenze in base al tipo
+    switch (this.type) {
+      case 'phd-student':
+        this.knowledge['federated-learning'] = 40;
+        this.knowledge['privacy'] = 40;
+        this.knowledge['machine-learning'] = 60;
+        this.knowledge['data-processing'] = 50;
+        this.knowledge['communication'] = 30;
+        break;
+        
+      case 'researcher':
+        this.knowledge['federated-learning'] = 70;
+        this.knowledge['privacy'] = 60;
+        this.knowledge['machine-learning'] = 70;
+        this.knowledge['data-processing'] = 60;
+        this.knowledge['communication'] = 50;
+        break;
+        
+      case 'professor':
+        this.knowledge['federated-learning'] = 90;
+        this.knowledge['privacy'] = 80;
+        this.knowledge['machine-learning'] = 85;
+        this.knowledge['data-processing'] = 70;
+        this.knowledge['communication'] = 80;
+        break;
+        
+      case 'ml-engineer':
+        this.knowledge['federated-learning'] = 65;
+        this.knowledge['privacy'] = 50;
+        this.knowledge['machine-learning'] = 85;
+        this.knowledge['data-processing'] = 70;
+        this.knowledge['communication'] = 60;
+        break;
+        
+      case 'data-engineer':
+        this.knowledge['federated-learning'] = 50;
+        this.knowledge['privacy'] = 40;
+        this.knowledge['machine-learning'] = 60;
+        this.knowledge['data-processing'] = 90;
+        this.knowledge['communication'] = 70;
+        break;
+        
+      case 'privacy-specialist':
+        this.knowledge['federated-learning'] = 60;
+        this.knowledge['privacy'] = 95;
+        this.knowledge['machine-learning'] = 60;
+        this.knowledge['data-processing'] = 70;
+        this.knowledge['communication'] = 60;
+        break;
+    }
+    
+    // Modifica in base alla specializzazione
+    this.adjustKnowledgeBySpecialization();
+  }
+  
+  /**
+   * Modifica le conoscenze in base alla specializzazione
+   */
+  private adjustKnowledgeBySpecialization(): void {
+    // Ogni specializzazione dà un bonus in aree specifiche
+    switch (this.specialization) {
+      case 'data-science':
+        this.knowledge['data-processing'] += 15;
+        this.knowledge['machine-learning'] += 10;
+        break;
+        
+      case 'privacy-engineering':
+        this.knowledge['privacy'] += 15;
+        this.knowledge['federated-learning'] += 5;
+        break;
+        
+      case 'optimization-theory':
+        this.knowledge['machine-learning'] += 10;
+        this.knowledge['federated-learning'] += 10;
+        break;
+        
+      case 'secure-aggregation':
+        this.knowledge['privacy'] += 10;
+        this.knowledge['federated-learning'] += 10;
+        break;
+        
+      case 'non-iid-data':
+        this.knowledge['data-processing'] += 15;
+        this.knowledge['federated-learning'] += 10;
+        break;
+        
+      case 'communication-efficiency':
+        this.knowledge['communication'] += 20;
+        this.knowledge['federated-learning'] += 5;
+        break;
+        
+      case 'fl-architecture':
+        this.knowledge['federated-learning'] += 20;
+        this.knowledge['machine-learning'] += 5;
+        break;
+        
+      case 'privacy-medical':
+      case 'genetic-data':
+        this.knowledge['privacy'] += 15;
+        this.knowledge['data-processing'] += 10;
+        break;
+        
+      // Altre specializzazioni potrebbero essere aggiunte qui
+    }
+    
+    // Limita i valori tra 0 e 100
+    Object.keys(this.knowledge).forEach(key => {
+      this.knowledge[key] = Math.min(100, Math.max(0, this.knowledge[key]));
+    });
+  }
+  
+  /**
+   * Regola la velocità di movimento in base al tipo di ricercatore
+   */
+  private adjustSpeedByType(): void {
+    switch (this.type) {
+      case 'phd-student':
+        // I dottorandi sono più veloci ma un po' erratici
+        this.moveSpeed = 60;
+        break;
+        
+      case 'researcher':
+        // I ricercatori hanno velocità standard
+        this.moveSpeed = 50;
+        break;
+        
+      case 'professor':
+        // I professori si muovono più lentamente ma con più scopo
+        this.moveSpeed = 40;
+        break;
+        
+      case 'ml-engineer':
+        // Gli ingegneri ML sono piuttosto attivi
+        this.moveSpeed = 55;
+        break;
+        
+      case 'data-engineer':
+        // Gli ingegneri di dati sono moderatamente attivi
+        this.moveSpeed = 50;
+        break;
+        
+      case 'privacy-specialist':
+        // Gli specialisti di privacy sono più cauti e lenti
+        this.moveSpeed = 45;
+        break;
+    }
+  }
+  
+  /**
+   * Logica specifica per i ricercatori
+   */
+  private updateResearcherBehavior(time: number, delta: number): void {
+    // Diversi comportamenti in base allo stato
+    switch (this.state) {
+      case 'researching':
+        // Occasionalmente generare un "insight" o conoscenza
+        if (Phaser.Math.Between(0, 1000) < 10) { // 1% di probabilità ogni secondo
+          this.gainKnowledge();
+        }
+        break;
+        
+      case 'secure-computing':
+        // Lavoro con dati protetti
+        if (Phaser.Math.Between(0, 1000) < 5) { // 0.5% di probabilità ogni secondo
+          this.gainKnowledge('privacy', 0.2);
+        }
+        break;
+        
+      case 'collaborating':
+        // Cerca altri ricercatori nelle vicinanze per collaborare
+        this.lookForCollaborators();
+        break;
+        
+      case 'teaching':
+        // Gli insegnanti condividono conoscenza nelle vicinanze
+        this.shareKnowledge();
+        break;
+        
+      // Altri stati specifici possono essere gestiti qui
+    }
+  }
+  
+  /**
+   * Aumenta la conoscenza in un'area casuale o specifica
+   */
+  private gainKnowledge(area?: string, amount = 0.1): void {
+    const knowledgeArea = area || Phaser.Utils.Array.GetRandom(Object.keys(this.knowledge));
+    
+    // Aumenta la conoscenza di una piccola quantità
+    this.knowledge[knowledgeArea] += amount;
+    
+    // Limita a 100
+    this.knowledge[knowledgeArea] = Math.min(100, this.knowledge[knowledgeArea]);
+    
+    // Potrebbe visualizzare un piccolo indicatore di "insight"
+    this.showInsightIndicator(knowledgeArea);
+  }
+  
+  /**
+   * Cerca altri ricercatori nelle vicinanze per collaborare
+   */
+  private lookForCollaborators(): void {
+    // Questa è una semplificazione - in un'implementazione reale
+    // avresti bisogno di accedere agli altri agenti nella scena
+    // Quello richiederebbe un riferimento alla scena tipizzata
+    
+    // Per ora, facciamo finta di trovare collaboratori
+    if (Phaser.Math.Between(0, 100) < 20) { // 20% di probabilità
+      const randomKnowledgeArea = Phaser.Utils.Array.GetRandom(Object.keys(this.knowledge));
+      this.gainKnowledge(randomKnowledgeArea, 0.2);
+    }
+  }
+  
+  /**
+   * Condivide la conoscenza con altri ricercatori nelle vicinanze
+   */
+  private shareKnowledge(): void {
+    // Semplificazione come sopra
+    
+    // Visualizza un indicatore di condivisione
+    this.showSharingIndicator();
+  }
+  
+  /**
+   * Mostra un indicatore di "insight"
+   */
+  private showInsightIndicator(area: string): void {
+    // Crea un'icona o effetto sopra la testa del ricercatore
+    const bubble = this.scene.add.text(this.x, this.y - 40, '💡', { fontSize: '16px' });
+    
+    // Animazione di fade out
+    this.scene.tweens.add({
+      targets: bubble,
+      y: bubble.y - 20,
+      alpha: { from: 1, to: 0 },
+      duration: 1000,
+      onComplete: () => {
+        bubble.destroy();
+      }
+    });
+  }
+  
+  /**
+   * Mostra un indicatore di condivisione della conoscenza
+   */
+  private showSharingIndicator(): void {
+    // Crea un'icona di condivisione
+    const bubble = this.scene.add.text(this.x, this.y - 40, '🔄', { fontSize: '16px' });
+    
+    // Animazione di fade out
+    this.scene.tweens.add({
+      targets: bubble,
+      y: bubble.y - 20,
+      alpha: { from: 1, to: 0 },
+      duration: 1000,
+      onComplete: () => {
+        bubble.destroy();
+      }
+    });
+  }
+  
+  /**
+   * Override per personalizzare la creazione della bolla di stato
+   */
+  protected createOrUpdateStatusBubble(): void {
+    super.createOrUpdateStatusBubble();
+    
+    // Aggiunge elementi specifici per ricercatori alla bolla
+    // Questo è opzionale e può essere implementato per dare più carattere
+  }
+  
+  /**
+   * Override per picking di stati casuali specifici per ricercatori
+   */
+  protected pickRandomState(): void {
+    // Stati possibili per un ricercatore
+    const possibleStates: ResearcherState[] = [
+      'idle', 'moving', 'working', 'resting', 
+      'researching', 'writing', 'analyzing'
+    ];
+    
+    // Stati specifici per il tipo di ricercatore
+    if (this.type === 'professor') {
+      possibleStates.push('teaching', 'discussing', 'presenting');
+    }
+    
+    if (this.type === 'privacy-specialist') {
+      possibleStates.push('secure-computing');
+    }
+    
+    // Evita di selezionare lo stesso stato attuale
+    let filteredStates = possibleStates.filter(s => s !== this.state);
+    
+    // Se non ci sono stati disponibili, usa tutti
+    if (filteredStates.length === 0) {
+      filteredStates = possibleStates;
+    }
+    
+    // Seleziona uno stato casuale
+    const newState = Phaser.Utils.Array.GetRandom(filteredStates);
+    
+    // Imposta il nuovo stato
+    this.setState(newState as ResearcherState);
+  }
+}

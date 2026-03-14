@@ -1,0 +1,101 @@
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+import json
+import logging
+import uvicorn
+from typing import Dict, List, Any
+
+# Configurazione logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Istanza FastAPI
+app = FastAPI(
+    title="Agent Laboratory API",
+    description="Backend API per la simulazione di Federated Learning con agenti autonomi",
+    version="0.1.0"
+)
+
+# Configurazione CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In produzione, limitare agli origine effettive
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Gestore connessioni WebSocket
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
+
+    async def broadcast(self, message: Dict[str, Any]):
+        for connection in self.active_connections:
+            await connection.send_json(message)
+
+manager = ConnectionManager()
+
+# Rotte API
+@app.get("/")
+async def root():
+    return {"message": "Agent Laboratory API", "status": "running"}
+
+@app.get("/config")
+async def get_config():
+    # Placeholder - in futuro leggerà dalla configurazione
+    return {
+        "simulation": {
+            "speed": 1.0,
+            "active_labs": ["mercatorum", "blekinge", "opbg"]
+        },
+        "agents": {
+            "count": 10,
+            "types": ["phd_student", "researcher", "professor"]
+        },
+        "fl": {
+            "algorithm": "fedavg",
+            "rounds": 5
+        }
+    }
+
+# Endpoint WebSocket
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            # Log dei messaggi ricevuti
+            logger.info(f"Received message: {message}")
+            
+            # Esempio di risposta echo
+            await websocket.send_json({
+                "type": "echo",
+                "data": message
+            })
+            
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"Error in WebSocket connection: {e}")
+        manager.disconnect(websocket)
+
+# Avvio server quando eseguito direttamente
+if __name__ == "__main__":
+    uvicorn.run("api.main:app", host="0.0.0.0", port=8091, reload=True) # -- Versione CLaude3.7 (Elaborata-Completa)
+    # uvicorn.run("api.main:app", host="0.0.0.0", port=8092, reload=True) # -- Versione ChatGPTo3 (Versione Light)

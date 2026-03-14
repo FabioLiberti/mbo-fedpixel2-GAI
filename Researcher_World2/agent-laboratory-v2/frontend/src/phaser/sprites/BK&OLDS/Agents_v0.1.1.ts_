@@ -1,0 +1,331 @@
+import Phaser from 'phaser';
+import { AgentState } from '../../types/AgentTypes';
+
+export class Agent extends Phaser.Physics.Arcade.Sprite {
+  // Stato corrente dell'agente
+  protected state: AgentState = 'idle';
+  
+  // Proprietà di movimento
+  protected moveSpeed: number = 50;
+  protected targetX: number | null = null;
+  protected targetY: number | null = null;
+  
+  // Timer per cambiamenti di stato
+  protected stateTimer: Phaser.Time.TimerEvent | null = null;
+  
+  // Per tenere traccia delle animazioni
+  protected currentAnimation: string = '';
+  
+  /**
+   * Costruttore per l'agente base
+   * @param scene La scena Phaser in cui l'agente esiste
+   * @param x Posizione X iniziale
+   * @param y Posizione Y iniziale
+   * @param texture La texture/sprite da utilizzare
+   */
+  constructor(scene: Phaser.Scene, x: number, y: number, texture: string) {
+    super(scene, x, y, texture);
+    
+    // Aggiungi l'agente alla scena
+    scene.add.existing(this);
+    scene.physics.add.existing(this);
+    
+    // Imposta una collisione leggera per evitare che gli agenti si sovrappongano
+    if (this.body) {
+      this.body.setSize(12, 12); // Dimensione del body minore dell'agente
+      this.body.setOffset(2, 4); // Centra il body
+      
+      // Configura la fisica
+      this.setBounce(0.1, 0.1);
+      if (this.body.drag) {
+        this.body.drag.set(0.9, 0.9);
+      }
+    }
+    
+    // Crea le animazioni
+    this.createAnimations();
+    
+    // Inizia con l'animazione idle
+    this.play('idle');
+    
+    // Imposta un timer per cambiamenti di stato casuali
+    this.setRandomStateTimer();
+  }
+  
+  /**
+   * Da chiamare ad ogni frame per aggiornare l'agente
+   * @param time Il tempo attuale
+   * @param delta Il tempo trascorso dall'ultimo frame
+   */
+  update(time: number, delta: number): void {
+    // Gestisci il comportamento basato sullo stato attuale
+    switch (this.state) {
+      case 'idle':
+        this.updateIdle(delta);
+        break;
+      case 'moving':
+        this.updateMoving(delta);
+        break;
+      case 'working':
+        this.updateWorking(delta);
+        break;
+      case 'meeting':
+        this.updateMeeting(delta);
+        break;
+      case 'resting':
+        this.updateResting(delta);
+        break;
+      case 'discussing':
+        this.updateDiscussing(delta);
+        break;
+      case 'presenting':
+        this.updatePresenting(delta);
+        break;
+      default:
+        this.updateIdle(delta);
+    }
+  }
+  
+  /**
+   * Imposta lo stato dell'agente
+   * @param newState Il nuovo stato
+   */
+  public setAgentState(newState: AgentState): void {
+    // Se lo stato non cambia, esci
+    if (this.state === newState) return;
+    
+    // Cambia lo stato
+    this.state = newState;
+    
+    // Esegui azioni in base al nuovo stato
+    switch (newState) {
+      case 'idle':
+        this.stopMoving();
+        this.play('idle');
+        break;
+      case 'moving':
+        this.play('walk');
+        break;
+      case 'working':
+        this.stopMoving();
+        this.play('work');
+        break;
+      case 'meeting':
+        this.stopMoving();
+        this.play('talk');
+        break;
+      case 'resting':
+        this.stopMoving();
+        this.play('rest');
+        break;
+      case 'discussing':
+        this.stopMoving();
+        this.play('discuss');
+        break;
+      case 'presenting':
+        this.stopMoving();
+        this.play('present');
+        break;
+    }
+    
+    // Emetti un evento di cambio stato
+    this.emit('stateChange', this.state);
+  }
+  
+  /**
+   * Ottieni lo stato corrente dell'agente
+   */
+  public getState(): AgentState {
+    return this.state;
+  }
+  
+  /**
+   * Crea tutte le animazioni necessarie per l'agente
+   */
+  protected createAnimations(): void {
+    const anims = this.scene.anims;
+    
+    if (!anims.exists('idle')) {
+      anims.create({
+        key: 'idle',
+        frames: anims.generateFrameNumbers(this.texture.key, { start: 0, end: 3 }),
+        frameRate: 5,
+        repeat: -1
+      });
+    }
+    
+    if (!anims.exists('walk')) {
+      anims.create({
+        key: 'walk',
+        frames: anims.generateFrameNumbers(this.texture.key, { start: 4, end: 7 }),
+        frameRate: 10,
+        repeat: -1
+      });
+    }
+    
+    if (!anims.exists('work')) {
+      anims.create({
+        key: 'work',
+        frames: anims.generateFrameNumbers(this.texture.key, { start: 8, end: 11 }),
+        frameRate: 8,
+        repeat: -1
+      });
+    }
+    
+    // Altre animazioni possono essere aggiunte qui
+  }
+  
+  /**
+   * Imposta un timer casuale per cambiare stato
+   */
+  protected setRandomStateTimer(): void {
+    // Cancella il timer esistente se presente
+    if (this.stateTimer) {
+      this.stateTimer.remove();
+    }
+    
+    // Imposta un nuovo timer con durata casuale (3-10 secondi)
+    const duration = Phaser.Math.Between(3000, 10000);
+    this.stateTimer = this.scene.time.delayedCall(duration, () => {
+      this.chooseRandomState();
+    });
+  }
+  
+  /**
+   * Sceglie casualmente un nuovo stato
+   */
+  protected chooseRandomState(): void {
+    const states: AgentState[] = ['idle', 'moving', 'working', 'resting'];
+    const randomState = states[Phaser.Math.Between(0, states.length - 1)];
+    
+    // Se è scelto moving, trova una posizione casuale
+    if (randomState === 'moving') {
+      this.moveToRandomPosition();
+    } else {
+      this.setAgentState(randomState);
+    }
+    
+    // Imposta un nuovo timer per cambiare stato
+    this.setRandomStateTimer();
+  }
+  
+  /**
+   * Sposta l'agente verso una posizione casuale
+   */
+  protected moveToRandomPosition(): void {
+    // Ottieni i limiti della scena
+    const width = this.scene.cameras.main.width;
+    const height = this.scene.cameras.main.height;
+    
+    // Scegli una posizione casuale all'interno della scena
+    const x = Phaser.Math.Between(50, width - 50);
+    const y = Phaser.Math.Between(50, height - 50);
+    
+    // Inizia a muoversi verso quella posizione
+    this.moveTo(x, y);
+  }
+  
+  /**
+   * Muove l'agente verso la destinazione specificata
+   */
+  public moveTo(x: number, y: number): void {
+    this.targetX = x;
+    this.targetY = y;
+    this.setAgentState('moving');
+  }
+  
+  /**
+   * Aggiorna quando l'agente è in stato idle
+   */
+  protected updateIdle(delta: number): void {
+    // Comportamento idle di base (può essere sovrascritto)
+  }
+  
+  /**
+   * Aggiorna quando l'agente è in movimento
+   */
+  protected updateMoving(delta: number): void {
+    // Se non abbiamo una destinazione, torna a idle
+    if (this.targetX === null || this.targetY === null) {
+      this.setAgentState('idle');
+      return;
+    }
+    
+    // Calcola la direzione verso la destinazione
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Se siamo arrivati a destinazione (o quasi)
+    if (distance < 5) {
+      this.stopMoving();
+      this.setAgentState('idle');
+      return;
+    }
+    
+    // Normalizza la direzione
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+    
+    // Imposta la velocità
+    if (this.body) {
+      this.body.setVelocity(dirX * this.moveSpeed, dirY * this.moveSpeed);
+    }
+    
+    // Aggiorna il flip in base alla direzione
+    if (dirX < 0) {
+      this.setFlipX(true);
+    } else {
+      this.setFlipX(false);
+    }
+  }
+  
+  /**
+   * Ferma il movimento dell'agente
+   */
+  protected stopMoving(): void {
+    // Azzera la velocità
+    if (this.body) {
+      this.body.setVelocity(0, 0);
+    }
+    
+    // Reimposta la destinazione
+    this.targetX = null;
+    this.targetY = null;
+  }
+  
+  /**
+   * Aggiorna quando l'agente sta lavorando
+   */
+  protected updateWorking(delta: number): void {
+    // Comportamento di base quando si lavora
+  }
+  
+  /**
+   * Aggiorna quando l'agente è in riunione
+   */
+  protected updateMeeting(delta: number): void {
+    // Comportamento di base in riunione
+  }
+  
+  /**
+   * Aggiorna quando l'agente sta riposando
+   */
+  protected updateResting(delta: number): void {
+    // Comportamento di base quando riposa
+  }
+  
+  /**
+   * Aggiorna quando l'agente sta discutendo
+   */
+  protected updateDiscussing(delta: number): void {
+    // Comportamento di base in discussione
+  }
+  
+  /**
+   * Aggiorna quando l'agente sta presentando
+   */
+  protected updatePresenting(delta: number): void {
+    // Comportamento di base quando presenta
+  }
+}

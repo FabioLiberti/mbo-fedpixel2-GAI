@@ -1,0 +1,210 @@
+import Phaser from 'phaser';
+import { PixelAnimation } from '../utils/PixelAnimation';
+
+interface SplashSceneInitData {
+  eventEmitter: Phaser.Events.EventEmitter;
+}
+
+export class SplashScene extends Phaser.Scene {
+  private eventEmitter?: Phaser.Events.EventEmitter;
+  private pixelAnimations: PixelAnimation[] = [];
+  private isSkipping = false;
+  private isComplete = false;
+  private backgroundRect?: Phaser.GameObjects.Rectangle;
+  private skipText?: Phaser.GameObjects.Text;
+  
+  // Color palettes for each lab
+  private readonly mercatorumColor = 0xc27c54; // terracotta
+  private readonly blekingeColor = 0xadd8e6;   // ice blue
+  private readonly opbgColor = 0x98d8c8;       // aqua green
+  
+  constructor() {
+    super({ key: 'SplashScene' });
+  }
+
+  init(data: SplashSceneInitData): void {
+    this.eventEmitter = data.eventEmitter;
+    this.isSkipping = false;
+    this.isComplete = false;
+    
+    // Listen for skip event
+    if (this.eventEmitter) {
+      this.eventEmitter.on('skipSplash', this.skipAnimation, this);
+    }
+  }
+
+  preload(): void {
+    // Load splash configuration
+    this.load.json('splash-config', 'assets/splash/splash-config.json');
+  }
+
+  create(): void {
+    const { width, height } = this.game.canvas;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    
+    // Add background
+    this.backgroundRect = this.add.rectangle(centerX, centerY, width, height, 0x000000);
+    
+    // Get pixel configuration
+    const config = this.cache.json.get('splash-config');
+    
+    if (!config) {
+      console.error('Failed to load splash configuration');
+      this.completeAnimation();
+      return;
+    }
+    
+    // Create separate pixel groups for each lab
+    this.createPixelGroups(config, centerX, centerY);
+    
+    // Start animation sequence
+    this.startAnimationSequence();
+  }
+  
+  private createPixelGroups(config: any, centerX: number, centerY: number): void {
+    const pixelSize = 6; // Size of each pixel
+    const spacing = 1;   // Spacing between pixels
+    const totalSize = config.grid.width * (pixelSize + spacing);
+    const startX = centerX - totalSize / 2 + pixelSize / 2;
+    const startY = centerY - totalSize / 2 + pixelSize / 2;
+    
+    // Process each lab's pixels
+    this.createLabPixels(
+      config.mercatorum, 
+      startX, startY, 
+      pixelSize, spacing, 
+      this.mercatorumColor,
+      { x: -200, y: height + 100 } // Start position: bottom left
+    );
+    
+    this.createLabPixels(
+      config.blekinge, 
+      startX, startY, 
+      pixelSize, spacing, 
+      this.blekingeColor,
+      { x: width + 100, y: height + 100 } // Start position: bottom right
+    );
+    
+    this.createLabPixels(
+      config.opbg, 
+      startX, startY, 
+      pixelSize, spacing, 
+      this.opbgColor,
+      { x: width / 2, y: -200 } // Start position: top center
+    );
+    
+    // Create center pixels (shared elements)
+    if (config.center) {
+      this.createLabPixels(
+        config.center, 
+        startX, startY, 
+        pixelSize, spacing, 
+        0xffffff, // White for center pixels
+        { x: width / 2, y: height / 2 },
+        true // Keep invisible initially
+      );
+    }
+  }
+  
+  private createLabPixels(
+    pixelPositions: number[][],
+    startX: number,
+    startY: number,
+    pixelSize: number,
+    spacing: number,
+    color: number,
+    startPosition: { x: number, y: number },
+    keepInvisible = false
+  ): void {
+    pixelPositions.forEach(pos => {
+      const pixel = this.add.rectangle(
+        startX + pos[0] * (pixelSize + spacing),
+        startY + pos[1] * (pixelSize + spacing),
+        pixelSize,
+        pixelSize,
+        color
+      );
+      
+      // Make invisible initially
+      pixel.setAlpha(0);
+      
+      // Create animation controller
+      const pixelAnim = new PixelAnimation(
+        this,
+        pixel,
+        startPosition,
+        { x: pixel.x, y: pixel.y },
+        keepInvisible
+      );
+      
+      this.pixelAnimations.push(pixelAnim);
+    });
+  }
+  
+  private startAnimationSequence(): void {
+    // Stagger the start times
+    const staggerTime = 20; // ms between each pixel start
+    const totalDuration = 1800; // Total duration of pixel movements
+    const fadeInDuration = 400; // Duration of center pixels fade in
+    
+    // Start lab pixels first
+    let index = 0;
+    this.pixelAnimations.forEach(pixelAnim => {
+      if (!pixelAnim.isCenter) {
+        this.time.delayedCall(index * staggerTime, () => {
+          pixelAnim.start(totalDuration);
+        });
+        index++;
+      }
+    });
+    
+    // Fade in center pixels after lab pixels start converging
+    this.time.delayedCall(totalDuration / 2, () => {
+      this.pixelAnimations.forEach(pixelAnim => {
+        if (pixelAnim.isCenter) {
+          pixelAnim.fadeIn(fadeInDuration);
+        }
+      });
+    });
+    
+    // Complete the animation after all movements
+    this.time.delayedCall(totalDuration + fadeInDuration + 300, () => {
+      if (!this.isComplete) {
+        this.completeAnimation();
+      }
+    });
+  }
+  
+  private skipAnimation(): void {
+    if (this.isSkipping || this.isComplete) return;
+    this.isSkipping = true;
+    
+    // Immediately move all pixels to their final positions
+    this.pixelAnimations.forEach(pixelAnim => {
+      pixelAnim.skip();
+    });
+    
+    // Wait a short time for visual clarity
+    this.time.delayedCall(200, () => {
+      this.completeAnimation();
+    });
+  }
+  
+  private completeAnimation(): void {
+    if (this.isComplete) return;
+    this.isComplete = true;
+    
+    // Fade out the entire scene
+    this.tweens.add({
+      targets: [this.backgroundRect, ...this.pixelAnimations.map(p => p.getPixel())],
+      alpha: 0,
+      duration: 300,
+      onComplete: () => {
+        if (this.eventEmitter) {
+          this.eventEmitter.emit('splashComplete');
+        }
+      }
+    });
+  }
+}

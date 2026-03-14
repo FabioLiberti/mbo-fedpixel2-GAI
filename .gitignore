@@ -1,0 +1,69 @@
+# === Local tool config (must not appear in repo) ===
+.claude/
+
+# === OS & Editor ===
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+venv/
+.venv/
+env/
+.env/
+llmgenag/
+*.so
+*.dylib
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+
+# === Build artifacts ===
+build/
+dist/
+coverage/
+*.log
+
+# === Simulation generated data ===
+# Exclude large simulation run storage (embeddings, movement files per step)
+# Keep only base templates (base_the_ville_*) and compressed demos
+**/storage/July1_*/
+**/storage/test_sim_*/
+**/storage/sim_*/
+**/storage/sim[0-9]*/
+**/storage/test-simulation-*/
+**/temp_storage/
+
+# === Nested git histories (from original forks) ===
+Researcher_World2/agent-laboratory-v2/.git/
+LLM_Generative_Agents/generative_agents/.git/
+
+# === Environment files with secrets ===
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# === LLM models (too large for git) ===
+*.gguf
+*.bin
+*.onnx
+*.safetensors
+models/

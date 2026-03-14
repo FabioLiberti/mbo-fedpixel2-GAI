@@ -1,0 +1,118 @@
+import Phaser from 'phaser';
+import { WorldMapScene } from '../scenes/WorldMapScene';
+import { SCENE_KEYS } from '../game';
+
+interface AgentData {
+  id: string;
+  type: string;
+  labScene: string;
+  x: number;
+  y: number;
+}
+
+export class GlobalAgentController {
+  private scene: WorldMapScene;
+  private agents: AgentData[] = [];
+  private agentUpdateInterval: number = 0; // Inizializzazione per risolvere l'errore TS2564
+  
+  constructor(scene: WorldMapScene) {
+    this.scene = scene;
+  }
+  
+  initialize(): void {
+    // Carica i dati iniziali degli agenti da tutti i laboratori
+    this.loadAgentsData();
+    
+    // Imposta un intervallo per aggiornare periodicamente la posizione degli agenti
+    this.agentUpdateInterval = window.setInterval(() => {
+      this.updateAgentsData();
+    }, 2000); // Aggiorna ogni 2 secondi
+  }
+  
+  update(time: number, delta: number): void {
+    // Aggiorna la visualizzazione degli agenti se necessario
+    // Questo metodo viene chiamato a ogni frame
+  }
+  
+  destroy(): void {
+    // Pulisci le risorse quando il controller non è più necessario
+    if (this.agentUpdateInterval) {
+      clearInterval(this.agentUpdateInterval);
+    }
+  }
+  
+  private loadAgentsData(): void {
+    // In una implementazione reale, questi dati potrebbero provenire
+    // da un'API o dallo store React/Redux
+    
+    // Dati di esempio per agenti del laboratorio Mercatorum
+    const mercatorumAgents = [
+      { id: 'prof1', type: 'professor', labScene: SCENE_KEYS.MERCATORUM, x: 200, y: 300 },
+      { id: 'res1', type: 'researcher', labScene: SCENE_KEYS.MERCATORUM, x: 500, y: 250 },
+      { id: 'stu1', type: 'student', labScene: SCENE_KEYS.MERCATORUM, x: 350, y: 400 },
+    ];
+    
+    // Dati di esempio per agenti del laboratorio Blekinge
+    const blekingeAgents = [
+      { id: 'prof2', type: 'professor', labScene: SCENE_KEYS.BLEKINGE, x: 300, y: 200 },
+      { id: 'eng1', type: 'engineer', labScene: SCENE_KEYS.BLEKINGE, x: 450, y: 350 },
+      { id: 'res2', type: 'researcher', labScene: SCENE_KEYS.BLEKINGE, x: 600, y: 400 },
+    ];
+    
+    // Dati di esempio per agenti del laboratorio OPBG
+    const opbgAgents = [
+      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 250, y: 350 },
+      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 400, y: 300 },
+      { id: 'eng2', type: 'engineer', labScene: SCENE_KEYS.OPBG, x: 550, y: 250 },
+    ];
+    
+    // Unisci tutti i dati degli agenti
+    this.agents = [...mercatorumAgents, ...blekingeAgents, ...opbgAgents];
+    
+    // Aggiorna la visualizzazione degli agenti nelle miniature
+    this.updateLabMiniaturesWithAgents();
+  }
+  
+  private updateAgentsData(): void {
+    // In una implementazione reale, qui faresti una chiamata API per
+    // ottenere i dati aggiornati degli agenti da tutti i laboratori
+    
+    // Per ora, simuliamo un movimento casuale degli agenti
+    this.agents.forEach(agent => {
+      agent.x += (Math.random() - 0.5) * 20;
+      agent.y += (Math.random() - 0.5) * 20;
+      
+      // Mantieni gli agenti entro i confini del laboratorio
+      agent.x = Math.max(50, Math.min(agent.x, 900));
+      agent.y = Math.max(50, Math.min(agent.y, 900));
+    });
+    
+    // Aggiorna la visualizzazione degli agenti nelle miniature
+    this.updateLabMiniaturesWithAgents();
+  }
+  
+  private updateLabMiniaturesWithAgents(): void {
+    // Raggruppa gli agenti per laboratorio
+    const mercatorumAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.MERCATORUM);
+    const blekingeAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.BLEKINGE);
+    const opbgAgents = this.agents.filter(a => a.labScene === SCENE_KEYS.OPBG);
+    
+    // Ottieni riferimenti alle miniature dei laboratori dalla scena
+    const mercatorumMiniature = this.scene['labMiniatures'].get('mercatorum');
+    const blekingeMiniature = this.scene['labMiniatures'].get('blekinge');
+    const opbgMiniature = this.scene['labMiniatures'].get('opbg');
+    
+    // Aggiorna la posizione degli agenti in ciascuna miniatura
+    if (mercatorumMiniature) {
+      mercatorumMiniature.updateAgentPositions(mercatorumAgents);
+    }
+    
+    if (blekingeMiniature) {
+      blekingeMiniature.updateAgentPositions(blekingeAgents);
+    }
+    
+    if (opbgMiniature) {
+      opbgMiniature.updateAgentPositions(opbgAgents);
+    }
+  }
+}

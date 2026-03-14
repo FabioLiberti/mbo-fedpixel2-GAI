@@ -1,0 +1,106 @@
+// frontend/src/phaser/game.ts
+
+import Phaser from 'phaser';
+import { MercatorumLab } from '../../scenes/MercatorumLab';
+import { BlekingeLabScene } from '../../scenes/BlekingeLabScene';
+import { OPBGLabScene } from '../../scenes/OPBGLabScene';
+
+// Estensione dell'interfaccia Game per accessibilità migliore
+export interface Game extends Phaser.Game {
+  // Proprietà aggiuntive specifiche della nostra implementazione
+}
+
+// Configurazione del gioco
+const gameConfig: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  parent: 'phaser-game',
+  width: 800,
+  height: 600,
+  backgroundColor: '#4b4b4b',
+  pixelArt: true,
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { x: 0, y: 0 },
+      debug: process.env.NODE_ENV === 'development'
+    }
+  },
+  scene: [MercatorumLab, BlekingeLabScene, OPBGLabScene],
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  render: {
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true
+  },
+  callbacks: {
+    postBoot: (game) => {
+      // Eseguito dopo l'inizializzazione del gioco
+      console.log('Phaser game booted successfully');
+    }
+  }
+};
+
+// Variabile per l'istanza singleton del gioco
+let gameInstance: Game | null = null;
+
+/**
+ * Inizializza il gioco Phaser
+ * @param containerId ID del container DOM
+ * @returns L'istanza del gioco
+ */
+export function initGame(containerId?: string): Game {
+  // Se l'istanza esiste già, restituiscila
+  if (gameInstance !== null) {
+    return gameInstance;
+  }
+  
+  // Modifica il container se specificato
+  if (containerId) {
+    gameConfig.parent = containerId;
+  }
+  
+  try {
+    // Crea una nuova istanza del gioco
+    gameInstance = new Phaser.Game(gameConfig) as Game;
+    
+    // Gestione errori a livello globale
+    window.addEventListener('error', (event) => {
+      if (event.error && event.error.message && 
+          (event.error.message.includes('WebGL context') || 
+           event.error.message.includes('Phaser'))) {
+        console.error('Phaser error caught:', event.error);
+      }
+    });
+    
+    return gameInstance;
+  } catch (error) {
+    console.error('Failed to initialize Phaser game:', error);
+    throw error;
+  }
+}
+
+/**
+ * Distrugge l'istanza del gioco
+ */
+export function destroyGame(): void {
+  if (gameInstance) {
+    try {
+      gameInstance.destroy(true);
+      gameInstance = null;
+      console.log('Phaser game instance destroyed');
+    } catch (error) {
+      console.error('Error destroying Phaser game:', error);
+    }
+  }
+}
+
+/**
+ * Ottiene l'istanza corrente del gioco
+ * @returns L'istanza del gioco o null se non inizializzata
+ */
+export function getGameInstance(): Game | null {
+  return gameInstance;
+}
