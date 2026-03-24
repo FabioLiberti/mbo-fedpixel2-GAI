@@ -27,8 +27,8 @@ _config_loaded = False
 OLLAMA_MODEL = "qwen3.5:4b"
 EMBEDDING_MODEL = "nomic-embed-text"
 OLLAMA_TEMPERATURE = 0.05
-OLLAMA_MAX_TOKENS = 60
-OLLAMA_NUM_CTX = 256
+OLLAMA_MAX_TOKENS = 150
+OLLAMA_NUM_CTX = 512
 
 EMBEDDING_CACHE = {}
 RESPONSE_CACHE = {}
@@ -121,7 +121,9 @@ def temp_sleep(seconds=0.01):
 
 def clean_ollama_response(response):
     """Clean Ollama response removing thinking tags and verbose output."""
-    # Remove <think> tags
+    original = response
+
+    # Remove <think> tags — keep content AFTER </think>, or inside if no closing tag
     if '<think>' in response:
         parts = response.split('</think>')
         if len(parts) > 1:
@@ -156,7 +158,24 @@ def clean_ollama_response(response):
                      not line.startswith(('$', '\\', '**', '#', '`', '---', 'Thinking'))):
             cleaned_lines.append(line)
 
-    return '\n'.join(cleaned_lines).strip()
+    result = '\n'.join(cleaned_lines).strip()
+
+    # Safety: if cleaning removed everything but original had content,
+    # extract the think block content as fallback
+    if not result and original and len(original) > 10:
+        # Try to extract content from inside <think> block
+        think_match = re.search(r'<think>(.*?)</think>', original, flags=re.DOTALL)
+        if think_match:
+            inner = think_match.group(1).strip()
+            # Take last meaningful paragraph (usually the conclusion)
+            paragraphs = [p.strip() for p in inner.split('\n\n') if p.strip()]
+            if paragraphs:
+                result = paragraphs[-1]
+                # Clean up any remaining verbose prefixes
+                result = re.sub(r'^(So|Okay|Hmm|Wait|Let me|First),?\s*', '', result)
+                result = result.strip()
+
+    return result
 
 
 # ============================================================================
@@ -189,7 +208,8 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
                 'top_p': 0.2,
                 'repeat_penalty': 1.0,
                 'num_ctx': OLLAMA_NUM_CTX,
-            }
+            },
+            think=False,
         )
         msg = response.message if hasattr(response, 'message') else response['message']
         content = msg.content if hasattr(msg, 'content') else msg['content']
@@ -257,13 +277,13 @@ def ChatGPT_single_request(prompt):
 def GPT4_request(prompt):
     """Request using the primary model (replaces GPT-4 calls)."""
     temp_sleep()
-    return ollama_chat_request(prompt, temperature=0.05, max_tokens=80)
+    return ollama_chat_request(prompt, temperature=0.05, max_tokens=150)
 
 
 def ChatGPT_request(prompt):
     """Request with higher temperature for creative output."""
     try:
-        return ollama_chat_request(prompt, temperature=0.7, max_tokens=80)
+        return ollama_chat_request(prompt, temperature=0.7, max_tokens=150)
     except:
         logger.error("Ollama ERROR in ChatGPT_request")
         return "OLLAMA ERROR"

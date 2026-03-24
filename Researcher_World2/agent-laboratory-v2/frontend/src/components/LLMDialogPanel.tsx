@@ -170,7 +170,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                   <span className="llm-dialog-chat-with">con {entry.chattingWith}</span>
                 )}
               </div>
-              <div className="llm-dialog-text">{entry.dialog}</div>
+              <div className="llm-dialog-text" style={{ whiteSpace: 'pre-wrap' }}>{entry.dialog}</div>
             </div>
           ))
         )}

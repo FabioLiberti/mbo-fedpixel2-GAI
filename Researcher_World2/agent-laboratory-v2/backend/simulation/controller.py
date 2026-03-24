@@ -354,10 +354,11 @@ class SimulationController:
                     # Process FL logic
                     self._process_fl_logic()
 
-                    # Collect and broadcast data
-                    sim_data = self._collect_simulation_data()
-                    if self.on_step_callback:
-                        self.on_step_callback(sim_data)
+                    # Collect and broadcast data (every 10 steps to avoid flooding Chrome)
+                    if step_count % 10 == 0:
+                        sim_data = self._collect_simulation_data()
+                        if self.on_step_callback:
+                            self.on_step_callback(sim_data)
 
                     # Throttle
                     elapsed = time.time() - start_time

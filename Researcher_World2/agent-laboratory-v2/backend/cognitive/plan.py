@@ -39,8 +39,10 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 def generate_wake_up_hour(persona):
-    """Generate the hour the persona wakes up."""
-    return int(run_gpt_prompt_wake_up_hour(persona)[0])
+    """Generate the hour the persona wakes up.
+    Capped to max 7 AM so agents are always active during lab hours (8+)."""
+    hour = int(run_gpt_prompt_wake_up_hour(persona)[0])
+    return min(hour, 7)
 
 
 def generate_first_daily_plan(persona, wake_up_hour):
