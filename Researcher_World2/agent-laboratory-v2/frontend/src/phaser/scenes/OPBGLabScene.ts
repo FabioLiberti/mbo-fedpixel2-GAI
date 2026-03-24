@@ -182,9 +182,11 @@ export class OPBGLabScene extends BaseScene {
     }
 
     try {
-      // Inizializza gli elementi di debug
+      // Inizializza gli elementi di debug (nascosti di default)
       this.createDebugElements();
-      
+      if (this.debugGraphics) this.debugGraphics.setVisible(false);
+      if (this.debugText) this.debugText.setVisible(false);
+
       // Imposta un colore di sfondo acceso per debug
       this.cameras.main.setBackgroundColor(0xFF00FF); // Magenta vivace per debug
       
@@ -1632,9 +1634,9 @@ export class OPBGLabScene extends BaseScene {
       if (toggleButton) {
         toggleButton.setDepth(1001);
         toggleButton.setScrollFactor(0);
+        toggleButton.setVisible(false);
         toggleButton.setInteractive({ useHandCursor: true });
         toggleButton.on('pointerdown', () => {
-          // Toggle visibility
           if (this.debugGraphics !== null && this.debugText !== null) {
             const visible = !this.debugGraphics.visible;
             this.debugGraphics.setVisible(visible);

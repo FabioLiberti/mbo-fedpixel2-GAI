@@ -116,13 +116,13 @@ export class AgentsLegend {
       toLoad.forEach(({ key, path }) => this.scene.load.image(key, path));
       this.scene.load.once('complete', () => {
         this.createAgentItems();
-        this.collapse();
+        this.expand();
         this.show();
       });
       this.scene.load.start();
     } else {
       this.createAgentItems();
-      this.collapse();
+      this.expand();
       this.show();
     }
   }
