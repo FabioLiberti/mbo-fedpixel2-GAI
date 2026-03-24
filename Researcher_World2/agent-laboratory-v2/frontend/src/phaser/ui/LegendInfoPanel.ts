@@ -66,15 +66,22 @@ export class LegendInfoPanel {
     this.container.add(this.agentSprite);
     
     // Crea i testi
-    const textStyle = { 
-      fontSize: '14px', 
-      color: '#ffffff', 
-      wordWrap: { width: this.width - (this.padding * 2) } 
+    const textStyle = {
+      fontSize: '13px',
+      color: '#d0d8e8',
+      wordWrap: { width: this.width - (this.padding * 2) }
     };
-    
-    const headerStyle = { 
-      fontSize: '18px', 
-      color: '#ffffff', 
+
+    const labelStyle = {
+      fontSize: '13px',
+      color: '#8899bb',
+      fontStyle: 'bold' as const,
+      wordWrap: { width: this.width - (this.padding * 2) }
+    };
+
+    const headerStyle = {
+      fontSize: '17px',
+      color: '#ffffff',
       fontStyle: 'bold'
     };
     
@@ -88,24 +95,24 @@ export class LegendInfoPanel {
     this.container.add(this.descriptionText);
     
     // Ruolo
-    const roleLabel = this.scene.add.text(this.padding, 200, 'Ruolo:', { ...textStyle, fontStyle: 'bold' });
+    const roleLabel = this.scene.add.text(this.padding, 200, 'Ruolo:', labelStyle);
     this.container.add(roleLabel);
-    
-    this.roleText = this.scene.add.text(this.padding, 220, '', textStyle);
+
+    this.roleText = this.scene.add.text(this.padding, 218, '', textStyle);
     this.container.add(this.roleText);
-    
+
     // Skills
-    const skillsLabel = this.scene.add.text(this.padding, 260, 'Competenze:', { ...textStyle, fontStyle: 'bold' });
+    const skillsLabel = this.scene.add.text(this.padding, 256, 'Competenze:', labelStyle);
     this.container.add(skillsLabel);
-    
-    this.skillsText = this.scene.add.text(this.padding, 280, '', textStyle);
+
+    this.skillsText = this.scene.add.text(this.padding, 274, '', textStyle);
     this.container.add(this.skillsText);
-    
+
     // Background
-    const bgLabel = this.scene.add.text(this.padding, 350, 'Background:', { ...textStyle, fontStyle: 'bold' });
+    const bgLabel = this.scene.add.text(this.padding, 345, 'Background:', labelStyle);
     this.container.add(bgLabel);
-    
-    this.backgroundText = this.scene.add.text(this.padding, 370, '', textStyle);
+
+    this.backgroundText = this.scene.add.text(this.padding, 363, '', textStyle);
     this.container.add(this.backgroundText);
     
     // Pulsante chiusura
@@ -155,13 +162,17 @@ export class LegendInfoPanel {
     
     // Aggiorna colore di sfondo
     const bgColor = Phaser.Display.Color.HexStringToColor(info.color).color;
-    const bgColorDark = Phaser.Display.Color.HexStringToColor(this.darkenColor(info.color)).color;
-    
-    // Ridisegna lo sfondo
+
+    // Ridisegna lo sfondo — base blu scuro (non nero)
     this.background.clear();
-    this.background.fillStyle(bgColorDark, 0.95);
+    // Pannello principale
+    this.background.fillStyle(0x1e2a3a, 0.95);
     this.background.fillRoundedRect(0, 0, this.width, this.height, 10);
-    this.background.lineStyle(2, bgColor, 1);
+    // Fascia colorata in alto per l'icona
+    this.background.fillStyle(bgColor, 0.25);
+    this.background.fillRoundedRect(0, 0, this.width, 110, { tl: 10, tr: 10, bl: 0, br: 0 });
+    // Bordo
+    this.background.lineStyle(2, bgColor, 0.8);
     this.background.strokeRoundedRect(0, 0, this.width, this.height, 10);
     
     // Rimuovi il placeholder precedente se esiste

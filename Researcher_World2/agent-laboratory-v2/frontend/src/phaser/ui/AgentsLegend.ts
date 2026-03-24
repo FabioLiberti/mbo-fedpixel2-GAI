@@ -118,15 +118,9 @@ export class AgentsLegend {
       itemBg.fillRect(0, 0, 3, this.itemHeight);
       itemContainer.add(itemBg);
 
-      // Icona con sfondo circolare scuro
+      // Icona
       const iconX = this.padding + this.iconSize / 2 + 4;
       const iconY = this.itemHeight / 2;
-      const iconBg = this.scene.add.graphics();
-      iconBg.fillStyle(0x2a2a2a, 1);
-      iconBg.fillCircle(iconX, iconY, this.iconSize / 2 + 2);
-      iconBg.lineStyle(1.5, bgColor, 0.6);
-      iconBg.strokeCircle(iconX, iconY, this.iconSize / 2 + 2);
-      itemContainer.add(iconBg);
 
       const iconKey = `icon_${agentType}`;
       if (info.iconPath && this.scene.textures.exists(iconKey)) {
