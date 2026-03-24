@@ -28,7 +28,7 @@ PERSONA_REGISTRY = {
     "mercatorum": [
         ("Marco_Rossi",  "phd_student", Specialization.DATA_SCIENCE),
         ("Elena_Conti",  "researcher",  Specialization.SECURE_AGGREGATION),
-        ("Luca_Bianchi", "phd_student", Specialization.OPTIMIZATION_THEORY),
+        ("Luca_Bianchi", "professor",   Specialization.OPTIMIZATION_THEORY),
     ],
     "blekinge": [
         ("Anna_Lindberg",   "professor",   Specialization.FL_ARCHITECTURE),

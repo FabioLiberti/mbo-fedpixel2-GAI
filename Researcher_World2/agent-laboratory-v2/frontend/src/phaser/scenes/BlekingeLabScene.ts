@@ -5,10 +5,11 @@ import { Agent, AgentState } from '../sprites/Agent';
 import { LabTheme } from './BaseLabScene';
 import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
 import { createAgent } from '../sprites/agentFactory';
-import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
 import { AgentsLegend } from '../ui/AgentsLegend';
-import { addLabInfoButton } from '../examples/AgentsLegendIntegration';
-//import { LabAgentsLoader } from '../utils/LabAgentsLoader';
+import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { DialogEventTracker } from '../controllers/DialogEventTracker';
+import { LAB_TYPES } from '../types/LabTypeConstants';
 
 
 // Configurazione agenti Blekinge (allineata al backend)
@@ -39,20 +40,25 @@ const AGENT_CONFIG = {
 
 export class BlekingeLabScene extends BaseScene {
   // Agenti e interazioni
-  protected agents: Agent[] = [];
+  public agents: Agent[] = [];
   protected interactionZones: Phaser.GameObjects.Zone[] = [];
-  
+
   // Grid per il pathfinding
   protected grid: number[][] = [];
-  
+
   // Elementi di debug
-  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
-  private debugText: Phaser.GameObjects.Text | null = null;
+  public debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  public debugText: Phaser.GameObjects.Text | null = null;
   private assetsLoaded: boolean = false;
   private textureTestContainers: Phaser.GameObjects.Container[] = [];
   private rawSprites: Phaser.GameObjects.Sprite[] = [];
-  
-  private agentsLegend: AgentsLegend | null = null;
+
+  public agentsLegend: AgentsLegend | null = null;
+
+  // Controller e pannelli condivisi
+  public agentController: GlobalAgentController | null = null;
+  public dialogEventTracker: DialogEventTracker | null = null;
+  private labControls: LabControlsMenu | null = null;
 
   // Tema del laboratorio Blekinge
   protected theme: LabTheme = {
@@ -264,11 +270,37 @@ export class BlekingeLabScene extends BaseScene {
       // Setup della camera
       this.setupCamera();
       
-      // Aggiungi pulsante per tornare al lab Mercatorum
-      this.createNavigationButtons();
-      
-      integrateAgentsLegend(this);
-      addLabInfoButton(this, 'blekinge');
+      // Inizializza DialogEventTracker + GlobalAgentController
+      this.dialogEventTracker = new DialogEventTracker(this);
+      this.agentController = new GlobalAgentController(this, LAB_TYPES.BLEKINGE);
+      this.agentController.setSimulationAgents(this.agents);
+      this.agentController.initDebugger();
+
+      // Pannello "Controlli Lab" condiviso
+      const controlConfig: LabControlConfig = {
+        labId: 'blekinge',
+        labName: 'Blekinge University Lab',
+        labDescription:
+          'Laboratorio di ricerca specializzato in architetture di\n' +
+          'federated learning e comunicazione efficiente.\n\n' +
+          'Specializzazione in:\n' +
+          '• Architetture FL distribuite e scalabili\n' +
+          '• Efficienza della comunicazione tra nodi federati\n' +
+          '• Gestione dati non-IID in ambienti eterogenei\n' +
+          '• Ottimizzazione del consenso distribuito',
+        theme: {
+          primary: this.theme.colorPalette.primary,    // 0x3f51b5
+          secondary: 0x1a1a2e,                         // dark navy
+          accent: 0xf5f5dc,                            // cream
+        },
+        navigation: [
+          { label: '← Torna a Mercatorum', sceneKey: 'MercatorumLabScene' },
+          { label: '→ Vai a OPBG Lab', sceneKey: 'OPBGLabScene' },
+        ],
+      };
+      this.labControls = new LabControlsMenu(this as any, controlConfig);
+      const dc = this.agentController.getDialogController();
+      if (dc) this.labControls.setDialogController(dc);
 
 
       // Titolo del laboratorio con effetto 3D in stile pixel art su sfondo bianco
@@ -1656,53 +1688,7 @@ private createAgentsFromConfig(): void {
   /**
    * Crea i pulsanti di navigazione tra laboratori
    */
-  private createNavigationButtons(): void {
-    try {
-      console.log('Creating navigation buttons');
-      // Pulsante per tornare al lab Mercatorum
-      const backButton = this.add.text(
-        100, 
-        100, 
-        '← Torna a Mercatorum', 
-        { 
-          fontSize: '18px',
-          color: '#ffffff',
-          backgroundColor: '#3f51b5',
-          padding: { left: 10, right: 10, top: 5, bottom: 5 }
-        }
-      );
-      backButton.setInteractive({ useHandCursor: true });
-      backButton.on('pointerdown', () => {
-        this.scene.start('MercatorumLabScene');
-      });
-      
-      // Pulsante per passare a OPBG Lab
-      const opbgButton = this.add.text(
-        100, 
-        140, 
-        '→ Vai a OPBG Lab', 
-        { 
-          fontSize: '18px',
-          color: '#ffffff',
-          backgroundColor: '#3f51b5',
-          padding: { left: 10, right: 10, top: 5, bottom: 5 }
-        }
-      );
-      opbgButton.setInteractive({ useHandCursor: true });
-      opbgButton.on('pointerdown', () => {
-        this.scene.start('OPBGLabScene');
-      });
-      
-      // Imposta profondità per assicurarsi che i pulsanti siano sopra altri elementi
-      backButton.setDepth(100);
-      opbgButton.setDepth(100);
-      
-      // Crea un pulsante per info sul laboratorio
-      this.createLabInfoButton();
-    } catch (error) {
-      console.error('Error in createNavigationButtons:', error);
-    }
-  }
+  // createNavigationButtons — ora gestito da LabControlsMenu
   
   /**
    * Aggiorna tutti gli agenti
@@ -1851,150 +1837,7 @@ private createAgentsFromConfig(): void {
   /**
    * Crea un pulsante per mostrare informazioni sul laboratorio
    */
-  private createLabInfoButton(): void {
-    const labInfoButton = this.add.text(
-      20, 
-      20, 
-      'ℹ️ Info Laboratorio', 
-      { 
-        fontSize: '16px',
-        color: '#ffffff',
-        backgroundColor: '#3f51b5',
-        padding: { left: 10, right: 10, top: 5, bottom: 5 }
-      }
-    );
-    
-    labInfoButton.setInteractive({ useHandCursor: true });
-    labInfoButton.setDepth(500);
-    
-    labInfoButton.on('pointerdown', () => {
-      this.showLabInfo();
-    });
-  }
-
-  /**
-   * Mostra informazioni specifiche sul laboratorio Blekinge
-   */
-  private showLabInfo(): void {
-    try {
-      // Crea un pannello di informazioni sul laboratorio
-      const infoPanel = this.add.container(
-        this.cameras.main.centerX,
-        this.cameras.main.centerY
-      );
-      infoPanel.setDepth(1000);
-      
-      // Sfondo del pannello con stile scandinavo minimalista
-      const background = this.add.graphics();
-      background.fillStyle(0xffffff, 0.95); // Bianco pulito
-      background.fillRoundedRect(-250, -200, 500, 400, 10);
-      background.lineStyle(3, 0x4fc3f7, 1); // Bordo azzurro
-      background.strokeRoundedRect(-250, -200, 500, 400, 10);
-      infoPanel.add(background);
-      
-      // Titolo
-      const title = this.add.text(
-        0, 
-        -170, 
-        'Blekinge University Lab', 
-        { 
-          fontSize: '24px',
-          color: '#3f51b5', // Blu principale
-          fontFamily: 'monospace',
-          fontStyle: 'bold',
-          align: 'center'
-        }
-      );
-      title.setOrigin(0.5);
-      infoPanel.add(title);
-      
-      // Descrizione in stile scandinavo minimalista
-      const descriptionText = 
-        'Laboratorio di ricerca caratterizzato da un design scandinavo ' +
-        'minimalista ad alta tecnologia. Questo ambiente è progettato per ' +
-        'favorire la collaborazione e l\'innovazione, con ampi spazi aperti ' +
-        'e tecnologie all\'avanguardia.\n\n' +
-        'Specializzazione in:\n' +
-        '• Algoritmi di aggregazione avanzati (oltre FedAvg)\n' +
-        '• Ottimizzazione per dispositivi IoT e edge computing\n' +
-        '• Quantizzazione e compressione per ridurre comunicazione\n' +
-        '• Client selection e sampling strategico';
-      
-      const description = this.add.text(
-        0,
-        -80,
-        descriptionText,
-        {
-          fontSize: '16px',
-          color: '#333333',
-          align: 'center',
-          wordWrap: { width: 450 }
-        }
-      );
-      description.setOrigin(0.5, 0);
-      infoPanel.add(description);
-      
-      // Pulsante di chiusura
-      const closeButton = this.add.text(
-        230, 
-        -180, 
-        'X', 
-        { 
-          fontSize: '20px',
-          color: '#ffffff',
-          backgroundColor: '#4fc3f7',
-          padding: { left: 8, right: 8, top: 5, bottom: 5 }
-        }
-      );
-      closeButton.setInteractive({ useHandCursor: true });
-      closeButton.on('pointerdown', () => {
-        infoPanel.destroy();
-      });
-      infoPanel.add(closeButton);
-      
-      // Logo Blekinge (se disponibile)
-      if (this.textures.exists('blekinge-logo')) {
-        const logo = this.add.image(0, 130, 'blekinge-logo');
-        logo.setScale(0.5);
-        infoPanel.add(logo);
-      }
-      
-      // Decorazioni geometriche in stile scandinavo
-      const decorations = this.add.graphics();
-      decorations.lineStyle(2, 0x4fc3f7, 0.5);
-      
-      // Linee orizzontali minimaliste
-      decorations.beginPath();
-      decorations.moveTo(-230, -140);
-      decorations.lineTo(-150, -140);
-      decorations.strokePath();
-      
-      decorations.beginPath();
-      decorations.moveTo(150, -140);
-      decorations.lineTo(230, -140);
-      decorations.strokePath();
-      
-      // Triangoli geometrici agli angoli (stile nordico)
-      decorations.fillStyle(0xffcc44, 0.3); // Accento giallo-oro
-      
-      // Triangolo in alto a sinistra
-      decorations.fillTriangle(-235, -185, -215, -185, -225, -165);
-      
-      // Triangolo in alto a destra
-      decorations.fillTriangle(235, -185, 215, -185, 225, -165);
-      
-      // Triangolo in basso a sinistra
-      decorations.fillTriangle(-235, 185, -215, 185, -225, 165);
-      
-      // Triangolo in basso a destra
-      decorations.fillTriangle(235, 185, 215, 185, 225, 165);
-      
-      infoPanel.add(decorations);
-      
-    } catch (error) {
-      console.error('Error showing lab info:', error);
-    }
-  }
+  // createLabInfoButton, showLabInfo — ora gestiti da LabControlsMenu
 
   /**************************
   *************************** 

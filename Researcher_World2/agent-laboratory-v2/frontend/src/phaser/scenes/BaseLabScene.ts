@@ -221,8 +221,12 @@ export class BaseLabScene extends BaseScene {
    */
   protected initializeControlsMenu(): void {
     try {
-      // Crea il menu dei controlli (modificato per utilizzare un solo parametro)
-      this.labControlsMenu = new LabControlsMenu(this);
+      // Crea il menu dei controlli con config di default
+      this.labControlsMenu = new LabControlsMenu(this as any, {
+        labId: 'default', labName: 'Lab', labDescription: '',
+        theme: { primary: 0x3f51b5, secondary: 0x1a1a2e, accent: 0xf5f5dc },
+        navigation: [],
+      });
 
       // Crea il pannello LLM semplificato
       this.simpleLLMPanel = new SimpleLLMPanel(this, 20, 60);

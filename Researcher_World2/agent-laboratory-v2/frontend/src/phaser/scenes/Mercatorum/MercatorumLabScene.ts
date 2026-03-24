@@ -8,51 +8,50 @@ import { MERCATORUM_THEME, IMercatorumLabScene, MercatorumSceneRefs } from './ty
 import { LLMControlPanel } from '../../ui/LLMControlPanel';
 import { SimpleLLMPanel } from '../../ui/simple/SimpleLLMPanel';
 import { DialogEventTracker } from '../../controllers/DialogEventTracker';
+import { LabControlsMenu, type LabControlConfig } from '../../ui/LabControlsMenu';
 
 // Importa i moduli
 import * as UI from './UI';
 import * as Agents from './Agents';
 import * as Environment from './Environment';
 import * as Textures from './Textures';
-import * as Controls from './Controls';
 
 
 export class MercatorumLabScene extends BaseScene implements IMercatorumLabScene {
-  // Agenti e interazioni - cambiati da protected a public per compatibilità con l'interfaccia
+  // Agenti e interazioni
   public agents: Agent[] = [];
   public interactionZones: Phaser.GameObjects.Zone[] = [];
-  
-  // Grid per il pathfinding - cambiato da protected a public
+
+  // Grid per il pathfinding
   public grid: number[][] = [];
-  
-  // Elementi di debug - cambiati da private a public
+
+  // Elementi di debug
   public debugGraphics: Phaser.GameObjects.Graphics | null = null;
   public debugText: Phaser.GameObjects.Text | null = null;
   public assetsLoaded: boolean = false;
   public textureTestContainers: Phaser.GameObjects.Container[] = [];
   public rawSprites: Phaser.GameObjects.Sprite[] = [];
-  
-  // Dichiarazione aggiuntiva per la legenda
+
+  // Legenda
   public agentsLegend: any = null;
-  
-  // Controller per gestire i dialoghi
+
+  // Controller
   public agentController: GlobalAgentController | null = null;
 
-  // Componenti UI per il pannello di controllo
+  // Pannello di controllo condiviso
+  private labControls: LabControlsMenu | null = null;
+
+  // Legacy properties kept for IMercatorumLabScene compatibility
   public controlPanel: Phaser.GameObjects.Container | null = null;
   public controlPanelToggle: Phaser.GameObjects.Container | null = null;
   public isPanelOpen: boolean = false;
-
-  // Pannello di controllo LLM - nuova proprietà
   public llmPanel: LLMControlPanel | null = null;
-  
-  // Pannello SimpleLLM
   public simpleLLMPanel: SimpleLLMPanel | null = null;
-  
-  // Tracker per i dialoghi - NUOVO
+
+  // Tracker dialoghi
   public dialogEventTracker: DialogEventTracker | null = null;
 
-  // Tema del laboratorio Mercatorum - cambiato da protected a public
+  // Tema
   public theme = MERCATORUM_THEME;
 
   constructor() {
@@ -98,168 +97,80 @@ export class MercatorumLabScene extends BaseScene implements IMercatorumLabScene
 
   create() {
     console.log('MercatorumLabScene create START');
-    
-    try {
-      // Ottieni il riferimento agli elementi della scena per i moduli
-      const sceneRefs: MercatorumSceneRefs = {
-        agents: this.agents,
-        interactionZones: this.interactionZones,
-        grid: this.grid,
-        agentController: this.agentController,
-        agentsLegend: this.agentsLegend,
-        debugGraphics: this.debugGraphics,
-        debugText: this.debugText,
-        controlPanel: this.controlPanel,
-        controlPanelToggle: this.controlPanelToggle, 
-        textureTestContainers: this.textureTestContainers,
-        rawSprites: this.rawSprites,
-        assetsLoaded: this.assetsLoaded,
-        isPanelOpen: this.isPanelOpen,
-        llmPanel: this.llmPanel
-      };
 
+    try {
       // Inizializza gli elementi di debug
       this.createDebugElements();
-      
-      // Assicuriamoci che il debug sia disattivato all'avvio
-      Controls.initDebugState(this);
-      
-      // Imposta un colore di sfondo acceso per debug
-      this.cameras.main.setBackgroundColor(0xFF00FF); // Magenta vivace per debug
-      
+      if (this.debugGraphics) this.debugGraphics.setVisible(false);
+      if (this.debugText) this.debugText.setVisible(false);
+
+      // Colore debug temporaneo
+      this.cameras.main.setBackgroundColor(0xFF00FF);
+
       // Fase 1: Gestione texture e animazioni
       Textures.setupTextures(this);
-      
-      // Visualizza asset disponibili
       this.displayLoadedAssets();
-      
-      // Dopo il debug, usa il colore reale
+
       setTimeout(() => {
         this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
       }, 1000);
-      
+
       // Fase 2: Crea l'ambiente
       Environment.createEnvironment(this);
-      
-      // NUOVO: Inizializza il tracker di dialoghi prima di creare gli agenti
-      this.dialogEventTracker = new DialogEventTracker(this);
-      
-      // Fase 3: Crea agenti e zone di interazione
-      Agents.createAgents(this);
-      
-      // Fase 4: Configura la UI
-      UI.setupUI(this);
-      
-      // Fase 5: Crea il pannello di controllo
-      Controls.createControlPanel(this);
 
-      // Fase 6: Inizializza il controller per i dialoghi
-      this.initDialogController();
-      
+      // Fase 3: Inizializza tracker e crea agenti
+      this.dialogEventTracker = new DialogEventTracker(this);
+      Agents.createAgents(this);
+
+      // Fase 4: Configura la UI (titolo)
+      UI.setupUI(this);
+
+      // Fase 5: Inizializza controller dialoghi
+      this.agentController = new GlobalAgentController(this, LAB_TYPES.MERCATORUM);
+      this.agentController.setSimulationAgents(this.agents);
+      this.agentController.initDebugger();
+
+      // Fase 6: Pannello "Controlli Lab" condiviso
+      const controlConfig: LabControlConfig = {
+        labId: 'mercatorum',
+        labName: 'Università Mercatorum Lab',
+        labDescription:
+          'Laboratorio di ricerca specializzato in business intelligence\n' +
+          'e analisi finanziaria federata.\n\n' +
+          'Specializzazione in:\n' +
+          '• Business intelligence e analisi finanziaria federata\n' +
+          '• Privacy-preserving analytics per dati aziendali sensibili\n' +
+          '• Compliance GDPR e framework regolatori\n' +
+          '• Ottimizzazione di modelli federati per previsioni di mercato',
+        theme: {
+          primary: this.theme.colorPalette.primary,    // 0xd2691e terracotta
+          secondary: this.theme.colorPalette.secondary, // 0x1a365d navy
+          accent: this.theme.colorPalette.accent,       // 0xf5f5dc cream
+        },
+        navigation: [
+          { label: '→ Vai a Blekinge Lab', sceneKey: 'BlekingeLabScene' },
+          { label: '→ Vai a OPBG Lab', sceneKey: 'OPBGLabScene' },
+        ],
+      };
+      this.labControls = new LabControlsMenu(this as any, controlConfig);
+      const dc = this.agentController.getDialogController();
+      if (dc) this.labControls.setDialogController(dc);
+
       console.log('MercatorumLabScene create COMPLETE');
-      
-      // Forza l'attivazione della scena se non è già attiva
+
       if (!this.scene.isActive()) {
-        console.log('MercatorumLabScene not active, attempting to force activation');
         this.scene.setActive(true);
         this.scene.setVisible(true);
       }
-      
     } catch (error) {
       console.error('Error in MercatorumLabScene create:', error);
       this.updateDebugInfo(`Create error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  // Inizializza il controller per i dialoghi
-  private initDialogController(): void {
-    try {
-      // Inizializza il controller globale per gli agenti con supporto per i dialoghi
-      this.agentController = new GlobalAgentController(this, LAB_TYPES.MERCATORUM);
-
-      // Registra gli agenti creati nel controller
-      this.agentController.setSimulationAgents(this.agents);
-
-      // Inizializza il debugger dei dialoghi
-      this.agentController.initDebugger();
-      
-      // Inizializza SimpleLLMPanel se non esistente
-      if (!this.simpleLLMPanel) {
-        this.simpleLLMPanel = new SimpleLLMPanel(this, 20, 60);
-      }
-      
-      // NUOVO: Se il tracker di dialoghi esiste, assicuriamoci che i dialoghi vengano tracciati
-      if (this.dialogEventTracker) {
-        console.log('Dialog event tracker already exists, ready for tracking dialogs');
-      } else {
-        // Fallback: crea il tracker se non esiste
-        this.dialogEventTracker = new DialogEventTracker(this);
-        console.log('Created dialog event tracker as fallback');
-      }
-
-      console.log('Dialog controller initialized with tracker integration');
-    } catch (error) {
-      console.error('Error initializing dialog controller:', error);
-    }
-  }
-
-  // NUOVO: Metodo per tracciare manualmente un dialogo
   public trackDialog(type: 'llm' | 'simulated' | 'standard', agentId?: string): void {
     if (this.dialogEventTracker) {
       this.dialogEventTracker.trackDialog(type, agentId);
-    } else {
-      console.warn('Cannot track dialog: dialog event tracker not initialized');
-      
-      // Emetti comunque l'evento in caso il tracker venga inizializzato più tardi
-      this.events.emit('mercatorum-dialog-created', { 
-        type, 
-        agentId 
-      });
-    }
-  }
-  
-  // Aggiungi pulsante per SimpleLLMPanel al menu di controllo
-  private addSimpleLLMButton(): void {
-    try {
-      // Aggiungi il pulsante direttamente sulla scena invece che nel controlPanel
-      const llmSimpleButton = this.add.text(
-        this.cameras.main.width - 200,  // Posiziona a destra
-        150,  // Posiziona più in alto
-        'LLM Simple',
-        {
-          fontSize: '16px',
-          color: '#ffffff',
-          backgroundColor: '#3f51b5',
-          padding: { left: 10, right: 10, top: 5, bottom: 5 }
-        }
-      );
-      
-      llmSimpleButton.setOrigin(0, 0.5);
-      llmSimpleButton.setInteractive({ useHandCursor: true });
-      llmSimpleButton.setScrollFactor(0);  // Fissa rispetto alla camera
-      llmSimpleButton.setDepth(1000);  // Assicurati che sia sopra gli altri elementi
-      
-      // Effetti hover
-      llmSimpleButton.on('pointerover', () => {
-        llmSimpleButton.setBackgroundColor('#5c6bc0');
-      });
-      
-      llmSimpleButton.on('pointerout', () => {
-        llmSimpleButton.setBackgroundColor('#3f51b5');
-      });
-      
-      // Azione al click
-      llmSimpleButton.on('pointerdown', () => {
-        if (this.simpleLLMPanel) {
-          this.simpleLLMPanel.toggle();
-        } else {
-          console.warn('SimpleLLMPanel not initialized');
-        }
-      });
-      
-      console.log('LLM Simple button added directly to scene');
-    } catch (error) {
-      console.error('Error adding LLM Simple button:', error);
     }
   }
 
@@ -422,28 +333,10 @@ export class MercatorumLabScene extends BaseScene implements IMercatorumLabScene
         this.agentController = null;
       }
       
-      // Distruggi il pannello di controllo
-      if (this.controlPanel) {
-        this.controlPanel.destroy();
-        this.controlPanel = null;
-      }
-      
-      // Distruggi il pulsante toggle
-      if (this.controlPanelToggle) {
-        this.controlPanelToggle.destroy();
-        this.controlPanelToggle = null;
-      }
-      
-      // Distruggi il pannello LLM
-      if (this.llmPanel) {
-        this.llmPanel.destroy();
-        this.llmPanel = null;
-      }
-      
-      // Distruggi il pannello SimpleLLM
-      if (this.simpleLLMPanel) {
-        this.simpleLLMPanel.destroy();
-        this.simpleLLMPanel = null;
+      // Distruggi il pannello condiviso
+      if (this.labControls) {
+        this.labControls.destroy();
+        this.labControls = null;
       }
       
       // NUOVO: Distruggi il tracker di dialoghi

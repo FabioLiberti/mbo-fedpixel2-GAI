@@ -6,9 +6,10 @@ import { LabTheme } from './BaseLabScene';
 import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
 import { createAgent } from '../sprites/agentFactory';
 import { AgentsLegend } from '../ui/AgentsLegend';
-import { LabAgentsLoader } from '../utils/LabAgentsLoader';
-import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
-import { addLabInfoButton } from '../examples/AgentsLegendIntegration';
+import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { DialogEventTracker } from '../controllers/DialogEventTracker';
+import { LAB_TYPES } from '../types/LabTypeConstants';
 
 // Configurazione agenti OPBG (allineata al backend - 3 agenti)
 const AGENT_CONFIG = {
@@ -38,21 +39,25 @@ const AGENT_CONFIG = {
 
 export class OPBGLabScene extends BaseScene {
   // Agenti e interazioni
-  protected agents: Agent[] = [];
+  public agents: Agent[] = [];
   protected interactionZones: Phaser.GameObjects.Zone[] = [];
-  
+
   // Grid per il pathfinding
   protected grid: number[][] = [];
-  
+
   // Elementi di debug
-  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
-  private debugText: Phaser.GameObjects.Text | null = null;
+  public debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  public debugText: Phaser.GameObjects.Text | null = null;
   private assetsLoaded: boolean = false;
   private textureTestContainers: Phaser.GameObjects.Container[] = [];
   private rawSprites: Phaser.GameObjects.Sprite[] = [];
-  
-  // Dichiarazione aggiuntiva per la legenda
-  private agentsLegend: AgentsLegend | null = null;
+
+  public agentsLegend: AgentsLegend | null = null;
+
+  // Controller e pannelli condivisi
+  public agentController: GlobalAgentController | null = null;
+  public dialogEventTracker: DialogEventTracker | null = null;
+  private labControls: LabControlsMenu | null = null;
   
   // Tema del laboratorio OPBG
   protected theme: LabTheme = {
@@ -221,13 +226,37 @@ export class OPBGLabScene extends BaseScene {
       // Setup della camera
       this.setupCamera();
       
-      // Aggiungi pulsanti di navigazione
-      this.createNavigationButtons();
-      
-      // Crea la legenda personalizzata per OPBG invece di quella generica
-      // this.createOPBGLegend();
-      integrateAgentsLegend(this);
-      addLabInfoButton(this, 'opbg');
+      // Inizializza DialogEventTracker + GlobalAgentController
+      this.dialogEventTracker = new DialogEventTracker(this);
+      this.agentController = new GlobalAgentController(this, LAB_TYPES.OPBG);
+      this.agentController.setSimulationAgents(this.agents);
+      this.agentController.initDebugger();
+
+      // Pannello "Controlli Lab" condiviso
+      const controlConfig: LabControlConfig = {
+        labId: 'opbg',
+        labName: 'OPBG IRCCS Lab',
+        labDescription:
+          'Laboratorio di ricerca specializzato in federated learning\n' +
+          'applicato alla medicina pediatrica e clinica.\n\n' +
+          'Specializzazione in:\n' +
+          '• Privacy engineering per dati sanitari sensibili\n' +
+          '• Medical imaging con federated learning\n' +
+          '• Equità e bias nei modelli clinici\n' +
+          '• Compliance normativa per dati pediatrici',
+        theme: {
+          primary: this.theme.colorPalette.primary,    // 0x00b8d4
+          secondary: 0x1a1a2e,                         // dark navy
+          accent: 0xf5f5dc,                            // cream
+        },
+        navigation: [
+          { label: '← Vai a Mercatorum Lab', sceneKey: 'MercatorumLabScene' },
+          { label: '→ Vai a Blekinge Lab', sceneKey: 'BlekingeLabScene' },
+        ],
+      };
+      this.labControls = new LabControlsMenu(this as any, controlConfig);
+      const dc = this.agentController.getDialogController();
+      if (dc) this.labControls.setDialogController(dc);
 
       // Titolo del laboratorio con stile "child-friendly"
       // Crea un container per tutto il titolo
@@ -1347,52 +1376,7 @@ export class OPBGLabScene extends BaseScene {
   /**
    * Crea i pulsanti di navigazione tra laboratori
    */
-  private createNavigationButtons(): void {
-    try {
-      console.log('Creating navigation buttons');
-      // Pulsante per tornare al lab Mercatorum
-      const mercatorumButton = this.add.text(
-        100, 
-        100, 
-        '← Vai a Mercatorum Lab', 
-        { 
-          fontSize: '18px',
-          color: '#ffffff',
-          backgroundColor: '#' + this.theme.colorPalette.primary.toString(16),
-          padding: { left: 10, right: 10, top: 5, bottom: 5 },
-          borderRadius: 5
-        }
-      );
-      mercatorumButton.setInteractive({ useHandCursor: true });
-      mercatorumButton.on('pointerdown', () => {
-        this.scene.start('MercatorumLabScene');
-      });
-      
-      // Pulsante per passare a Blekinge Lab
-      const blekingeButton = this.add.text(
-        100, 
-        140, 
-        '→ Vai a Blekinge Lab', 
-        { 
-          fontSize: '18px',
-          color: '#ffffff',
-          backgroundColor: '#' + this.theme.colorPalette.primary.toString(16),
-          padding: { left: 10, right: 10, top: 5, bottom: 5 },
-          borderRadius: 5
-        }
-      );
-      blekingeButton.setInteractive({ useHandCursor: true });
-      blekingeButton.on('pointerdown', () => {
-        this.scene.start('BlekingeLabScene');
-      });
-      
-      // Imposta profondità per assicurarsi che i pulsanti siano sopra altri elementi
-      mercatorumButton.setDepth(100);
-      blekingeButton.setDepth(100);
-    } catch (error) {
-      console.error('Error in createNavigationButtons:', error);
-    }
-  }
+  // createNavigationButtons — ora gestito da LabControlsMenu
   
   /**
    * Aggiorna tutti gli agenti
@@ -1703,177 +1687,7 @@ export class OPBGLabScene extends BaseScene {
   /**
    * Crea una legenda specifica per il laboratorio OPBG
    */
-  private createOPBGLegend(): void {
-    try {
-      console.log('Creating OPBG specific legend');
-      
-      // Utilizziamo il loader per ottenere agenti specifici per OPBG
-      LabAgentsLoader.loadLabSpecificAgents(this, 'opbg')
-        .then(agentTypes => {
-          // Crea la legenda con gli agenti specifici
-          const legend = new AgentsLegend(
-            this,            // riferimento alla scena
-            20,              // posizione X (nell'angolo in alto a sinistra)
-            60,              // posizione Y (sotto il titolo)
-            agentTypes       // configurazione specifica per OPBG
-          );
-          
-          // Esponi la legenda come proprietà della scena per usarla altrove
-          this.agentsLegend = legend;
-          
-          // Aggiungi pulsante per info sul laboratorio
-          this.createLabInfoButton();
-          
-          console.log('OPBG legend created');
-        })
-        .catch(error => {
-          console.error('Error creating OPBG legend:', error);
-        });
-    } catch (error) {
-      console.error('Error in createOPBGLegend:', error);
-    }
-  }
-  
-  /**
-   * Crea un pulsante per mostrare informazioni sul laboratorio
-   */
-  private createLabInfoButton(): void {
-    const labInfoButton = this.add.text(
-      20, 
-      20, 
-      'ℹ️ Info Laboratorio', 
-      { 
-        fontSize: '16px',
-        color: '#ffffff',
-        backgroundColor: '#00b8d4',
-        padding: { left: 10, right: 10, top: 5, bottom: 5 }
-      }
-    );
-    
-    labInfoButton.setInteractive({ useHandCursor: true });
-    labInfoButton.setDepth(500);
-    
-    labInfoButton.on('pointerdown', () => {
-      this.showLabInfo();
-    });
-  }
-
-  /**
-   * Mostra informazioni specifiche sul laboratorio OPBG
-   */
-  private showLabInfo(): void {
-    try {
-      // Crea un pannello di informazioni sul laboratorio
-      const infoPanel = this.add.container(
-        this.cameras.main.centerX,
-        this.cameras.main.centerY
-      );
-      infoPanel.setDepth(1000);
-      
-      // Sfondo del pannello
-      const background = this.add.graphics();
-      background.fillStyle(0xffffff, 0.95); // Bianco
-      background.fillRoundedRect(-250, -200, 500, 400, 20); // Angoli più arrotondati per stile pediatrico
-      background.lineStyle(3, 0x00b8d4, 1); // Bordo verde acqua
-      background.strokeRoundedRect(-250, -200, 500, 400, 20);
-      infoPanel.add(background);
-      
-      // Titolo
-      const title = this.add.text(
-        0, 
-        -170, 
-        'OPBG IRCCS Lab', 
-        { 
-          fontSize: '24px',
-          color: '#00b8d4', // Verde acqua
-          fontStyle: 'bold',
-          align: 'center'
-        }
-      );
-      title.setOrigin(0.5);
-      infoPanel.add(title);
-      
-      // Descrizione in stile child-friendly
-      const descriptionText = 
-        'Laboratorio di ricerca specializzato in federated learning per dati ' +
-        'medici pediatrici altamente sensibili. Questo ambiente ' +
-        'combina sicurezza dei dati con un design adatto ai bambini, ' +
-        'facilitando la ricerca medica collaborativa.\n\n' +
-        'Specializzazione in:\n' +
-        '• Federated learning per dati medici altamente sensibili\n' +
-        '• Diagnosi collaborativa preservando privacy dei pazienti\n' +
-        '• Modelli personalizzati per casi pediatrici rari\n' +
-        '• Integrazione di dati eterogenei (immagini, test, genetica)';
-      
-      const description = this.add.text(
-        0,
-        -80,
-        descriptionText,
-        {
-          fontSize: '16px',
-          color: '#333333',
-          align: 'center',
-          wordWrap: { width: 450 }
-        }
-      );
-      description.setOrigin(0.5, 0);
-      infoPanel.add(description);
-      
-      // Pulsante di chiusura
-      const closeButton = this.add.text(
-        230, 
-        -180, 
-        'X', 
-        { 
-          fontSize: '20px',
-          color: '#ffffff',
-          backgroundColor: '#00b8d4',
-          padding: { left: 8, right: 8, top: 5, bottom: 5 }
-        }
-      );
-      closeButton.setInteractive({ useHandCursor: true });
-      closeButton.on('pointerdown', () => {
-        infoPanel.destroy();
-      });
-      infoPanel.add(closeButton);
-      
-      // Logo OPBG (se disponibile)
-      if (this.textures.exists('opbg-logo')) {
-        const logo = this.add.image(0, 130, 'opbg-logo');
-        logo.setScale(0.5);
-        infoPanel.add(logo);
-      }
-      
-      // Decorazioni a tema pediatrico
-      const decorations = this.add.graphics();
-      
-      // Stelle colorate
-      decorations.fillStyle(0xffb6c1, 0.7); // Rosa pallido
-      decorations.fillStar(-200, -150, 5, 8, 15);
-      decorations.fillStar(200, -150, 5, 6, 12);
-      
-      // Cerchi colorati
-      decorations.fillStyle(0x4fc7ff, 0.5); // Blu cielo
-      decorations.fillCircle(-180, 170, 15);
-      decorations.fillCircle(180, 170, 12);
-      
-      // Forme di nuvole stilizzate
-      decorations.fillStyle(0xb3e5fc, 0.5); // Azzurro chiaro
-      // Nuvola a sinistra
-      decorations.fillCircle(-220, -120, 10);
-      decorations.fillCircle(-200, -120, 15);
-      decorations.fillCircle(-180, -120, 10);
-      // Nuvola a destra
-      decorations.fillCircle(220, 150, 10);
-      decorations.fillCircle(200, 150, 15);
-      decorations.fillCircle(180, 150, 10);
-      
-      infoPanel.add(decorations);
-      
-    } catch (error) {
-      console.error('Error showing lab info:', error);
-    }
-  }
+  // createOPBGLegend, createLabInfoButton, showLabInfo — ora gestiti da LabControlsMenu
 
   update(time: number, delta: number) {
     try {

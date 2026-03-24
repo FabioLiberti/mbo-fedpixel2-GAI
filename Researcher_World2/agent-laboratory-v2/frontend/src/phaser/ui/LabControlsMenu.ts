@@ -1,371 +1,403 @@
 // frontend/src/phaser/ui/LabControlsMenu.ts
+//
+// Pannello condiviso "Controlli Lab" — unico per tutte e tre le scene.
+// Contiene: Navigazione, Agenti, LLM, Test/Debug, Info Laboratorio.
 
 import * as Phaser from 'phaser';
 import { SimpleLLMPanel } from './simple/SimpleLLMPanel';
 import { LLMControlPanel } from './LLMControlPanel';
 import { DialogController } from '../controllers/DialogController';
+import { Agent } from '../sprites/Agent';
+import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
 
-/**
- * Menu per i controlli del laboratorio che include il semplice pannello LLM
- */
+// ── Configuration ────────────────────────────────────────────────────
+
+export interface LabControlConfig {
+  labId: string;
+  labName: string;
+  labDescription: string;
+  theme: {
+    primary: number;    // button / accent colour (e.g. terracotta, teal, blue)
+    secondary: number;  // panel background
+    accent: number;     // text / border colour
+  };
+  /** Navigation links to other scenes */
+  navigation: Array<{ label: string; sceneKey: string }>;
+}
+
+/** Minimal scene interface — every lab scene already satisfies this. */
+export interface ILabControlScene extends Phaser.Scene {
+  agents: Agent[];
+  agentController: any;          // GlobalAgentController | null
+  agentsLegend: any;             // AgentsLegend | null
+  debugGraphics: Phaser.GameObjects.Graphics | null;
+  debugText: Phaser.GameObjects.Text | null;
+  theme: { name: string; colorPalette: Record<string, number> };
+  updateDebugInfo(text: string): void;
+}
+
+// ── LabControlsMenu ──────────────────────────────────────────────────
+
 export class LabControlsMenu {
-  private scene: Phaser.Scene;
-  private container: Phaser.GameObjects.Container;
-  //private menuBackground: Phaser.GameObjects.Graphics;
-  private menuBackground!: Phaser.GameObjects.Graphics; // Aggiunta ! per l'inizializzazione definitiva
-  private menuButtons: Phaser.GameObjects.Text[] = [];
-  private isVisible: boolean = false;
-  private isExpanded: boolean = false;
+  private scene: ILabControlScene & Phaser.Scene;
+  private config: LabControlConfig;
+
+  // Phaser containers
+  private panel: Phaser.GameObjects.Container | null = null;
+  private toggleBtn: Phaser.GameObjects.Container | null = null;
+  private isOpen = false;
+
+  // Sub-panels
   private simpleLLMPanel: SimpleLLMPanel | null = null;
   private llmControlPanel: LLMControlPanel | null = null;
   private dialogController: DialogController | null = null;
-  
-  // Dimensioni
-  private menuWidth: number = 180;
-  private menuButtonHeight: number = 40;
-  private expandedHeight: number = 0; // Verrà calcolato in base al numero di pulsanti
-  private collapsedHeight: number = 50;
-  private padding: number = 10;
-  
-  /**
-   * Costruttore
-   * @param scene La scena Phaser in cui inserire il menu
-   */
-  constructor(scene: Phaser.Scene) {
+
+  // Panel geometry
+  private readonly panelW = 240;
+  private panelH = 0; // computed in build
+
+  constructor(scene: ILabControlScene & Phaser.Scene, config: LabControlConfig) {
     this.scene = scene;
-    
-    // Crea container
-    this.container = this.scene.add.container(this.scene.cameras.main.width - this.menuWidth - 10, 10);
-    this.container.setDepth(1000);
-    
-    // Inizializza elementi grafici
-    this.createMenuElements();
-    
-    // Registra evento resize
-    this.scene.scale.on('resize', this.handleResize, this);
-    
-    // Mostra menu collassato inizialmente
-    this.show();
+    this.config = config;
+    this.build();
   }
-  
-  /**
-   * Crea gli elementi del menu
-   */
-  private createMenuElements(): void {
-    // Crea sfondo
-    this.menuBackground = this.scene.add.graphics();
-    this.container.add(this.menuBackground);
-    
-    // Titolo menu
-    const titleText = this.scene.add.text(
-      this.menuWidth / 2,
-      25,
-      'Controlli Lab',
-      {
-        fontSize: '16px',
-        color: '#ffffff',
-        fontStyle: 'bold'
-      }
-    );
-    titleText.setOrigin(0.5, 0.5);
-    this.container.add(titleText);
-    
-    // Pulsante espandi/collassa
-    const toggleButton = this.scene.add.text(
-      this.menuWidth - 30,
-      25,
-      '▼',
-      {
-        fontSize: '16px',
-        color: '#ffffff'
-      }
-    );
-    toggleButton.setOrigin(0.5, 0.5);
-    toggleButton.setInteractive({ useHandCursor: true });
-    toggleButton.on('pointerdown', () => this.toggleMenu());
-    this.container.add(toggleButton);
-    
-    // Definisci pulsanti del menu
-    const menuItems = [
-      { id: 'agents', label: 'Agenti' },
-      { id: 'simple-llm', label: 'Simple LLM Panel' },
-      { id: 'advanced-llm', label: 'Legacy LLM Panel' },
-      { id: 'fl-dashboard', label: 'FL Dashboard' },
-      { id: 'test-dialog', label: 'Test Dialogo' },
-      { id: 'debug', label: 'Debug' }
-    ];
-    
-    // Crea pulsanti del menu
-    menuItems.forEach((item, index) => {
-      const y = this.collapsedHeight + (index * this.menuButtonHeight) + this.padding;
-      
-      const button = this.scene.add.text(
-        this.menuWidth / 2,
-        y,
-        item.label,
-        {
-          fontSize: '14px',
-          color: '#ffffff',
-          backgroundColor: '#3f51b5',
-          padding: { left: 10, right: 10, top: 5, bottom: 5 }
-        }
-      );
-      button.setOrigin(0.5, 0.5);
-      button.setInteractive({ useHandCursor: true });
-      button.visible = false; // Nascosto inizialmente
-      
-      // Gestisci clic sul pulsante
-      button.on('pointerdown', () => this.handleMenuItemClick(item.id));
-      
-      // Effetti hover
-      button.on('pointerover', () => {
-        button.setBackgroundColor('#5c6bc0');
-      });
-      
-      button.on('pointerout', () => {
-        button.setBackgroundColor('#3f51b5');
-      });
-      
-      this.menuButtons.push(button);
-      this.container.add(button);
-    });
-    
-    // Calcola altezza totale menu espanso
-    this.expandedHeight = this.collapsedHeight + (menuItems.length * this.menuButtonHeight) + (this.padding * 2);
-    
-    // Disegna sfondo iniziale
-    this.drawMenuBackground();
-  }
-  
-  /**
-   * Disegna lo sfondo del menu
-   */
-  private drawMenuBackground(): void {
-    this.menuBackground.clear();
-    
-    // Determina altezza corrente
-    const currentHeight = this.isExpanded ? this.expandedHeight : this.collapsedHeight;
-    
-    // Disegna sfondo
-    this.menuBackground.fillStyle(0x1a1a2e, 0.9);
-    this.menuBackground.fillRoundedRect(0, 0, this.menuWidth, currentHeight, 8);
-    this.menuBackground.lineStyle(2, 0x3f51b5, 1);
-    this.menuBackground.strokeRoundedRect(0, 0, this.menuWidth, currentHeight, 8);
-  }
-  
-  /**
-   * Gestisce il click su una voce di menu
-   */
-  private handleMenuItemClick(itemId: string): void {
-    switch (itemId) {
-      case 'simple-llm':
-        this.toggleSimpleLLMPanel();
-        break;
-      case 'advanced-llm':
-        this.toggleLegacyLLMPanel();
-        break;
-      case 'test-dialog':
-        this.testDialog();
-        break;
-      case 'fl-dashboard':
-        this.showFLDashboard();
-        break;
-      case 'agents':
-        this.showAgentsLegend();
-        break;
-      case 'debug':
-        this.toggleDebug();
-        break;
-    }
-  }
-  
-  /**
-   * Inizializza e mostra/nasconde il simple LLM panel
-   */
-  private toggleSimpleLLMPanel(): void {
-    if (!this.simpleLLMPanel) {
-      // Inizializza il pannello se non esiste
-      this.simpleLLMPanel = new SimpleLLMPanel(this.scene);
-      
-      // Imposta dialog controller se presente
-      if (this.dialogController) {
-        this.simpleLLMPanel.setDialogController(this.dialogController);
-      }
-    }
-    
-    // Toggle visibilità
-    if (this.simpleLLMPanel.isShown()) {
-      this.simpleLLMPanel.hide();
-    } else {
-      this.simpleLLMPanel.show();
-      
-      // Nascondi legacy panel se attivo
-      if (this.llmControlPanel && this.llmControlPanel.getIsVisible()) {
-        this.llmControlPanel.hide();
-      }
-    }
-  }
-  
-  /**
-   * Inizializza e mostra/nasconde il legacy LLM control panel
-   */
-  private toggleLegacyLLMPanel(): void {
-    if (!this.llmControlPanel) {
-      // Inizializza il pannello se non esiste
-      this.llmControlPanel = new LLMControlPanel(
-        this.scene,
-        20,
-        60
-      );
-      
-      // Imposta dialog controller se presente
-      if (this.dialogController) {
-        this.llmControlPanel.setDialogController(this.dialogController);
-      }
-    }
-    
-    // Toggle visibilità
-    if (this.llmControlPanel.getIsVisible()) {
-      this.llmControlPanel.hide();
-    } else {
-      this.llmControlPanel.show();
-      
-      // Nascondi simple panel se attivo
-      if (this.simpleLLMPanel && this.simpleLLMPanel.isShown()) {
-        this.simpleLLMPanel.hide();
-      }
-    }
-  }
-  
-  /**
-   * Mostra dashboard FL
-   */
-  private showFLDashboard(): void {
-    // Emetti evento per mostrare la dashboard FL
-    this.scene.events.emit('show-fl-dashboard');
-    
-    // Collassa menu
-    this.collapseMenu();
-  }
-  
-  /**
-   * Mostra legenda agenti
-   */
-  private showAgentsLegend(): void {
-    // Emetti evento per mostrare la legenda agenti
-    this.scene.events.emit('show-agents-legend');
-    
-    // Collassa menu
-    this.collapseMenu();
-  }
-  
-  /**
-   * Test dialogo
-   */
-  private testDialog(): void {
-    // Emetti evento per testare il dialogo
-    this.scene.events.emit('test-dialog');
-    
-    // Collassa menu
-    this.collapseMenu();
-  }
-  
-  /**
-   * Toggle debug
-   */
-  private toggleDebug(): void {
-    // Emetti evento per toggle debug
-    this.scene.events.emit('toggle-debug');
-    
-    // Collassa menu
-    this.collapseMenu();
-  }
-  
-  /**
-   * Toggle visibilità menu espanso/collassato
-   */
-  private toggleMenu(): void {
-    this.isExpanded = !this.isExpanded;
-    
-    // Aggiorna visibilità pulsanti
-    this.menuButtons.forEach(button => {
-      button.visible = this.isExpanded;
-    });
-    
-    // Ridisegna sfondo
-    this.drawMenuBackground();
-  }
-  
-  /**
-   * Collassa il menu
-   */
-  private collapseMenu(): void {
-    if (this.isExpanded) {
-      this.toggleMenu();
-    }
-  }
-  
-  /**
-   * Gestisce il ridimensionamento della finestra
-   */
-  private handleResize(): void {
-    // Aggiorna posizione del container
-    this.container.setPosition(this.scene.cameras.main.width - this.menuWidth - 10, 10);
-  }
-  
-  /**
-   * Imposta il controller dei dialoghi
-   */
-  public setDialogController(controller: DialogController): void {
+
+  // ── Public API ───────────────────────────────────────────────────
+
+  setDialogController(controller: DialogController): void {
     this.dialogController = controller;
-    
-    // Aggiorna i componenti esistenti
-    if (this.simpleLLMPanel) {
-      this.simpleLLMPanel.setDialogController(controller);
+    if (this.simpleLLMPanel) this.simpleLLMPanel.setDialogController(controller);
+    if (this.llmControlPanel) this.llmControlPanel.setDialogController(controller);
+  }
+
+  destroy(): void {
+    this.simpleLLMPanel?.destroy(); this.simpleLLMPanel = null;
+    this.llmControlPanel?.destroy(); this.llmControlPanel = null;
+    this.panel?.destroy(); this.panel = null;
+    this.toggleBtn?.destroy(); this.toggleBtn = null;
+  }
+
+  // ── Build ────────────────────────────────────────────────────────
+
+  private build(): void {
+    const { primary, secondary, accent } = this.config.theme;
+    const W = this.panelW;
+    const cam = this.scene.cameras.main;
+
+    // --- Collect sections to compute total height ---
+    interface Section { title: string; buttons: { label: string; cb: () => void }[] }
+    const sections: Section[] = [];
+
+    // 1. Navigazione
+    if (this.config.navigation.length > 0) {
+      sections.push({
+        title: 'Navigazione',
+        buttons: this.config.navigation.map(n => ({
+          label: n.label,
+          cb: () => this.scene.scene.start(n.sceneKey),
+        })),
+      });
     }
-    
-    if (this.llmControlPanel) {
-      this.llmControlPanel.setDialogController(controller);
+
+    // 2. Agenti
+    sections.push({
+      title: 'Agenti',
+      buttons: [
+        { label: 'Legenda Agenti', cb: () => this.toggleAgentsLegend() },
+        { label: 'Stimola Movimento', cb: () => this.stimulateMovement() },
+      ],
+    });
+
+    // 3. LLM
+    sections.push({
+      title: 'LLM',
+      buttons: [
+        { label: 'LLM Dashboard', cb: () => this.toggleLLMPanel() },
+        { label: 'LLM Simple', cb: () => this.toggleSimpleLLMPanel() },
+      ],
+    });
+
+    // 4. Test e Debug
+    sections.push({
+      title: 'Test e Debug',
+      buttons: [
+        { label: 'Test Dialogo', cb: () => this.testDialog() },
+        { label: 'Debug Dialoghi (D)', cb: () => this.toggleDebugDialogs() },
+        { label: 'Assets Debug', cb: () => this.toggleAssetsDebug() },
+      ],
+    });
+
+    // 5. Informazioni
+    sections.push({
+      title: 'Informazioni',
+      buttons: [
+        { label: 'Info Laboratorio', cb: () => this.showLabInfo() },
+      ],
+    });
+
+    // Calculate panel height: title(40) + per-section(sectionTitle 30 + buttons * 40 + gap 10)
+    let totalH = 50; // title bar + separator
+    for (const s of sections) {
+      totalH += 30; // section title
+      totalH += s.buttons.length * 40; // buttons
+      totalH += 10; // gap
+    }
+    totalH += 10; // bottom padding
+    this.panelH = totalH;
+
+    // --- Panel container ---
+    const panelX = cam.width - 40;
+    const panelY = cam.height - 40;
+
+    const p = this.scene.add.container(panelX, panelY);
+    this.panel = p;
+    p.setDepth(1000);
+    p.setScrollFactor(0);
+
+    // Background
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(secondary, 0.92);
+    bg.fillRoundedRect(-W, -this.panelH, W, this.panelH, 10);
+    bg.lineStyle(2, primary, 1);
+    bg.strokeRoundedRect(-W, -this.panelH, W, this.panelH, 10);
+    p.add(bg);
+
+    // Title
+    const title = this.scene.add.text(-W / 2, -this.panelH + 20, 'Controlli Lab', {
+      fontSize: '18px', color: this.hexStr(accent), fontStyle: 'bold',
+    }).setOrigin(0.5);
+    p.add(title);
+
+    // Separator
+    const sep = this.scene.add.graphics();
+    sep.lineStyle(2, primary, 0.8);
+    sep.lineBetween(-W + 20, -this.panelH + 40, -20, -this.panelH + 40);
+    p.add(sep);
+
+    // --- Render sections ---
+    let curY = -this.panelH + 55;
+
+    for (const section of sections) {
+      // Section title
+      const sTitle = this.scene.add.text(-W + 20, curY, section.title, {
+        fontSize: '15px', color: this.hexStr(accent), fontStyle: 'bold',
+      });
+      p.add(sTitle);
+      curY += 28;
+
+      // Buttons
+      for (const btn of section.buttons) {
+        this.addButton(-W / 2, curY, btn.label, btn.cb, primary, accent);
+        curY += 40;
+      }
+      curY += 10; // section gap
+    }
+
+    // --- Toggle button (circle, bottom-right) ---
+    this.createToggleButton(primary, accent);
+
+    // Start closed
+    this.setOpen(false);
+  }
+
+  // ── Button factory ───────────────────────────────────────────────
+
+  private addButton(x: number, y: number, label: string, cb: () => void, primary: number, accent: number): void {
+    const bw = 200, bh = 30;
+    const container = this.scene.add.container(x, y);
+
+    const bg = this.scene.add.graphics();
+    const drawBg = (alpha: number, borderAlpha: number) => {
+      bg.clear();
+      bg.fillStyle(primary, alpha);
+      bg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 5);
+      bg.lineStyle(1, accent, borderAlpha);
+      bg.strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 5);
+    };
+    drawBg(0.7, 0.5);
+
+    const txt = this.scene.add.text(0, 0, label, {
+      fontSize: '14px', color: this.hexStr(accent), align: 'center',
+    }).setOrigin(0.5);
+
+    container.add([bg, txt]);
+    container.setInteractive(new Phaser.Geom.Rectangle(-bw / 2, -bh / 2, bw, bh), Phaser.Geom.Rectangle.Contains);
+    container.on('pointerover', () => drawBg(0.9, 0.8));
+    container.on('pointerout', () => drawBg(0.7, 0.5));
+    container.on('pointerdown', () => drawBg(0.5, 0.3));
+    container.on('pointerup', () => { drawBg(0.9, 0.8); cb(); });
+
+    this.panel!.add(container);
+  }
+
+  // ── Toggle button ────────────────────────────────────────────────
+
+  private createToggleButton(primary: number, accent: number): void {
+    const cam = this.scene.cameras.main;
+    const tb = this.scene.add.container(cam.width - 30, cam.height - 30);
+    this.toggleBtn = tb;
+    tb.setDepth(1001);
+    tb.setScrollFactor(0);
+
+    const circle = this.scene.add.graphics();
+    const drawCircle = (fill: number, r: number) => {
+      circle.clear();
+      circle.fillStyle(fill, 0.9);
+      circle.fillCircle(0, 0, r);
+      circle.lineStyle(2, accent, 1);
+      circle.strokeCircle(0, 0, r);
+    };
+    drawCircle(primary, 20);
+
+    const icon = this.scene.add.text(0, 0, '≡', { fontSize: '24px', color: this.hexStr(accent) }).setOrigin(0.5);
+    tb.add([circle, icon]);
+
+    tb.setInteractive(new Phaser.Geom.Rectangle(-20, -20, 40, 40), Phaser.Geom.Rectangle.Contains);
+    tb.on('pointerover', () => drawCircle(primary, 22));
+    tb.on('pointerout', () => drawCircle(primary, 20));
+    tb.on('pointerup', () => {
+      this.isOpen = !this.isOpen;
+      this.setOpen(this.isOpen);
+      icon.setText(this.isOpen ? '×' : '≡');
+    });
+  }
+
+  private setOpen(open: boolean): void {
+    if (!this.panel) return;
+    const cam = this.scene.cameras.main;
+    const targetX = cam.width - 40;
+
+    if (open) {
+      this.panel.setVisible(true);
+      this.scene.tweens.add({ targets: this.panel, x: targetX, duration: 300, ease: 'Power2' });
+    } else {
+      this.scene.tweens.add({
+        targets: this.panel, x: targetX + 250, duration: 300, ease: 'Power2',
+        onComplete: () => { this.panel?.setVisible(false); },
+      });
     }
   }
-  
-  /**
-   * Mostra il menu
-   */
-  public show(): void {
-    this.container.setVisible(true);
-    this.isVisible = true;
+
+  // ── Action handlers ──────────────────────────────────────────────
+
+  private toggleAgentsLegend(): void {
+    try {
+      if (this.scene.agentsLegend) {
+        const legends = this.scene.children.getAll().filter(
+          (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
+        );
+        legends.forEach((el: Phaser.GameObjects.GameObject) => this.scene.children.remove(el));
+        this.scene.children.remove(this.scene.agentsLegend);
+        this.scene.agentsLegend = null;
+      } else {
+        integrateAgentsLegend(this.scene as any);
+        // Hide auto-generated titles
+        const titles = this.scene.children.getAll().filter(
+          (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
+        );
+        titles.forEach((el: Phaser.GameObjects.GameObject) => (el as any).setVisible?.(false));
+      }
+    } catch (err) { console.error('[LabControlsMenu] toggleAgentsLegend:', err); }
   }
-  
-  /**
-   * Nasconde il menu
-   */
-  public hide(): void {
-    this.container.setVisible(false);
-    this.isVisible = false;
+
+  private stimulateMovement(): void {
+    const cam = this.scene.cameras.main;
+    this.scene.agents.forEach(agent => {
+      agent.moveTo(Math.random() * cam.width, Math.random() * cam.height);
+    });
   }
-  
-  /**
-   * Distrugge il menu e pulisce le risorse
-   */
-  public destroy(): void {
-    // Rimuovi listener resize
-    this.scene.scale.off('resize', this.handleResize, this);
-    
-    // Distruggi componenti
-    if (this.simpleLLMPanel) {
-      this.simpleLLMPanel.destroy();
-      this.simpleLLMPanel = null;
+
+  private toggleLLMPanel(): void {
+    try {
+      if (this.llmControlPanel) {
+        this.llmControlPanel.hide();
+        setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
+        return;
+      }
+      const x = Math.min(this.scene.cameras.main.width / 4, 50);
+      this.llmControlPanel = new LLMControlPanel(this.scene, x, 50, () => {
+        this.llmControlPanel?.hide();
+        setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
+      });
+      if (this.dialogController) this.llmControlPanel.setDialogController(this.dialogController);
+    } catch (err) { console.error('[LabControlsMenu] toggleLLMPanel:', err); }
+  }
+
+  private toggleSimpleLLMPanel(): void {
+    try {
+      if (this.simpleLLMPanel) {
+        this.simpleLLMPanel.toggle();
+        return;
+      }
+      const x = Math.min(this.scene.cameras.main.width / 4, 50);
+      this.simpleLLMPanel = new SimpleLLMPanel(this.scene, x, 120);
+      if (this.dialogController) this.simpleLLMPanel.setDialogController(this.dialogController);
+      this.simpleLLMPanel.show();
+    } catch (err) { console.error('[LabControlsMenu] toggleSimpleLLMPanel:', err); }
+  }
+
+  private testDialog(): void {
+    if (this.scene.agents.length >= 2) {
+      const [a1, a2] = this.scene.agents;
+      this.scene.game.events.emit('agent-interaction', {
+        agentId1: a1.getId(), agentId2: a2.getId(), type: 'test-dialog',
+      });
     }
-    
-    if (this.llmControlPanel) {
-      this.llmControlPanel.destroy();
-      this.llmControlPanel = null;
+  }
+
+  private toggleDebugDialogs(): void {
+    if (this.scene.agentController?.toggleDebugger) {
+      this.scene.agentController.toggleDebugger();
     }
-    
-    // Distruggi container principale
-    if (this.container && this.container.scene) {
-      this.container.destroy();
+  }
+
+  private toggleAssetsDebug(): void {
+    const { debugGraphics: dg, debugText: dt } = this.scene;
+    if (dg && dt) {
+      const show = !dg.visible;
+      dg.setVisible(show);
+      dt.setVisible(show);
+      if (show) {
+        const keys = this.scene.textures.getTextureKeys();
+        this.scene.updateDebugInfo(
+          `Scene: ${this.scene.scene.key}\nTextures: ${keys.length}\nAgents: ${this.scene.agents.length}`
+        );
+      }
     }
+  }
+
+  private showLabInfo(): void {
+    const { primary, secondary, accent } = this.config.theme;
+    const cam = this.scene.cameras.main;
+    const info = this.scene.add.container(cam.centerX, cam.centerY).setDepth(1000);
+
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(secondary, 0.95);
+    bg.fillRoundedRect(-250, -200, 500, 400, 10);
+    bg.lineStyle(3, primary, 1);
+    bg.strokeRoundedRect(-250, -200, 500, 400, 10);
+    info.add(bg);
+
+    info.add(this.scene.add.text(0, -170, this.config.labName, {
+      fontSize: '24px', color: this.hexStr(accent), fontStyle: 'bold', align: 'center',
+    }).setOrigin(0.5));
+
+    info.add(this.scene.add.text(0, -80, this.config.labDescription, {
+      fontSize: '15px', color: '#ffffff', align: 'center', wordWrap: { width: 450 },
+    }).setOrigin(0.5, 0));
+
+    const close = this.scene.add.text(230, -180, 'X', {
+      fontSize: '20px', color: '#ffffff', backgroundColor: '#aa0000',
+      padding: { left: 8, right: 8, top: 5, bottom: 5 },
+    });
+    close.setInteractive({ useHandCursor: true });
+    close.on('pointerdown', () => info.destroy());
+    info.add(close);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  private hexStr(n: number): string {
+    return '#' + n.toString(16).padStart(6, '0');
   }
 }
