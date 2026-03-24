@@ -1,48 +1,72 @@
 .fl-status-panel {
-    background-color: rgba(30, 30, 40, 0.9);
+    background-color: rgba(30, 30, 40, 0.92);
     border-radius: 6px;
-    padding: 12px;
+    padding: 10px;
     color: #eee;
     font-family: monospace;
-    width: 280px;
+    width: 260px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: 12px;
+    right: 12px;
     z-index: 1000;
-    font-size: 13px;
-    /* Aggiunti per animazione */
+    font-size: 12px;
     transition: opacity 0.3s ease, transform 0.3s ease;
     opacity: 1;
     transform: translateX(0);
   }
-  
-  /* Classi per animazione */
+
+  .fl-status-panel.fl-collapsed {
+    padding-bottom: 0;
+  }
+
+  .fl-status-panel.fl-collapsed > *:not(.fl-status-header) {
+    display: none;
+  }
+
   .fl-status-panel.hidden {
     opacity: 0;
     transform: translateX(20px);
     pointer-events: none;
   }
-  
+
   .fl-status-panel.visible {
     opacity: 1;
     transform: translateX(0);
     pointer-events: auto;
   }
-  
+
   .fl-status-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 8px;
+    padding-bottom: 6px;
+    user-select: none;
   }
-  
+
+  .fl-collapsed .fl-status-header {
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
   .fl-status-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fl-state-inline {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.1);
   }
   
   .fl-toggle {

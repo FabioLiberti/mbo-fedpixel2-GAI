@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './LLMDialogPanel.css';
+import { addPhaserDialogListener, PhaserDialogDetail } from '../utils/customEvents';
 
 interface DialogEntry {
   timestamp: string;
@@ -8,6 +9,8 @@ interface DialogEntry {
   labId: string;
   dialog: string;
   isLlm: boolean;
+  source: 'backend' | 'phaser';
+  cognitiveType?: string;
   state: string;
   chattingWith: string | null;
 }
@@ -19,14 +22,12 @@ interface LLMDialogPanelProps {
   onClose: () => void;
 }
 
-// Mappa lab_id backend → labType frontend
 const LAB_DISPLAY: Record<string, string> = {
   mercatorum: 'Mercatorum',
   blekinge: 'Blekinge',
   opbg: 'OPBG',
 };
 
-// Mappa sceneKey → lab_id backend
 const SCENE_TO_LAB: Record<string, string> = {
   MercatorumLabScene: 'mercatorum',
   BlekingeLabScene: 'blekinge',
@@ -41,6 +42,13 @@ const ROLE_COLORS: Record<string, string> = {
   student: '#9b59b6',
 };
 
+const COGNITIVE_LABELS: Record<string, string> = {
+  thinking: 'pensiero',
+  decision: 'decisione',
+  planning: 'piano',
+  dialog: 'dialogo',
+};
+
 const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   backendSimData,
   selectedLab,
@@ -49,10 +57,20 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 }) => {
   const [dialogLog, setDialogLog] = useState<DialogEntry[]>([]);
   const [filterLlmOnly, setFilterLlmOnly] = useState<boolean>(false);
+  const [collapsed, setCollapsed] = useState<boolean>(true);
   const lastDialogsRef = useRef<Record<string, string>>({});
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Accumula dialoghi dal broadcast backend
+  // Append helper (deduplicates and caps at 500)
+  const appendEntries = useCallback((entries: DialogEntry[]) => {
+    if (entries.length === 0) return;
+    setDialogLog(prev => {
+      const updated = [...prev, ...entries];
+      return updated.length > 500 ? updated.slice(-500) : updated;
+    });
+  }, []);
+
+  // 1) Backend broadcast dialogs
   useEffect(() => {
     if (!backendSimData?.agent_states) return;
 
@@ -64,7 +82,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
       const dialog = agent.dialog || '';
       const agentKey = agent.name || agent.id?.toString() || 'unknown';
 
-      // Aggiungi solo se il dialogo è cambiato rispetto all'ultimo
       if (dialog && dialog !== 'idle' && dialog !== lastDialogsRef.current[agentKey]) {
         lastDialogsRef.current[agentKey] = dialog;
         newEntries.push({
@@ -74,29 +91,45 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
           labId: agent.lab_id || 'unknown',
           dialog,
           isLlm: agent.dialog_is_llm || false,
+          source: 'backend',
           state: agent.state || 'idle',
           chattingWith: agent.chatting_with || null,
         });
       }
     }
 
-    if (newEntries.length > 0) {
-      setDialogLog(prev => {
-        const updated = [...prev, ...newEntries];
-        // Mantieni max 500 entries
-        return updated.length > 500 ? updated.slice(-500) : updated;
-      });
-    }
-  }, [backendSimData]);
+    appendEntries(newEntries);
+  }, [backendSimData, appendEntries]);
 
-  // Auto-scroll verso il basso
+  // 2) Phaser-side LLM dialogs (via DOM CustomEvent bridge)
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [dialogLog]);
+    const cleanup = addPhaserDialogListener((detail: PhaserDialogDetail) => {
+      const entry: DialogEntry = {
+        timestamp: new Date().toISOString(),
+        agentName: detail.agentName,
+        agentRole: detail.agentRole,
+        labId: detail.labId,
+        dialog: detail.text,
+        isLlm: detail.isLlm,
+        source: 'phaser',
+        cognitiveType: detail.cognitiveType,
+        state: 'active',
+        chattingWith: null,
+      };
+      appendEntries([entry]);
+    });
+    return cleanup;
+  }, [appendEntries]);
+
+  // Auto-scroll
+  useEffect(() => {
+    if (!collapsed) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [dialogLog, collapsed]);
 
   if (!visible) return null;
 
-  // Filtra per lab se non siamo in worldmap
   const isWorldMap = !selectedLab || selectedLab === 'WorldMapScene';
   const labFilter = selectedLab ? SCENE_TO_LAB[selectedLab] : null;
 
@@ -105,6 +138,8 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     if (filterLlmOnly && !entry.isLlm) return false;
     return true;
   });
+
+  const llmCount = filteredLog.filter(e => e.isLlm).length;
 
   const formatTime = (iso: string) => {
     try {
@@ -116,10 +151,14 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   };
 
   return (
-    <div className="llm-dialog-panel">
-      <div className="llm-dialog-header">
-        <h3>LLM Dialoghi</h3>
-        <div className="llm-dialog-controls">
+    <div className={`llm-dialog-panel ${collapsed ? 'llm-collapsed' : ''}`}>
+      <div className="llm-dialog-header" onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer' }}>
+        <h3>
+          LLM Dialoghi
+          <span className="llm-dialog-count">{filteredLog.length}</span>
+          {llmCount > 0 && <span className="llm-badge" style={{ marginLeft: 4 }}>AI {llmCount}</span>}
+        </h3>
+        <div className="llm-dialog-controls" onClick={e => e.stopPropagation()}>
           <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
             <input
               type="checkbox"
@@ -128,7 +167,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
             />
             Solo LLM
           </label>
-          <span className="llm-dialog-count">{filteredLog.length}</span>
           <button className="llm-dialog-clear" onClick={() => {
             setDialogLog([]);
             lastDialogsRef.current = {};
@@ -139,43 +177,51 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
         </div>
       </div>
 
-      <div className="llm-dialog-context">
-        {isWorldMap ? 'Tutte le scene' : `${LAB_DISPLAY[labFilter || ''] || selectedLab}`}
-      </div>
+      {!collapsed && (
+        <>
+          <div className="llm-dialog-context">
+            {isWorldMap ? 'Tutte le scene' : `${LAB_DISPLAY[labFilter || ''] || selectedLab}`}
+          </div>
 
-      <div className="llm-dialog-log">
-        {filteredLog.length === 0 ? (
-          <p className="llm-dialog-empty">
-            {dialogLog.length === 0
-              ? 'Avvia la simulazione per vedere i dialoghi degli agenti'
-              : 'Nessun dialogo per il filtro selezionato'}
-          </p>
-        ) : (
-          filteredLog.map((entry, i) => (
-            <div
-              key={i}
-              className={`llm-dialog-entry ${entry.isLlm ? 'llm-generated' : 'stub-generated'}`}
-            >
-              <div className="llm-dialog-meta">
-                <span className="llm-dialog-time">{formatTime(entry.timestamp)}</span>
-                <span
-                  className="llm-dialog-agent"
-                  style={{ color: ROLE_COLORS[entry.agentRole] || '#ccc' }}
+          <div className="llm-dialog-log">
+            {filteredLog.length === 0 ? (
+              <p className="llm-dialog-empty">
+                {dialogLog.length === 0
+                  ? 'Avvia la simulazione per vedere i dialoghi degli agenti'
+                  : 'Nessun dialogo per il filtro selezionato'}
+              </p>
+            ) : (
+              filteredLog.map((entry, i) => (
+                <div
+                  key={i}
+                  className={`llm-dialog-entry ${entry.isLlm ? 'llm-generated' : 'stub-generated'} ${entry.source === 'phaser' ? 'phaser-source' : ''}`}
                 >
-                  {entry.agentName}
-                </span>
-                <span className="llm-dialog-lab">{LAB_DISPLAY[entry.labId] || entry.labId}</span>
-                {entry.isLlm && <span className="llm-badge">LLM</span>}
-                {entry.chattingWith && (
-                  <span className="llm-dialog-chat-with">con {entry.chattingWith}</span>
-                )}
-              </div>
-              <div className="llm-dialog-text" style={{ whiteSpace: 'pre-wrap' }}>{entry.dialog}</div>
-            </div>
-          ))
-        )}
-        <div ref={logEndRef} />
-      </div>
+                  <div className="llm-dialog-meta">
+                    <span className="llm-dialog-time">{formatTime(entry.timestamp)}</span>
+                    <span
+                      className="llm-dialog-agent"
+                      style={{ color: ROLE_COLORS[entry.agentRole] || '#ccc' }}
+                    >
+                      {entry.agentName}
+                    </span>
+                    <span className="llm-dialog-lab">{LAB_DISPLAY[entry.labId] || entry.labId}</span>
+                    {entry.isLlm && <span className="llm-badge">LLM</span>}
+                    {entry.source === 'phaser' && <span className="phaser-badge">AI</span>}
+                    {entry.cognitiveType && (
+                      <span className="cognitive-badge">{COGNITIVE_LABELS[entry.cognitiveType] || entry.cognitiveType}</span>
+                    )}
+                    {entry.chattingWith && (
+                      <span className="llm-dialog-chat-with">con {entry.chattingWith}</span>
+                    )}
+                  </div>
+                  <div className="llm-dialog-text" style={{ whiteSpace: 'pre-wrap' }}>{entry.dialog}</div>
+                </div>
+              ))
+            )}
+            <div ref={logEndRef} />
+          </div>
+        </>
+      )}
     </div>
   );
 };

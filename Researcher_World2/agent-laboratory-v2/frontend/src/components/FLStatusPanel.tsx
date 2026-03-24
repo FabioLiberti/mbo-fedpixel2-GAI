@@ -17,6 +17,7 @@ interface FLStatusPanelProps {
  */
 const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, totalAgentCount, currentLabName }) => {
   const [visible, setVisible] = useState<boolean>(getFLPanelState());
+  const [collapsed, setCollapsed] = useState<boolean>(true);
 
   // Ascolta toggle dal pulsante "FL Process" (evento DOM personalizzato)
   useEffect(() => {
@@ -35,29 +36,12 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
     emitFLPanelToggle(false);
   };
 
-  // Se non ci sono dati FL (simulazione non avviata), mostra messaggio
-  if (!flStatus) {
-    return (
-      <div className={`fl-status-panel visible`}>
-        <div className="fl-status-header">
-          <h3>Federated Learning</h3>
-          <button className="fl-minimize-btn" onClick={handleMinimize} title="Minimizza">&#x2715;</button>
-        </div>
-        <p style={{ color: '#888', fontStyle: 'italic', fontSize: '13px', margin: '8px 0' }}>
-          Avvia la simulazione per visualizzare i dati FL
-        </p>
-      </div>
-    );
-  }
+  const { enabled, currentState, activeAgents, metrics, connections } = flStatus || {};
 
-  const { enabled, currentState, activeAgents, metrics, connections } = flStatus;
-
-  // Formatta un valore metrico con 4 cifre decimali o "N/A" se non disponibile
   const formatMetric = (value: number | undefined): string => {
     return value !== undefined ? value.toFixed(4) : 'N/A';
   };
 
-  // Conta gli agenti per ogni stato
   const agentStateCount = Array.isArray(activeAgents)
     ? activeAgents.reduce((acc, agent) => {
         acc[agent.state] = (acc[agent.state] || 0) + 1;
@@ -65,32 +49,47 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
       }, {} as Record<string, number>)
     : {};
 
+  const stateLabel = currentState || 'IDLE';
+
   return (
-    <div className={`fl-status-panel visible`}>
-      <div className="fl-status-header">
-        <h3>Federated Learning</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="fl-toggle">
-            <input
-            type="checkbox"
-            id="fl-toggle-switch"
-            checked={enabled}
-            onChange={(e) => onToggleFL(e.target.checked)}
-          />
-          <label htmlFor="fl-toggle-switch">
-            {enabled ? 'Enabled' : 'Disabled'}
-          </label>
-          </div>
+    <div className={`fl-status-panel visible ${collapsed ? 'fl-collapsed' : ''}`}>
+      <div className="fl-status-header" onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer' }}>
+        <h3>
+          Federated Learning
+          {flStatus && enabled && (
+            <span className={`fl-state-inline fl-state-${stateLabel.toLowerCase()}`}>{stateLabel}</span>
+          )}
+        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
+          {flStatus && (
+            <div className="fl-toggle">
+              <input
+                type="checkbox"
+                id="fl-toggle-switch"
+                checked={enabled || false}
+                onChange={(e) => onToggleFL(e.target.checked)}
+              />
+              <label htmlFor="fl-toggle-switch">
+                {enabled ? 'On' : 'Off'}
+              </label>
+            </div>
+          )}
           <button className="fl-minimize-btn" onClick={handleMinimize} title="Minimizza">&#x2715;</button>
         </div>
       </div>
 
-      {enabled && (
+      {!collapsed && !flStatus && (
+        <p style={{ color: '#888', fontStyle: 'italic', fontSize: '12px', margin: '8px 12px' }}>
+          Avvia la simulazione per visualizzare i dati FL
+        </p>
+      )}
+
+      {!collapsed && flStatus && enabled && (
         <>
           <div className="fl-current-state">
-            <span className="fl-state-label">Current State:</span>
-            <span className={`fl-state-value fl-state-${currentState.toLowerCase()}`}>
-              {currentState}
+            <span className="fl-state-label">State:</span>
+            <span className={`fl-state-value fl-state-${stateLabel.toLowerCase()}`}>
+              {stateLabel}
             </span>
           </div>
 
@@ -110,7 +109,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
                 <span className="fl-metric-value">{metrics?.round || 0}</span>
               </div>
               <div className="fl-metric">
-                <span className="fl-metric-label">Client Fraction:</span>
+                <span className="fl-metric-label">Clients:</span>
                 <span className="fl-metric-value">
                   {metrics?.clientFraction ? `${(metrics.clientFraction * 100).toFixed(0)}%` : 'N/A'}
                 </span>

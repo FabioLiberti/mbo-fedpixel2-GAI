@@ -6,6 +6,7 @@
 import Phaser from 'phaser';
 import { FLDialogType as DialogType, CognitiveProcessType } from '../types/DialogTypes';
 import { api } from '../../services/api';
+import { emitPhaserDialog } from '../../utils/customEvents';
 import type { DialogState, DialogConfig, DialogResponse } from './DialogState';
 import type { DialogRenderer } from './DialogRenderer';
 
@@ -24,6 +25,21 @@ export class DialogEventHandler {
     this.state = state;
     this.renderer = renderer;
     this.creator = creator;
+  }
+
+  // ── Bridge to React LLM Panel ─────────────────────────────────────
+
+  private bridgeToPanel(agentId: string, text: string, isLlm: boolean, cognitiveType?: string): void {
+    const agent = this.state.getAgentDetails(agentId);
+    if (!agent || !text) return;
+    emitPhaserDialog({
+      agentName: agent.name,
+      agentRole: agent.role,
+      labId: this.state.getLabTypeString(),
+      text,
+      isLlm,
+      cognitiveType,
+    });
   }
 
   // ── Registration / tear-down ──────────────────────────────────────
@@ -190,6 +206,7 @@ export class DialogEventHandler {
               sourceId: agent1.id, type: DialogType.GENERAL, text: t1.thinking,
               cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, showEffect: false, duration: 3000, priority: 5,
             });
+            this.bridgeToPanel(agent1.id, t1.thinking, true, 'thinking');
           }
 
           // Agent 1 dialog (after delay)
@@ -206,6 +223,7 @@ export class DialogEventHandler {
               type: s.getDialogTypeForRole(agent1.role), text: d1.dialog,
               isLLMDialog: true, showEffect: true, priority: 7,
             });
+            this.bridgeToPanel(agent1.id, d1.dialog, true, 'dialog');
           }, 3000);
 
           // Agent 2 thinking + dialog (after longer delay)
@@ -222,6 +240,7 @@ export class DialogEventHandler {
                 sourceId: agent2.id, type: DialogType.GENERAL, text: t2.thinking,
                 cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, showEffect: false, duration: 3000, priority: 5,
               });
+              this.bridgeToPanel(agent2.id, t2.thinking, true, 'thinking');
             }
             setTimeout(async () => {
               const d2 = await api.generateAgentDialog({
@@ -236,6 +255,7 @@ export class DialogEventHandler {
                 type: s.getDialogTypeForRole(agent2.role), text: d2.dialog,
                 isLLMDialog: true, showEffect: false, priority: 7,
               });
+              this.bridgeToPanel(agent2.id, d2.dialog, true, 'dialog');
             }, 3000);
           }, 6000);
 
@@ -291,6 +311,7 @@ export class DialogEventHandler {
           sourceId: agent.id, type: DialogType.RESEARCH, text: processedText,
           cognitiveType: processType || CognitiveProcessType.THINKING, isLLMDialog: true, priority: 6,
         });
+        this.bridgeToPanel(agent.id, processedText, true, 'thinking');
       }
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentThinking error:', e);
@@ -323,17 +344,20 @@ export class DialogEventHandler {
             sourceId: agent.id, type: DialogType.MODEL, text: thinking,
             cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, duration: 4000, priority: 6,
           });
+          this.bridgeToPanel(agent.id, thinking, true, 'thinking');
           setTimeout(() => {
             this.creator.createCognitiveProcess({
               sourceId: agent.id, type: DialogType.MODEL, text: cleaned,
               cognitiveType: CognitiveProcessType.DECISION, isLLMDialog: true, priority: 8,
             });
+            this.bridgeToPanel(agent.id, cleaned, true, 'decision');
           }, 4000);
         } else {
           this.creator.createCognitiveProcess({
             sourceId: agent.id, type: DialogType.MODEL, text: cleaned,
             cognitiveType: CognitiveProcessType.DECISION, isLLMDialog: true, priority: 8,
           });
+          this.bridgeToPanel(agent.id, cleaned, true, 'decision');
         }
       }
     } catch (e) {
@@ -367,17 +391,20 @@ export class DialogEventHandler {
             sourceId: agent.id, type: DialogType.RESEARCH, text: thinking,
             cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, duration: 4000, priority: 6,
           });
+          this.bridgeToPanel(agent.id, thinking, true, 'thinking');
           setTimeout(() => {
             this.creator.createCognitiveProcess({
               sourceId: agent.id, type: DialogType.RESEARCH, text: cleaned,
               cognitiveType: CognitiveProcessType.PLANNING, isLLMDialog: true, priority: 8,
             });
+            this.bridgeToPanel(agent.id, cleaned, true, 'planning');
           }, 4000);
         } else {
           this.creator.createCognitiveProcess({
             sourceId: agent.id, type: DialogType.RESEARCH, text: cleaned,
             cognitiveType: CognitiveProcessType.PLANNING, isLLMDialog: true, priority: 8,
           });
+          this.bridgeToPanel(agent.id, cleaned, true, 'planning');
         }
       }
     } catch (e) {
@@ -411,17 +438,20 @@ export class DialogEventHandler {
             sourceId: agent.id, type: DialogType.GENERAL, text: thinking,
             cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, duration: 3000, priority: 7,
           });
+          this.bridgeToPanel(agent.id, thinking, true, 'thinking');
           setTimeout(() => {
             this.creator.createDialog({
               sourceId: agent.id, type: s.getDialogTypeForRole(agent.role), text: cleaned,
               isLLMDialog: true, showEffect: true, priority: 9,
             });
+            this.bridgeToPanel(agent.id, cleaned, true, 'dialog');
           }, 3000);
         } else {
           this.creator.createDialog({
             sourceId: agent.id, type: s.getDialogTypeForRole(agent.role), text: cleaned,
             isLLMDialog: true, showEffect: true, priority: 9,
           });
+          this.bridgeToPanel(agent.id, cleaned, true, 'dialog');
         }
       }
     } catch (e) {

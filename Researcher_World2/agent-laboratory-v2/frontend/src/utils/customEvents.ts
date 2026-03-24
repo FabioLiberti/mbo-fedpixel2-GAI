@@ -85,6 +85,33 @@ export const addSimulationControlListener = (callback: (action: SimControlAction
 };
 
 // =========================================================================
+// Phaser Dialog → React LLM Panel (Phaser → React)
+// =========================================================================
+
+const PHASER_DIALOG_EVENT = 'phaser-dialog-entry';
+
+export interface PhaserDialogDetail {
+  agentName: string;
+  agentRole: string;
+  labId: string;
+  text: string;
+  isLlm: boolean;
+  cognitiveType?: string;  // 'thinking' | 'decision' | 'planning' | 'dialog'
+}
+
+export const emitPhaserDialog = (detail: PhaserDialogDetail): void => {
+  document.dispatchEvent(new CustomEvent(PHASER_DIALOG_EVENT, { detail }));
+};
+
+export const addPhaserDialogListener = (callback: (detail: PhaserDialogDetail) => void): () => void => {
+  const handler = (event: Event) => {
+    callback((event as CustomEvent).detail);
+  };
+  document.addEventListener(PHASER_DIALOG_EVENT, handler);
+  return () => document.removeEventListener(PHASER_DIALOG_EVENT, handler);
+};
+
+// =========================================================================
 // Documentation (Phaser → React)
 // =========================================================================
 
