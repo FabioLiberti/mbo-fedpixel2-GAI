@@ -23,13 +23,13 @@ const AGENT_CONFIG = {
         specialization: 'fl_architecture'
       },
       {
-        type: 'researcher',
+        type: 'student',
         name: 'Erik Johansson',
         position: { x: 300, y: 250 },
         specialization: 'communication_efficiency'
       },
       {
-        type: 'student',
+        type: 'researcher',
         name: 'Sara Nilsson',
         position: { x: 200, y: 150 },
         specialization: 'non_iid_data'

@@ -32,8 +32,8 @@ PERSONA_REGISTRY = {
     ],
     "blekinge": [
         ("Anna_Lindberg",   "professor",   Specialization.FL_ARCHITECTURE),
-        ("Erik_Johansson",  "researcher",  Specialization.COMMUNICATION_EFFICIENCY),
-        ("Sara_Nilsson",    "phd_student", Specialization.NON_IID_DATA),
+        ("Erik_Johansson",  "phd_student", Specialization.COMMUNICATION_EFFICIENCY),
+        ("Sara_Nilsson",    "researcher",  Specialization.NON_IID_DATA),
     ],
     "opbg": [
         ("Giulia_Romano",  "researcher",  Specialization.PRIVACY_ENGINEERING),

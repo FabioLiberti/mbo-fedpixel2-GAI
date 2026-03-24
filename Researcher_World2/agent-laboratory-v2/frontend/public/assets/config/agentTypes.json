@@ -3,27 +3,29 @@
       "title": "Professor",
       "description": "Esperto accademico che supervisiona le ricerche sul federated learning",
       "skills": [
-        "FL Systems Architecture", 
-        "Theoretical Guarantees", 
+        "FL Systems Architecture",
+        "Theoretical Guarantees",
         "Privacy Economics"
       ],
       "role": "Supervisiona progetti di ricerca e guida gli studenti PhD",
       "background": "Esperienza pluriennale in ricerca sul federated learning",
       "color": "#1E88E5",
-      "spritesheetPath": "assets/characters/professor_spritesheet.png"
+      "spritesheetPath": "assets/characters/professor_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_Professor3.png"
     },
     "researcher": {
       "title": "Researcher",
       "description": "Ricercatore post-doc che conduce esperimenti e sviluppa algoritmi",
       "skills": [
-        "Secure Aggregation", 
-        "Non-IID Data Handling", 
+        "Secure Aggregation",
+        "Non-IID Data Handling",
         "Communication Efficiency"
       ],
       "role": "Conduce esperimenti avanzati e sviluppa nuovi algoritmi di aggregazione",
       "background": "Specializzato in ottimizzazione di algoritmi distribuiti",
       "color": "#43A047",
-      "spritesheetPath": "assets/characters/researcher_spritesheet.png"
+      "spritesheetPath": "assets/characters/researcher_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_PHDStudent2.png"
     },
     "student": {
       "title": "PhD Student",
@@ -36,7 +38,8 @@
       "role": "Esplora nuove direzioni di ricerca sotto la supervisione del professore",
       "background": "Formazione in matematica e informatica con interesse per l'apprendimento federato",
       "color": "#FB8C00",
-      "spritesheetPath": "assets/characters/student_spritesheet.png"
+      "spritesheetPath": "assets/characters/student_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_PHDStudent.png"
     },
     "doctor": {
       "title": "Medical Doctor",
