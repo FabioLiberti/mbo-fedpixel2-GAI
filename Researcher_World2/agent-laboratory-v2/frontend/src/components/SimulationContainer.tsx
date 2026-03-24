@@ -53,7 +53,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const [flEnabled, setFLEnabled] = useState<boolean>(true); // Default a true per mostrare il pannello
   const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CognitiveAgentState | null>(null);
-  const [llmPanelVisible, setLlmPanelVisible] = useState<boolean>(false);
+  const [llmPanelVisible, setLlmPanelVisible] = useState<boolean>(true);
   
   // Timer per simulare aggiornamenti dello stato FL
   const flUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);

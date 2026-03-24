@@ -88,18 +88,9 @@ export class LabControlsMenu {
     interface Section { title: string; buttons: { label: string; cb: () => void }[] }
     const sections: Section[] = [];
 
-    // 1. Navigazione
-    if (this.config.navigation.length > 0) {
-      sections.push({
-        title: 'Navigazione',
-        buttons: this.config.navigation.map(n => ({
-          label: n.label,
-          cb: () => this.scene.scene.start(n.sceneKey),
-        })),
-      });
-    }
+    // Navigazione rimossa — si usa la sidebar
 
-    // 2. Agenti
+    // 1. Agenti
     sections.push({
       title: 'Agenti',
       buttons: [
@@ -307,6 +298,14 @@ export class LabControlsMenu {
     });
   }
 
+  /** Chiude il pannello laterale per evitare sovrapposizioni */
+  private closePanel(): void {
+    if (this.isOpen) {
+      this.isOpen = false;
+      this.setOpen(false);
+    }
+  }
+
   private toggleLLMPanel(): void {
     try {
       if (this.llmControlPanel) {
@@ -314,7 +313,9 @@ export class LabControlsMenu {
         setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
         return;
       }
-      const x = Math.min(this.scene.cameras.main.width / 4, 50);
+      this.closePanel();
+      // Posiziona a sinistra, lontano dal pannello Controlli Lab (destra)
+      const x = 20;
       this.llmControlPanel = new LLMControlPanel(this.scene, x, 50, () => {
         this.llmControlPanel?.hide();
         setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
@@ -329,7 +330,9 @@ export class LabControlsMenu {
         this.simpleLLMPanel.toggle();
         return;
       }
-      const x = Math.min(this.scene.cameras.main.width / 4, 50);
+      this.closePanel();
+      // Posiziona a sinistra, lontano dal pannello Controlli Lab (destra)
+      const x = 20;
       this.simpleLLMPanel = new SimpleLLMPanel(this.scene, x, 120);
       if (this.dialogController) this.simpleLLMPanel.setDialogController(this.dialogController);
       this.simpleLLMPanel.show();
