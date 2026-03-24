@@ -140,8 +140,8 @@ export class BlekingeLabScene extends BaseScene {
         frameHeight: 48
       });
 
-      // sw_engineer e engineer usano la stessa spritesheet
-      this.load.spritesheet('sw_engineer', 'assets/characters/engineer_spritesheet.png', {
+      // sw_engineer usa researcher_spritesheet per distinguersi visivamente da engineer
+      this.load.spritesheet('sw_engineer', 'assets/characters/researcher_spritesheet.png', {
         frameWidth: 32,
         frameHeight: 48
       });
