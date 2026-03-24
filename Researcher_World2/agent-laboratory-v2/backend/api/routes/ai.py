@@ -150,7 +150,7 @@ async def generate_dialog(request: DialogGenerationRequest, connector: LLMConnec
         logger.error(f"Error generating dialog: {str(e)}")
         # Restituisci un dialogo di fallback
         return {
-            "dialog": f"I'm researching {request.agentSpecialization} in federated learning.",
+            "dialog": f"Sto facendo ricerca su {request.agentSpecialization} nel federated learning.",
             "isLLMGenerated": False,
             "source": "fallback",
             "model": None

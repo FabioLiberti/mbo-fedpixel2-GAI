@@ -304,10 +304,10 @@ class LLMConnector:
                 "enable_caching": True,
                 "cache_expiry_seconds": 3600,
                 "fallback_dialogs": {
-                    "phd_student": "I'm working on optimizing our federated learning algorithm for better privacy preservation.",
-                    "researcher": "I've been analyzing the convergence properties of our model with non-IID data.",
-                    "professor": "Let me show you the theoretical guarantees for our federated learning approach.",
-                    "default": "I'm currently focused on my federated learning research."
+                    "phd_student": "Sto lavorando sull'ottimizzazione del nostro algoritmo di federated learning per una migliore privacy.",
+                    "researcher": "Sto analizzando le proprietà di convergenza del nostro modello con dati non-IID.",
+                    "professor": "Vi mostro le garanzie teoriche del nostro approccio al federated learning.",
+                    "default": "Sono concentrato sulla mia ricerca in federated learning."
                 }
             },
             "prompt_templates": {
@@ -563,17 +563,17 @@ La proposta deve essere concisa, specifica e convincente."""
         """
         if response_type == "dialog":
             fallbacks = self.config.get("dialog_generation", {}).get("fallback_dialogs", {})
-            return fallbacks.get(agent_type.lower(), fallbacks.get("default", "I'm researching federated learning."))
+            return fallbacks.get(agent_type.lower(), fallbacks.get("default", "Sono concentrato sulla mia ricerca in federated learning."))
         elif response_type == "fl_decision":
-            return "Use FedAvg algorithm with default parameters."
+            return "Uso l'algoritmo FedAvg con parametri predefiniti."
         elif response_type == "action_plan":
-            return "Continue current research task. Next steps: analyze results, discuss with team, document findings."
+            return "Proseguo con il task di ricerca corrente. Prossimi passi: analisi risultati, discussione con il team, documentazione."
         elif response_type == "event_reaction":
-            return "I'll investigate how this affects our research and adjust our approach accordingly."
+            return "Analizzo come questo influisce sulla nostra ricerca e adatto il nostro approccio di conseguenza."
         elif response_type == "collaboration_proposal":
-            return "Let's collaborate on optimizing our models. I'll share my privacy techniques if you can help with convergence analysis."
+            return "Collaboriamo sull'ottimizzazione dei modelli. Condivido le mie tecniche di privacy se puoi aiutare con l'analisi di convergenza."
         else:
-            return "Continue with current task."
+            return "Proseguo con il task corrente."
     
     def get_agent_memory(self, agent_id: str) -> AgentMemory:
         """

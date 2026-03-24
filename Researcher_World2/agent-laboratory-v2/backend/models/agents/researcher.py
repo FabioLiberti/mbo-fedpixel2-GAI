@@ -278,8 +278,12 @@ class ResearcherAgent(Agent):
 
         except Exception as e:
             logger.error(f"Cognitive cycle error for '{self.name}': {e}")
-            self.last_dialog = f"working on {self.scratch.fl_specialization or 'research'}"
+            self.last_dialog = f"sto lavorando su {self.scratch.fl_specialization or 'ricerca'}"
             self.dialog_is_llm = False
+
+    # Track recent dialogs to avoid repetition (class-level, shared across agents)
+    _recent_dialogs: list = []
+    _RECENT_DIALOG_MAX = 20
 
     def _generate_thought_dialog(self) -> str:
         """Generate a rich thought dialog via a single LLM call after cognitive cycle."""
@@ -297,28 +301,44 @@ class ResearcherAgent(Agent):
                 if task:
                     schedule_items.append(f"- {task} ({dur} min)")
 
-        schedule_str = "\n".join(schedule_items) if schedule_items else "No schedule yet"
+        schedule_str = "\n".join(schedule_items) if schedule_items else "Nessuna attività pianificata"
+
+        # Build avoidance hint from recent dialogs
+        avoid_hint = ""
+        if ResearcherAgent._recent_dialogs:
+            recent = ResearcherAgent._recent_dialogs[-5:]
+            avoid_hint = (
+                "\n\nNON ripetere frasi simili a queste già dette di recente:\n"
+                + "\n".join(f'- "{d}"' for d in recent)
+                + "\nSii originale e vario."
+            )
 
         prompt = (
-            f"You are {self.name}, a {self.role} specializing in {spec} "
-            f"at a federated learning research lab ({self.lab_id}).\n"
-            f"Current activity: {act}\n"
-            f"Today's plan: {plan}\n"
-            f"Upcoming schedule:\n{schedule_str}\n\n"
-            f"Describe in 2-3 sentences what you are currently thinking about "
-            f"and working on. Be specific about your research. "
-            f"Write in first person, as a researcher's internal monologue."
+            f"Sei {self.name}, un {self.role} specializzato in {spec} "
+            f"presso un laboratorio di ricerca sul federated learning ({self.lab_id}).\n"
+            f"Attività corrente: {act}\n"
+            f"Piano della giornata: {plan}\n"
+            f"Prossime attività:\n{schedule_str}\n\n"
+            f"Descrivi in 2-3 frasi a cosa stai pensando e su cosa stai lavorando. "
+            f"Sii specifico riguardo alla tua ricerca. "
+            f"Scrivi in prima persona, come un monologo interiore da ricercatore. "
+            f"Rispondi in italiano."
+            f"{avoid_hint}"
         )
 
         try:
             response = ChatGPT_request(prompt)
             if response and response != "OLLAMA ERROR" and len(response) > 5:
+                # Track to avoid repetition in future prompts
+                ResearcherAgent._recent_dialogs.append(response[:80])
+                if len(ResearcherAgent._recent_dialogs) > ResearcherAgent._RECENT_DIALOG_MAX:
+                    ResearcherAgent._recent_dialogs = ResearcherAgent._recent_dialogs[-ResearcherAgent._RECENT_DIALOG_MAX:]
                 return response
         except Exception as e:
             logger.warning(f"Thought dialog generation failed for '{self.name}': {e}")
 
         # Fallback: compose from available data
-        return f"{self.name} is working on {spec}: {act}"
+        return f"{self.name} sta lavorando su {spec}: {act}"
 
     def _move_to_tile(self, next_tile, maze):
         """Move agent to a new tile on the Mesa grid, updating maze events."""
@@ -370,12 +390,12 @@ class ResearcherAgent(Agent):
             # (preserve LLM dialogs so the panel can display them longer)
             if not self.dialog_is_llm:
                 fl_descriptions = {
-                    AgentState.TRAINING_MODEL: f"Training local model on {self.scratch.fl_specialization or 'FL'} data",
-                    AgentState.SENDING_MODEL: "Sending model updates to aggregator",
-                    AgentState.AGGREGATING_MODELS: "Aggregating federated model updates",
-                    AgentState.RECEIVING_MODEL: "Receiving global model from server",
+                    AgentState.TRAINING_MODEL: f"Addestramento modello locale su dati {self.scratch.fl_specialization or 'FL'}",
+                    AgentState.SENDING_MODEL: "Invio aggiornamenti modello all'aggregatore",
+                    AgentState.AGGREGATING_MODELS: "Aggregazione aggiornamenti modello federato",
+                    AgentState.RECEIVING_MODEL: "Ricezione modello globale dal server",
                 }
-                self.last_dialog = fl_descriptions.get(self.state, f"FL task: {self.fl_task}")
+                self.last_dialog = fl_descriptions.get(self.state, f"Task FL: {self.fl_task}")
             return  # FL blocks cognitive pipeline
 
         # --- Priority 2: Cognitive pipeline (throttled) ---

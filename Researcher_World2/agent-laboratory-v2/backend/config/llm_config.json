@@ -14,13 +14,13 @@
       "enable_caching": true,
       "cache_expiry_seconds": 3600,
       "fallback_dialogs": {
-        "phd_student": "I'm working on optimizing our federated learning algorithm for better privacy preservation.",
-        "researcher": "I've been analyzing the convergence properties of our model with non-IID data.",
-        "professor": "Let me show you the theoretical guarantees for our federated learning approach.",
-        "ml_engineer": "This implementation allows for more efficient communication between federated nodes.",
-        "data_engineer": "I've structured the data pipeline to handle heterogeneous sources efficiently.",
-        "privacy_specialist": "Our approach provides strong privacy guarantees with minimal accuracy loss.",
-        "default": "I'm currently focused on my federated learning research."
+        "phd_student": "Sto lavorando sull'ottimizzazione del nostro algoritmo di federated learning per una migliore privacy.",
+        "researcher": "Sto analizzando le proprietà di convergenza del nostro modello con dati non-IID.",
+        "professor": "Vi mostro le garanzie teoriche del nostro approccio al federated learning.",
+        "ml_engineer": "Questa implementazione permette una comunicazione più efficiente tra i nodi federati.",
+        "data_engineer": "Ho strutturato la pipeline dati per gestire fonti eterogenee in modo efficiente.",
+        "privacy_specialist": "Il nostro approccio fornisce forti garanzie di privacy con perdita minima di accuratezza.",
+        "default": "Sono concentrato sulla mia ricerca in federated learning."
       }
     },
     "prompt_templates": {

@@ -624,10 +624,10 @@ def run_gpt_prompt_agent_chat(maze, init_persona, target_persona,
         n1 = init_persona.scratch.name
         n2 = target_persona.scratch.name
         return [
-            [n1, f"How is your work on {init_persona.scratch.fl_specialization or 'FL'} going?"],
-            [n2, f"Making progress. I've been focusing on {target_persona.scratch.fl_specialization or 'my part'}."],
-            [n1, "We should coordinate our approaches for the next FL round."],
-            [n2, "Agreed. Let's sync up after the next training round."],
+            [n1, f"Come procede il tuo lavoro su {init_persona.scratch.fl_specialization or 'FL'}?"],
+            [n2, f"Sto facendo progressi. Mi sto concentrando su {target_persona.scratch.fl_specialization or 'la mia parte'}."],
+            [n1, "Dovremmo coordinare i nostri approcci per il prossimo round FL."],
+            [n2, "D'accordo. Sincronizziamoci dopo il prossimo round di training."],
         ], True
 
     n1 = init_persona.scratch.name

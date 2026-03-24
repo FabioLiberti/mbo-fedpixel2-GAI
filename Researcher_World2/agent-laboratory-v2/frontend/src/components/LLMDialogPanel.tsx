@@ -59,16 +59,38 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   const [filterLlmOnly, setFilterLlmOnly] = useState<boolean>(false);
   const [collapsed, setCollapsed] = useState<boolean>(true);
   const lastDialogsRef = useRef<Record<string, string>>({});
+  const recentTextsRef = useRef<{ text: string; ts: number }[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const DEDUP_WINDOW_MS = 60_000; // skip identical text within 60s
+
+  /** Normalize text for dedup comparison */
+  const normalize = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  /** Returns true if this text already appeared recently (global, cross-agent) */
+  const isDuplicate = useCallback((text: string): boolean => {
+    const now = Date.now();
+    const norm = normalize(text);
+    // Prune old entries
+    recentTextsRef.current = recentTextsRef.current.filter(e => now - e.ts < DEDUP_WINDOW_MS);
+    // Check
+    if (recentTextsRef.current.some(e => e.text === norm)) return true;
+    // Register
+    recentTextsRef.current.push({ text: norm, ts: now });
+    return false;
+  }, []);
 
   // Append helper (deduplicates and caps at 500)
   const appendEntries = useCallback((entries: DialogEntry[]) => {
     if (entries.length === 0) return;
+    // Filter out global duplicates (same text within 60s window)
+    const unique = entries.filter(e => !isDuplicate(e.dialog));
+    if (unique.length === 0) return;
     setDialogLog(prev => {
-      const updated = [...prev, ...entries];
+      const updated = [...prev, ...unique];
       return updated.length > 500 ? updated.slice(-500) : updated;
     });
-  }, []);
+  }, [isDuplicate]);
 
   // 1) Backend broadcast dialogs
   useEffect(() => {
