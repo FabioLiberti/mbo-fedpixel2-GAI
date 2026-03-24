@@ -99,7 +99,8 @@ def execute(persona, maze, personas, plan):
                     pass_curr_tile = any(j[0] in persona_name_set for j in curr_event_set)
                     if not pass_curr_tile:
                         new_target_tiles.append(tile)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"access_tile filter skip: {e}")
                     new_target_tiles.append(tile)
             if new_target_tiles:
                 target_tiles = new_target_tiles
@@ -118,7 +119,8 @@ def execute(persona, maze, personas, plan):
                     if closest_target_tile is None or len(curr_path) < len(path):
                         closest_target_tile = tile
                         path = curr_path
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"pathfinding skip tile: {e}")
                     continue
 
             if path:

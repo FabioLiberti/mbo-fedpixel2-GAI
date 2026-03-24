@@ -14,101 +14,118 @@ import time
 import hashlib
 import os
 import logging
+from threading import Lock
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
 # ============================================================================
-# Configuration - loaded from llm_config.json or defaults
+# OllamaService — singleton encapsulating all LLM state
 # ============================================================================
 
-_config_loaded = False
-OLLAMA_MODEL = "qwen3.5:4b"
-EMBEDDING_MODEL = "nomic-embed-text"
-OLLAMA_TEMPERATURE = 0.05
-OLLAMA_MAX_TOKENS = 150
-OLLAMA_NUM_CTX = 512
+class OllamaService:
+    """Thread-safe singleton managing Ollama client, config, and caches."""
 
-EMBEDDING_CACHE = {}
-RESPONSE_CACHE = {}
-MAX_CACHE_SIZE = 500
+    _instance = None
+    _init_lock = Lock()
 
-# Tracks whether any LLM call succeeded since last check
-_llm_call_succeeded = False
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
+        self._lock = Lock()
+
+        # Config defaults
+        self.model = "qwen3.5:4b"
+        self.embedding_model = "nomic-embed-text"
+        self.temperature = 0.05
+        self.max_tokens = 150
+        self.num_ctx = 512
+        self.max_cache_size = 500
+
+        # State
+        self._config_loaded = False
+        self._client = None
+        self._llm_call_succeeded = False
+        self._embed_failed = False
+
+        # Caches
+        self.response_cache = {}
+        self.embedding_cache = {}
+
+    def load_config(self):
+        if self._config_loaded:
+            return
+        config_paths = [
+            os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'llm_config.json'),
+        ]
+        for config_path in config_paths:
+            config_path = os.path.abspath(config_path)
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path) as f:
+                        cfg = json.load(f)
+                    llm = cfg.get("llm", {})
+                    self.model = llm.get("model", self.model)
+                    params = llm.get("parameters", {})
+                    self.temperature = params.get("temperature", self.temperature)
+                    self.max_tokens = params.get("max_tokens", self.max_tokens)
+                    caching = cfg.get("caching", cfg.get("advanced_settings", {}))
+                    self.max_cache_size = caching.get("max_cache_size", self.max_cache_size)
+                    logger.info(f"LLM config loaded: model={self.model}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to load LLM config from {config_path}: {e}")
+        self._config_loaded = True
+
+    def get_client(self):
+        if self._client is not None:
+            return self._client
+        try:
+            import ollama
+            self._client = ollama.Client(timeout=60)
+            return self._client
+        except ImportError:
+            logger.error("ollama package not installed. Run: pip install ollama")
+            return None
+
+    def manage_cache(self):
+        with self._lock:
+            if len(self.response_cache) > self.max_cache_size:
+                items_to_remove = int(self.max_cache_size * 0.2)
+                for i, key in enumerate(list(self.response_cache.keys())):
+                    if i >= items_to_remove:
+                        break
+                    del self.response_cache[key]
+
+    def get_and_reset_llm_success(self) -> bool:
+        with self._lock:
+            result = self._llm_call_succeeded
+            self._llm_call_succeeded = False
+            return result
+
+    def mark_llm_success(self):
+        with self._lock:
+            self._llm_call_succeeded = True
+
+
+# Module-level singleton instance
+_service = OllamaService()
 
 
 def get_and_reset_llm_success() -> bool:
     """Return True if at least one LLM call succeeded since last check, then reset."""
-    global _llm_call_succeeded
-    result = _llm_call_succeeded
-    _llm_call_succeeded = False
-    return result
-
-
-def _load_config():
-    """Load LLM config from llm_config.json if available."""
-    global _config_loaded, OLLAMA_MODEL, EMBEDDING_MODEL
-    global OLLAMA_TEMPERATURE, OLLAMA_MAX_TOKENS, OLLAMA_NUM_CTX, MAX_CACHE_SIZE
-
-    if _config_loaded:
-        return
-
-    config_paths = [
-        os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'llm_config.json'),
-    ]
-
-    for config_path in config_paths:
-        config_path = os.path.abspath(config_path)
-        if os.path.exists(config_path):
-            try:
-                with open(config_path) as f:
-                    cfg = json.load(f)
-                llm = cfg.get("llm", {})
-                OLLAMA_MODEL = llm.get("model", OLLAMA_MODEL)
-                params = llm.get("parameters", {})
-                OLLAMA_TEMPERATURE = params.get("temperature", OLLAMA_TEMPERATURE)
-                OLLAMA_MAX_TOKENS = params.get("max_tokens", OLLAMA_MAX_TOKENS)
-
-                caching = cfg.get("caching", cfg.get("advanced_settings", {}))
-                MAX_CACHE_SIZE = caching.get("max_cache_size", MAX_CACHE_SIZE)
-
-                logger.info(f"LLM config loaded: model={OLLAMA_MODEL}")
-                break
-            except Exception as e:
-                logger.warning(f"Failed to load LLM config from {config_path}: {e}")
-
-    _config_loaded = True
-
-
-_ollama_client = None
-
-def _get_ollama():
-    """Lazy creation of ollama Client with 60s timeout (qwen3.5:4b on CPU needs ~25-40s)."""
-    global _ollama_client
-    if _ollama_client is not None:
-        return _ollama_client
-    try:
-        import ollama
-        _ollama_client = ollama.Client(timeout=60)
-        return _ollama_client
-    except ImportError:
-        logger.error("ollama package not installed. Run: pip install ollama")
-        return None
-
-
-# ============================================================================
-# Cache Management
-# ============================================================================
-
-def manage_cache():
-    """Remove oldest 20% of cache entries when size limit exceeded."""
-    if len(RESPONSE_CACHE) > MAX_CACHE_SIZE:
-        items_to_remove = int(MAX_CACHE_SIZE * 0.2)
-        for i, key in enumerate(list(RESPONSE_CACHE.keys())):
-            if i >= items_to_remove:
-                break
-            del RESPONSE_CACHE[key]
+    return _service.get_and_reset_llm_success()
 
 
 def temp_sleep(seconds=0.01):
@@ -163,15 +180,12 @@ def clean_ollama_response(response):
     # Safety: if cleaning removed everything but original had content,
     # extract the think block content as fallback
     if not result and original and len(original) > 10:
-        # Try to extract content from inside <think> block
         think_match = re.search(r'<think>(.*?)</think>', original, flags=re.DOTALL)
         if think_match:
             inner = think_match.group(1).strip()
-            # Take last meaningful paragraph (usually the conclusion)
             paragraphs = [p.strip() for p in inner.split('\n\n') if p.strip()]
             if paragraphs:
                 result = paragraphs[-1]
-                # Clean up any remaining verbose prefixes
                 result = re.sub(r'^(So|Okay|Hmm|Wait|Let me|First),?\s*', '', result)
                 result = result.strip()
 
@@ -184,16 +198,16 @@ def clean_ollama_response(response):
 
 def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
     """Make a chat request to Ollama with caching."""
-    _load_config()
-    model = model or OLLAMA_MODEL
-    temperature = temperature if temperature is not None else OLLAMA_TEMPERATURE
-    max_tokens = max_tokens or OLLAMA_MAX_TOKENS
+    _service.load_config()
+    model = model or _service.model
+    temperature = temperature if temperature is not None else _service.temperature
+    max_tokens = max_tokens or _service.max_tokens
 
     cache_key = hashlib.md5(f"{prompt}_{model}_{temperature}".encode()).hexdigest()
-    if cache_key in RESPONSE_CACHE:
-        return RESPONSE_CACHE[cache_key]
+    if cache_key in _service.response_cache:
+        return _service.response_cache[cache_key]
 
-    ol = _get_ollama()
+    ol = _service.get_client()
     if not ol:
         return "OLLAMA NOT AVAILABLE"
 
@@ -207,17 +221,16 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
                 'top_k': 5,
                 'top_p': 0.2,
                 'repeat_penalty': 1.0,
-                'num_ctx': OLLAMA_NUM_CTX,
+                'num_ctx': _service.num_ctx,
             },
             think=False,
         )
         msg = response.message if hasattr(response, 'message') else response['message']
         content = msg.content if hasattr(msg, 'content') else msg['content']
         result = clean_ollama_response(content)
-        RESPONSE_CACHE[cache_key] = result
-        manage_cache()
-        global _llm_call_succeeded
-        _llm_call_succeeded = True
+        _service.response_cache[cache_key] = result
+        _service.manage_cache()
+        _service.mark_llm_success()
         return result
     except Exception as e:
         logger.warning(f"Ollama chat: {e}")
@@ -226,16 +239,16 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
 
 def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=None):
     """Make a generate request to Ollama with caching."""
-    _load_config()
-    model = model or OLLAMA_MODEL
-    temperature = temperature if temperature is not None else OLLAMA_TEMPERATURE
-    max_tokens = max_tokens or OLLAMA_MAX_TOKENS
+    _service.load_config()
+    model = model or _service.model
+    temperature = temperature if temperature is not None else _service.temperature
+    max_tokens = max_tokens or _service.max_tokens
 
     cache_key = hashlib.md5(f"gen_{prompt}_{model}_{temperature}".encode()).hexdigest()
-    if cache_key in RESPONSE_CACHE:
-        return RESPONSE_CACHE[cache_key]
+    if cache_key in _service.response_cache:
+        return _service.response_cache[cache_key]
 
-    ol = _get_ollama()
+    ol = _service.get_client()
     if not ol:
         return "OLLAMA NOT AVAILABLE"
 
@@ -249,16 +262,15 @@ def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=Non
                 'top_k': 5,
                 'top_p': 0.2,
                 'repeat_penalty': 1.0,
-                'num_ctx': OLLAMA_NUM_CTX,
+                'num_ctx': _service.num_ctx,
             },
             think=False,
         )
         raw = response.response if hasattr(response, 'response') else response['response']
         result = clean_ollama_response(raw)
-        RESPONSE_CACHE[cache_key] = result
-        manage_cache()
-        global _llm_call_succeeded
-        _llm_call_succeeded = True
+        _service.response_cache[cache_key] = result
+        _service.manage_cache()
+        _service.mark_llm_success()
         return result
     except Exception as e:
         logger.warning(f"Ollama generate: {e}")
@@ -284,8 +296,8 @@ def ChatGPT_request(prompt):
     """Request with higher temperature for creative output."""
     try:
         return ollama_chat_request(prompt, temperature=0.7, max_tokens=150)
-    except:
-        logger.error("Ollama ERROR in ChatGPT_request")
+    except Exception as e:
+        logger.error(f"Ollama ERROR in ChatGPT_request: {e}")
         return "OLLAMA ERROR"
 
 
@@ -384,8 +396,8 @@ def GPT_request(prompt, gpt_parameter):
         temperature = gpt_parameter.get("temperature", 0.3)
         max_tokens = gpt_parameter.get("max_tokens", 500)
         return ollama_generate_request(prompt=prompt, temperature=temperature, max_tokens=max_tokens)
-    except:
-        logger.error("OLLAMA ERROR in GPT_request")
+    except Exception as e:
+        logger.error(f"OLLAMA ERROR in GPT_request: {e}")
         return "OLLAMA ERROR"
 
 
@@ -437,45 +449,42 @@ def get_embedding(text, model=None):
     Generate text embeddings via Ollama or deterministic fallback.
     Uses caching for performance.
     """
-    _load_config()
-    global EMBEDDING_CACHE
+    _service.load_config()
 
     text = text.replace("\n", " ")
     if not text:
         text = "this is blank"
 
     text_hash = hashlib.md5(text.encode()).hexdigest()
-    if text_hash in EMBEDDING_CACHE:
-        return EMBEDDING_CACHE[text_hash]
+    if text_hash in _service.embedding_cache:
+        return _service.embedding_cache[text_hash]
 
-    ol = _get_ollama()
-    if ol and not getattr(get_embedding, '_ollama_embed_failed', False):
+    ol = _service.get_client()
+    if ol and not _service._embed_failed:
         try:
-            # Check if model is available before calling (avoids pull-hang)
             model_list = ol.list()
             if hasattr(model_list, 'models'):
-                # New API: ListResponse with .models attribute
                 available = [
                     (m.model if hasattr(m, 'model') else m.name).split(':')[0]
                     for m in model_list.models
                 ]
             else:
-                # Old API: dict with 'models' key
                 available = [m['name'].split(':')[0] for m in model_list.get('models', [])]
-            if EMBEDDING_MODEL.split(':')[0] in available:
-                response = ol.embeddings(model=EMBEDDING_MODEL, prompt=text)
+            if _service.embedding_model.split(':')[0] in available:
+                response = ol.embeddings(model=_service.embedding_model, prompt=text)
                 embedding = response.embedding if hasattr(response, 'embedding') else response['embedding']
-                EMBEDDING_CACHE[text_hash] = embedding
+                _service.embedding_cache[text_hash] = embedding
                 return embedding
             else:
-                logger.warning(f"Embedding model '{EMBEDDING_MODEL}' not available, using fallback")
-                get_embedding._ollama_embed_failed = True
-        except Exception:
-            get_embedding._ollama_embed_failed = True
+                logger.warning(f"Embedding model '{_service.embedding_model}' not available, using fallback")
+                _service._embed_failed = True
+        except Exception as e:
+            logger.debug(f"Ollama embedding failed: {e}")
+            _service._embed_failed = True
 
     # Deterministic fallback: hash-based pseudo-embedding (1536-dim for compatibility)
-    logger.warning(f"Using deterministic embedding fallback. Install '{EMBEDDING_MODEL}' with: ollama pull {EMBEDDING_MODEL}")
+    logger.warning(f"Using deterministic embedding fallback. Install '{_service.embedding_model}' with: ollama pull {_service.embedding_model}")
     np.random.seed(int(text_hash[:8], 16))
     embedding = np.random.randn(1536).tolist()
-    EMBEDDING_CACHE[text_hash] = embedding
+    _service.embedding_cache[text_hash] = embedding
     return embedding

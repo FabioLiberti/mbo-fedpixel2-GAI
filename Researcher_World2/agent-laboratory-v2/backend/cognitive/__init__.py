@@ -24,7 +24,7 @@ def check_if_file_exists(curr_file):
         with open(curr_file):
             pass
         return True
-    except:
+    except (IOError, OSError):
         return False
 
 

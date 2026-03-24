@@ -1,54 +1,98 @@
 /**
- * Utility per gestire eventi personalizzati tra Phaser e React
- * Questo file fornisce un modo alternativo per comunicare tra i componenti
- * quando gli eventi standard di Phaser non funzionano come previsto
+ * Centralized DOM custom events for React ↔ Phaser communication.
+ *
+ * EVENT SYSTEM CONVENTIONS:
+ * 1. WebSocket messages: backend → App.tsx → Zustand store (data flow)
+ * 2. DOM CustomEvents: React ↔ Phaser bidirectional (UI actions) — THIS FILE
+ * 3. Phaser game.events: internal Phaser scene-to-scene only
+ *
+ * All cross-boundary events (React ↔ Phaser) MUST go through this file.
  */
 
-// Evento DOM personalizzato per gestire il toggle del pannello FL
-export const emitFLPanelToggle = (visible: boolean): void => {
-  try {
-    const customEvent = new CustomEvent('fl-panel-toggle', {
-      detail: { visible }
-    });
-    document.dispatchEvent(customEvent);
-    console.log('Emitted custom fl-panel-toggle event with visible:', visible);
-  } catch (error) {
-    console.error('Error emitting custom event:', error);
-  }
-};
+// =========================================================================
+// FL Panel Toggle
+// =========================================================================
 
-// Funzione per registrare un listener per l'evento toggle
-export const addFLPanelToggleListener = (callback: (visible: boolean) => void): () => void => {
-  const handler = (event: Event) => {
-    const customEvent = event as CustomEvent;
-    callback(customEvent.detail.visible);
-  };
-  
-  document.addEventListener('fl-panel-toggle', handler);
-  
-  // Restituisce una funzione di pulizia
-  return () => {
-    document.removeEventListener('fl-panel-toggle', handler);
-  };
-};
+const FL_PANEL_KEY = 'fl-panel-visible';
+const FL_PANEL_EVENT = 'fl-panel-toggle';
 
-// Funzione per aggiornare lo stato del pannello FL nel localStorage
-// Questo è un fallback quando il game registry non funziona
-export const updateFLPanelState = (visible: boolean): void => {
-  try {
-    localStorage.setItem('fl-panel-visible', JSON.stringify(visible));
-  } catch (error) {
-    console.error('Error updating FL panel state in localStorage:', error);
-  }
-};
-
-// Funzione per ottenere lo stato del pannello FL dal localStorage
 export const getFLPanelState = (): boolean => {
   try {
-    const storedValue = localStorage.getItem('fl-panel-visible');
-    return storedValue ? JSON.parse(storedValue) : true; // Default a true
-  } catch (error) {
-    console.error('Error getting FL panel state from localStorage:', error);
-    return true; // Default a true in caso di errore
+    const storedValue = localStorage.getItem(FL_PANEL_KEY);
+    return storedValue ? JSON.parse(storedValue) : true;
+  } catch {
+    return true;
   }
+};
+
+export const updateFLPanelState = (visible: boolean): void => {
+  try {
+    localStorage.setItem(FL_PANEL_KEY, JSON.stringify(visible));
+  } catch {
+    // localStorage may be unavailable
+  }
+};
+
+export const emitFLPanelToggle = (visible: boolean): void => {
+  updateFLPanelState(visible);
+  document.dispatchEvent(new CustomEvent(FL_PANEL_EVENT, { detail: { visible } }));
+};
+
+export const addFLPanelToggleListener = (callback: (visible: boolean) => void): () => void => {
+  const handler = (event: Event) => {
+    callback((event as CustomEvent).detail.visible);
+  };
+  document.addEventListener(FL_PANEL_EVENT, handler);
+  return () => document.removeEventListener(FL_PANEL_EVENT, handler);
+};
+
+// =========================================================================
+// LLM Panel Toggle
+// =========================================================================
+
+const LLM_PANEL_EVENT = 'llm-panel-toggle';
+
+export const emitLLMPanelToggle = (visible: boolean): void => {
+  document.dispatchEvent(new CustomEvent(LLM_PANEL_EVENT, { detail: { visible } }));
+};
+
+export const addLLMPanelToggleListener = (callback: (visible: boolean) => void): () => void => {
+  const handler = (event: Event) => {
+    callback((event as CustomEvent).detail.visible);
+  };
+  document.addEventListener(LLM_PANEL_EVENT, handler);
+  return () => document.removeEventListener(LLM_PANEL_EVENT, handler);
+};
+
+// =========================================================================
+// Simulation Control (React → Phaser)
+// =========================================================================
+
+const SIM_CONTROL_EVENT = 'simulation:control';
+
+export type SimControlAction = 'start' | 'stop' | 'pause' | 'resume' | 'reset';
+
+export const emitSimulationControl = (action: SimControlAction): void => {
+  document.dispatchEvent(new CustomEvent(SIM_CONTROL_EVENT, { detail: { action } }));
+};
+
+export const addSimulationControlListener = (callback: (action: SimControlAction) => void): () => void => {
+  const handler = (event: Event) => {
+    callback((event as CustomEvent).detail.action);
+  };
+  document.addEventListener(SIM_CONTROL_EVENT, handler);
+  return () => document.removeEventListener(SIM_CONTROL_EVENT, handler);
+};
+
+// =========================================================================
+// Documentation (Phaser → React)
+// =========================================================================
+
+export const emitOpenDocumentation = (): void => {
+  document.dispatchEvent(new CustomEvent('openDocumentation'));
+};
+
+export const addOpenDocumentationListener = (callback: () => void): () => void => {
+  document.addEventListener('openDocumentation', callback);
+  return () => document.removeEventListener('openDocumentation', callback);
 };

@@ -35,36 +35,35 @@
     },
     "researchers": {
       "phd_student": {
-        "count": 5,
+        "count": 4,
         "speed": 1.2,
         "social_tendency": 0.7,
         "research_efficiency": 0.5,
         "specializations": [
           "data_science",
-          "privacy_engineering",
-          "optimization_theory"
+          "optimization_theory",
+          "non_iid_data"
         ]
       },
       "researcher": {
-        "count": 3,
+        "count": 4,
         "speed": 1.0,
         "social_tendency": 0.5,
         "research_efficiency": 0.8,
         "specializations": [
           "secure_aggregation",
-          "non_iid_data",
-          "communication_efficiency"
+          "communication_efficiency",
+          "privacy_engineering",
+          "data_science"
         ]
       },
       "professor": {
-        "count": 2,
+        "count": 1,
         "speed": 0.8,
         "social_tendency": 0.6,
         "research_efficiency": 1.0,
         "specializations": [
-          "fl_architecture",
-          "theoretical_guarantees",
-          "privacy_economics"
+          "fl_architecture"
         ]
       }
     },

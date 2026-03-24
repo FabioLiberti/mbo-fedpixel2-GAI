@@ -419,12 +419,15 @@ function App() {
                 backendConnected={connected}
                 backendSimData={backendSimData}
                 onFLUpdate={(data) => {
-                  setFlProgress(data.flProgress);
-                  setAgentCount(data.agentCount);
-                  setFlRound(data.round);
-                  setFlAccuracy(data.accuracy);
-                  setFlLoss(data.loss);
-                  setFlState(data.flState);
+                  // Aggiorna sidebar FL solo se backend non connesso (fallback locale)
+                  if (!connected) {
+                    setFlProgress(data.flProgress);
+                    setAgentCount(data.agentCount);
+                    setFlRound(data.round);
+                    setFlAccuracy(data.accuracy);
+                    setFlLoss(data.loss);
+                    setFlState(data.flState);
+                  }
                 }}
               />
             </div>

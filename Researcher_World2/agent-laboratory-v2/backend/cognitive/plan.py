@@ -120,7 +120,8 @@ def generate_action_pronunciatio(act_desp, persona):
     """Generate emoji representation of an action."""
     try:
         x = run_gpt_prompt_pronunciatio(act_desp, persona)[0]
-    except Exception:
+    except Exception as e:
+        logger.debug(f"pronunciatio fallback: {e}")
         x = "🙂"
     return x if x else "🙂"
 

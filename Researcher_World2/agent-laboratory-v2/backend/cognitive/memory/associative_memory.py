@@ -220,7 +220,7 @@ class AssociativeMemory:
         try:
             if filling:
                 depth += max([self.id_to_node[i].depth for i in filling])
-        except:
+        except (KeyError, ValueError, AttributeError):
             pass
 
         node = ConceptNode(node_id, node_count, type_count, node_type, depth,

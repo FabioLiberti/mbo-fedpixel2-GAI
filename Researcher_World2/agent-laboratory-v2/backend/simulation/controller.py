@@ -10,7 +10,7 @@ import logging
 import json
 import numpy as np
 from typing import Dict, List, Any, Optional, Callable
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 import time
 
 from models.environment import LabEnvironment
@@ -55,6 +55,7 @@ class SimulationController:
         # Thread control
         self.simulation_thread = None
         self.stop_event = Event()
+        self._lock = Lock()  # protects shared state (running, paused, speed, fl_*)
 
         logger.info(f"Simulation controller initialized with config: {config_path}")
 
@@ -159,36 +160,37 @@ class SimulationController:
     # =========================================================================
 
     def start_simulation(self):
-        if self.running:
-            logger.warning("Simulation is already running")
-            return False
-        if not self.model and not self.initialize_model():
-            logger.error("Could not initialize simulation model")
-            return False
+        with self._lock:
+            if self.running:
+                logger.warning("Simulation is already running")
+                return False
+            if not self.model and not self.initialize_model():
+                logger.error("Could not initialize simulation model")
+                return False
 
-        self.running = True
-        self.paused = False
-        self.stop_event.clear()
+            self.running = True
+            self.paused = False
+            self.stop_event.clear()
 
-        # Enable FL automatically so data is broadcast from the start
-        if self.fl_system and not self.fl_enabled:
-            self.fl_enabled = True
-            logger.info("FL enabled automatically on simulation start")
+            # Enable FL automatically so data is broadcast from the start
+            if self.fl_system and not self.fl_enabled:
+                self.fl_enabled = True
+                logger.info("FL enabled automatically on simulation start")
 
-        self.simulation_thread = Thread(target=self._simulation_loop)
-        self.simulation_thread.daemon = True
-        self.simulation_thread.start()
+            self.simulation_thread = Thread(target=self._simulation_loop)
+            self.simulation_thread.daemon = True
+            self.simulation_thread.start()
 
         logger.info("Simulation started")
         return True
 
     def stop_simulation(self):
-        if not self.running:
-            logger.warning("Simulation is not running")
-            return False
-
-        self.running = False
-        self.stop_event.set()
+        with self._lock:
+            if not self.running:
+                logger.warning("Simulation is not running")
+                return False
+            self.running = False
+            self.stop_event.set()
 
         if self.simulation_thread:
             self.simulation_thread.join(timeout=2.0)
@@ -200,23 +202,26 @@ class SimulationController:
         return True
 
     def pause_simulation(self):
-        if not self.running:
-            return False
-        self.paused = True
+        with self._lock:
+            if not self.running:
+                return False
+            self.paused = True
         logger.info("Simulation paused")
         return True
 
     def resume_simulation(self):
-        if not self.running:
-            return False
-        self.paused = False
+        with self._lock:
+            if not self.running:
+                return False
+            self.paused = False
         logger.info("Simulation resumed")
         return True
 
     def set_speed(self, speed: float):
         if speed <= 0:
             return False
-        self.speed = speed
+        with self._lock:
+            self.speed = speed
         logger.info(f"Simulation speed set to {speed}")
         return True
 
@@ -224,12 +229,12 @@ class SimulationController:
         if not self.fl_system:
             logger.warning("FL system not initialized")
             return False
-
-        self.fl_enabled = enabled
-        if not enabled:
-            self.fl_round_in_progress = False
-            self.fl_step_counter = 0
-            self.fl_current_phase = None
+        with self._lock:
+            self.fl_enabled = enabled
+            if not enabled:
+                self.fl_round_in_progress = False
+                self.fl_step_counter = 0
+                self.fl_current_phase = None
         logger.info(f"Federated Learning {'enabled' if enabled else 'disabled'}")
         return True
 
@@ -297,8 +302,8 @@ class SimulationController:
             logger.info("FL phase: sending -> aggregating")
 
         elif phase == "aggregating":
-            client_updates = self._collect_client_updates()
-            self.fl_system.aggregate_models(client_updates)
+            client_updates, client_metrics = self._collect_client_updates()
+            self.fl_system.aggregate_models(client_updates, client_metrics=client_metrics)
 
             self.fl_current_phase = "receiving"
             for lab_id in self.model.get_lab_ids():
@@ -318,21 +323,36 @@ class SimulationController:
             logger.info("FL round completed")
 
     def _collect_client_updates(self) -> Dict[str, Any]:
+        from fl.federated import generate_client_data
+
         client_updates = {}
+        client_metrics = {}
+        fl_round = self.fl_system.round if self.fl_system else 0
+
         for lab_id in self.model.get_lab_ids():
-            data_x = np.random.randn(100, 10)
-            data_y = np.random.randint(0, 2, size=(100, 1))
+            # Consistent synthetic data per lab, seeded by lab_id + round
+            data_x, data_y = generate_client_data(
+                client_id=lab_id,
+                n_samples=120,
+                seed=42 + fl_round,
+            )
             metrics, weights = self.fl_system.train_client(lab_id, data_x, data_y)
             client_updates[lab_id] = weights
-        return client_updates
+            client_metrics[lab_id] = metrics
+
+        return client_updates, client_metrics
 
     def _process_fl_logic(self):
-        if not self.fl_enabled:
+        with self._lock:
+            fl_enabled = self.fl_enabled
+            fl_in_progress = self.fl_round_in_progress
+        if not fl_enabled:
             return
-        if not self.fl_round_in_progress:
+        if not fl_in_progress:
             self._start_fl_round()
         else:
-            self.fl_step_counter += 1
+            with self._lock:
+                self.fl_step_counter += 1
             if self._check_fl_phase_completion():
                 self._advance_fl_phase()
 
@@ -384,53 +404,55 @@ class SimulationController:
 
     def _collect_simulation_data(self) -> Dict[str, Any]:
         """Collect simulation data for frontend broadcast."""
-        base_data = {
-            "step": self.model.schedule.steps if self.model else 0,
-            "sim_time": self.model.sim_time.isoformat() if self.model else None,
-            "agent_count": self.model.schedule.get_agent_count() if self.model else 0,
-            "agent_states": self.model.get_agent_states() if self.model else [],
-            "simulation": {
-                "running": self.running,
-                "paused": self.paused,
-                "speed": self.speed
+        with self._lock:
+            base_data = {
+                "step": self.model.schedule.steps if self.model else 0,
+                "sim_time": self.model.sim_time.isoformat() if self.model else None,
+                "agent_count": self.model.schedule.get_agent_count() if self.model else 0,
+                "agent_states": self.model.get_agent_states() if self.model else [],
+                "simulation": {
+                    "running": self.running,
+                    "paused": self.paused,
+                    "speed": self.speed
+                }
             }
-        }
 
-        # FL data
-        if self.fl_enabled and self.fl_system:
-            fl_state = self.fl_system.get_state()
-            base_data["fl"] = {
-                "enabled": self.fl_enabled,
-                "round_in_progress": self.fl_round_in_progress,
-                "current_phase": self.fl_current_phase,
-                "step_counter": self.fl_step_counter,
-                "steps_per_round": self.fl_steps_per_round,
-                "round": fl_state["round"],
-                "metrics": fl_state["metrics"]
-            }
+            # FL data
+            if self.fl_enabled and self.fl_system:
+                fl_state = self.fl_system.get_state()
+                base_data["fl"] = {
+                    "enabled": self.fl_enabled,
+                    "round_in_progress": self.fl_round_in_progress,
+                    "current_phase": self.fl_current_phase,
+                    "step_counter": self.fl_step_counter,
+                    "steps_per_round": self.fl_steps_per_round,
+                    "round": fl_state["round"],
+                    "metrics": fl_state["metrics"]
+                }
 
         return base_data
 
     def get_simulation_state(self) -> Dict[str, Any]:
-        state = {
-            "initialized": self.model is not None,
-            "running": self.running,
-            "paused": self.paused,
-            "speed": self.speed,
-            "step": self.model.schedule.steps if self.model else 0,
-            "sim_time": self.model.sim_time.isoformat() if self.model else None,
-            "agent_count": self.model.schedule.get_agent_count() if self.model else 0
-        }
-
-        if self.fl_system:
-            fl_state = self.fl_system.get_state()
-            state["fl"] = {
-                "enabled": self.fl_enabled,
-                "round": fl_state["round"],
-                "algorithm": fl_state["algorithm"],
-                "round_in_progress": self.fl_round_in_progress,
-                "current_phase": self.fl_current_phase
+        with self._lock:
+            state = {
+                "initialized": self.model is not None,
+                "running": self.running,
+                "paused": self.paused,
+                "speed": self.speed,
+                "step": self.model.schedule.steps if self.model else 0,
+                "sim_time": self.model.sim_time.isoformat() if self.model else None,
+                "agent_count": self.model.schedule.get_agent_count() if self.model else 0
             }
+
+            if self.fl_system:
+                fl_state = self.fl_system.get_state()
+                state["fl"] = {
+                    "enabled": self.fl_enabled,
+                    "round": fl_state["round"],
+                    "algorithm": fl_state["algorithm"],
+                    "round_in_progress": self.fl_round_in_progress,
+                    "current_phase": self.fl_current_phase
+                }
 
         return state
 
@@ -453,15 +475,17 @@ class SimulationController:
     # =========================================================================
 
     def reset_simulation(self):
-        was_running = self.running
+        with self._lock:
+            was_running = self.running
         if was_running:
             self.stop_simulation()
 
-        self.model = None
-        self.fl_system = None
-        self.fl_enabled = False
-        self.fl_round_in_progress = False
-        self.fl_step_counter = 0
+        with self._lock:
+            self.model = None
+            self.fl_system = None
+            self.fl_enabled = False
+            self.fl_round_in_progress = False
+            self.fl_step_counter = 0
 
         success = self.initialize_model()
         if success and was_running:

@@ -265,8 +265,8 @@ async def get_llm_status():
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get("http://localhost:11434/api/tags")
                 ollama_ok = resp.status_code == 200
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Ollama health check failed: {e}")
     return {"llm_enabled": llm_on, "ollama_reachable": ollama_ok}
 
 

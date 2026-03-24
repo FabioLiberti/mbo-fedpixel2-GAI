@@ -108,7 +108,7 @@ def run_gpt_prompt_event_poignancy(persona, description):
     try:
         response = GPT4_request(prompt)
         return _extract_number(response, default=5), True
-    except Exception:
+    except Exception as e:
         return 5, False
 
 
@@ -147,7 +147,7 @@ def run_gpt_prompt_focal_pt(persona, statements, n=3):
         response = ChatGPT_request(prompt)
         points = _extract_list_items(response, n)
         return points if points else [f"What should {persona.scratch.name} focus on?"], True
-    except Exception:
+    except Exception as e:
         return [f"What is important for {persona.scratch.name}?"], False
 
 
@@ -178,7 +178,7 @@ def run_gpt_prompt_insight_and_guidance(persona, statements, n=5):
                 if thought:
                     result[thought] = indices
         return result if result else {"research is progressing": [0]}, True
-    except Exception:
+    except Exception as e:
         return {"reflection needed": [0]}, False
 
 
@@ -205,7 +205,7 @@ def run_gpt_prompt_event_triple(act_desp, persona):
         if len(parts) >= 3:
             return (parts[0], parts[1], parts[2]), True
         return (persona.scratch.name, "is doing", act_desp), False
-    except Exception:
+    except Exception as e:
         return (persona.scratch.name, "is doing", act_desp), False
 
 
@@ -228,7 +228,7 @@ def run_gpt_prompt_wake_up_hour(persona):
     try:
         response = GPT4_request(prompt)
         return _extract_number(response, default=9, low=7, high=11), True
-    except Exception:
+    except Exception as e:
         return 9, False
 
 
@@ -258,7 +258,7 @@ def run_gpt_prompt_daily_plan(persona, wake_up_hour):
         response = ChatGPT_request(prompt)
         items = _extract_list_items(response, 8)
         return items if items else ["work on research"], True
-    except Exception:
+    except Exception as e:
         return ["work on research"], False
 
 
@@ -289,7 +289,7 @@ def run_gpt_prompt_generate_hourly_schedule(persona, curr_hour_str, n_m1_activit
     )
     try:
         return ChatGPT_request(prompt).strip()[:100], True
-    except Exception:
+    except Exception as e:
         return "working on research", False
 
 
@@ -326,7 +326,7 @@ def run_gpt_prompt_task_decomp(persona, task, duration):
                     r[1] = max(5, round(r[1] * scale))
             return result, True
         return [[task, duration]], True
-    except Exception:
+    except Exception as e:
         return [[task, duration]], False
 
 
@@ -373,7 +373,7 @@ def run_gpt_prompt_action_sector(act_desp, persona, maze):
             if s.strip().lower() in response or response in s.strip().lower():
                 return s.strip(), True
         return sector_list[0], True
-    except Exception:
+    except Exception as e:
         return persona.scratch.lab_id or sector_list[0], False
 
 
@@ -407,7 +407,7 @@ def run_gpt_prompt_action_arena(act_desp, persona, maze, act_world, act_sector):
             if a.strip().lower() in response or response in a.strip().lower():
                 return a.strip(), True
         return arena_list[0], True
-    except Exception:
+    except Exception as e:
         return "workspace", False
 
 
@@ -455,7 +455,7 @@ def run_gpt_prompt_action_game_object(act_desp, persona, maze, act_address):
             if o.strip().lower() in response or response in o.strip().lower():
                 return o.strip(), True
         return obj_list[0], True
-    except Exception:
+    except Exception as e:
         return "desk_1", False
 
 
@@ -482,7 +482,7 @@ def run_gpt_prompt_pronunciatio(act_desp, persona):
         # Extract just emoji characters
         emojis = ''.join(c for c in response if ord(c) > 127)
         return emojis[:4] if emojis else "\U0001f642", True
-    except Exception:
+    except Exception as e:
         return "\U0001f642", False
 
 
@@ -498,7 +498,7 @@ def run_gpt_prompt_act_obj_desc(act_game_object, act_desp, persona):
     )
     try:
         return GPT4_request(prompt).strip()[:100], True
-    except Exception:
+    except Exception as e:
         return f"{act_game_object} is in use", False
 
 
@@ -533,7 +533,7 @@ def run_gpt_prompt_decide_to_talk(init_persona, target_persona, retrieved):
     try:
         response = GPT4_request(prompt).strip().lower()
         return "yes" if "yes" in response else "no", True
-    except Exception:
+    except Exception as e:
         return "no", False
 
 
@@ -569,7 +569,7 @@ def run_gpt_prompt_summarize_conversation(persona, convo):
     prompt = f"Summarize this conversation in one sentence:\n{convo_str}\nSummary:"
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "had a conversation", False
 
 
@@ -591,7 +591,7 @@ def run_gpt_prompt_agent_chat_summarize_ideas(init_persona, target_persona,
     )
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "", False
 
 
@@ -612,7 +612,7 @@ def run_gpt_prompt_agent_chat_summarize_relationship(init_persona, target_person
     )
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "colleagues", False
 
 
@@ -654,7 +654,7 @@ def run_gpt_prompt_agent_chat(maze, init_persona, target_persona,
                     elif n2.split()[0] in speaker:
                         convo.append([n2, text])
         return convo if convo else [[n1, "Hello."], [n2, "Hi."]], True
-    except Exception:
+    except Exception as e:
         return [[n1, "Hello."], [n2, "Hi."]], False
 
 
@@ -687,7 +687,7 @@ def run_gpt_generate_iterative_chat_utt(maze, init_persona, target_persona,
         utt = parts[0].strip()
         end = "true" in parts[1].lower() if len(parts) > 1 else len(curr_chat) >= 4
         return {"utterance": utt, "end": end}, True
-    except Exception:
+    except Exception as e:
         return {"utterance": "I see.", "end": True}, False
 
 
@@ -699,7 +699,7 @@ def run_gpt_prompt_summarize_ideas(persona, statements, question):
     prompt = f"Given:\n{statements}\n\nSummarize ideas relevant to: {question}"
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "", False
 
 
@@ -732,7 +732,7 @@ def run_gpt_prompt_planning_thought_on_convo(persona, all_utt):
     )
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "should follow up", False
 
 
@@ -748,5 +748,5 @@ def run_gpt_prompt_memo_on_convo(persona, all_utt):
     )
     try:
         return ChatGPT_request(prompt).strip()[:200], True
-    except Exception:
+    except Exception as e:
         return "had a conversation", False

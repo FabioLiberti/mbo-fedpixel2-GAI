@@ -282,33 +282,40 @@ export class BootScene extends BaseScene {
   }
 
   private loadAgentSprites(): void {
-    // Caricamento sprite ricercatori con informazioni di debug
+    // Caricamento spritesheet principali (128x48, 4 frame da 32x48)
+    // Caricati qui UNA volta, riutilizzati da tutte le scene (WorldMap, Lab scenes)
+    const agentTypes = ['professor', 'researcher', 'student', 'doctor'];
+    agentTypes.forEach(type => {
+      if (!this.textures.exists(type)) {
+        this.load.spritesheet(type, `assets/characters/${type}_spritesheet.png`, {
+          frameWidth: 32,
+          frameHeight: 48,
+        });
+        console.log(`Loading spritesheet: ${type}`);
+      }
+    });
+
+    // Caricamento sprite statici per ricercatori (fallback)
     const researcherTypes = [
-      'professor', 'researcher', 'phd_student', 'ml_engineer', 
+      'professor', 'researcher', 'phd_student', 'ml_engineer',
       'data_engineer', 'privacy_specialist', 'doctor', 'biomedical'
     ];
-    
+
     researcherTypes.forEach(type => {
-      // Tenta percorsi diversi per sprite ricercatori
       [
         `assets/images/agents/${type}.png`,
         `assets/images/agents/${type}.jpg`,
         `assets/sprites/${type}.png`,
-        `assets/sprites/${type}.jpg`,
-        `assets/images/agents/researcher.png` // Fallback generico
       ].forEach(path => {
         this.logAndLoad('image', `researcher_${type}`, path);
-        // Carica anche con nome semplice
-        this.logAndLoad('image', type, path);
       });
     });
-    
+
     // Punto semplice per rappresentare agenti sulla mappa
     this.logAndLoad('image', 'agent-dot', 'assets/ui/placeholder.png');
-    
+
     // Sprite di default
     this.logAndLoad('image', 'default_researcher', 'assets/images/agents/researcher.png');
-    this.logAndLoad('image', 'default_researcher', 'assets/images/agents/default_researcher.png');
   }
 
   private loadMapAssets(): void {

@@ -4,6 +4,7 @@ import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
 import AgentInspectorPanel from './AgentInspectorPanel';
 import LLMDialogPanel from './LLMDialogPanel';
+import ErrorBoundary from './ErrorBoundary';
 import { FLStatusData } from '../phaser/fl/FLController';
 import { FLState } from '../phaser/fl/FLState';
 import { CognitiveAgentState } from '../phaser/types/AgentTypes';
@@ -508,12 +509,14 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
       />
 
       {/* Pannello di controllo FL - sempre montato, gestisce internamente la visibilità */}
-      <FLStatusPanel
-        flStatus={contextualFlStatus}
-        onToggleFL={handleToggleFL}
-        totalAgentCount={flStatus?.activeAgents?.length || 0}
-        currentLabName={isWorldMap ? null : currentLabName}
-      />
+      <ErrorBoundary name="FLStatusPanel">
+        <FLStatusPanel
+          flStatus={contextualFlStatus}
+          onToggleFL={handleToggleFL}
+          totalAgentCount={flStatus?.activeAgents?.length || 0}
+          currentLabName={isWorldMap ? null : currentLabName}
+        />
+      </ErrorBoundary>
 
       {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
       {flStatus && (
@@ -524,18 +527,22 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
       )}
 
       {/* LLM Dialog Panel - cronologia dialoghi agenti */}
-      <LLMDialogPanel
-        backendSimData={backendSimData}
-        selectedLab={selectedLab}
-        visible={llmPanelVisible}
-        onClose={() => setLlmPanelVisible(false)}
-      />
+      <ErrorBoundary name="LLMDialogPanel">
+        <LLMDialogPanel
+          backendSimData={backendSimData}
+          selectedLab={selectedLab}
+          visible={llmPanelVisible}
+          onClose={() => setLlmPanelVisible(false)}
+        />
+      </ErrorBoundary>
 
       {/* Agent Inspector Panel - shown when an agent is clicked */}
-      <AgentInspectorPanel
-        agent={selectedAgent}
-        onClose={() => setSelectedAgent(null)}
-      />
+      <ErrorBoundary name="AgentInspectorPanel">
+        <AgentInspectorPanel
+          agent={selectedAgent}
+          onClose={() => setSelectedAgent(null)}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

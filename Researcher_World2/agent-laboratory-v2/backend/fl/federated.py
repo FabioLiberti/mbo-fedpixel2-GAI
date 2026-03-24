@@ -15,6 +15,146 @@ logger = logging.getLogger(__name__)
 if not HAS_TF:
     logger.warning("TensorFlow not installed. FL system will use numpy-only simulation.")
 
+
+# =========================================================================
+# Numpy-only helpers: 2-layer NN for binary classification
+# =========================================================================
+
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    x = np.clip(x, -500, 500)
+    return 1.0 / (1.0 + np.exp(-x))
+
+def _relu(x: np.ndarray) -> np.ndarray:
+    return np.maximum(0, x)
+
+def _relu_deriv(x: np.ndarray) -> np.ndarray:
+    return (x > 0).astype(np.float32)
+
+def _binary_cross_entropy(y_pred: np.ndarray, y_true: np.ndarray) -> float:
+    eps = 1e-7
+    y_pred = np.clip(y_pred, eps, 1 - eps)
+    return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+
+
+def generate_client_data(client_id: str, n_samples: int = 100, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Generate non-IID synthetic data for a client.
+    Uses an XOR-like pattern with client-specific distribution shift.
+    Input dim = 10, but only first 2 features carry the signal.
+    """
+    # Deterministic seed from client_id string + global seed
+    h = hash(client_id) & 0xFFFFFFFF
+    rng = np.random.RandomState(seed ^ h)
+
+    X = rng.randn(n_samples, 10).astype(np.float32)
+
+    # Non-IID: shift the decision boundary per client
+    shift = (h % 7) * 0.3 - 0.9  # range ~ [-0.9, 0.9]
+    xor_signal = ((X[:, 0] + shift) > 0).astype(np.float32) != (X[:, 1] > 0).astype(np.float32)
+    y = xor_signal.reshape(-1, 1).astype(np.float32)
+
+    # Add ~10% label noise for realism
+    flip_mask = rng.rand(n_samples) < 0.10
+    y[flip_mask] = 1.0 - y[flip_mask]
+
+    return X, y
+
+
+def numpy_train(
+    weights: List[np.ndarray],
+    data_x: np.ndarray,
+    data_y: np.ndarray,
+    epochs: int = 5,
+    lr: float = 0.05,
+    batch_size: int = 32,
+    mu: float = 0.0,
+    global_weights: Optional[List[np.ndarray]] = None,
+) -> Tuple[List[np.ndarray], float, float]:
+    """
+    Train a 2-layer NN (10->32 relu ->16 relu ->1 sigmoid) with SGD.
+
+    Returns (updated_weights, final_loss, final_accuracy).
+    If mu > 0 and global_weights is provided, adds FedProx proximal term.
+    """
+    # Unpack: W1(10,32) b1(32) W2(32,16) b2(16) W3(16,1) b3(1)
+    W1, b1, W2, b2, W3, b3 = [w.copy() for w in weights]
+    n = len(data_x)
+
+    final_loss = 1.0
+    final_acc = 0.5
+
+    for _epoch in range(epochs):
+        # Shuffle
+        idx = np.random.permutation(n)
+        epoch_loss = 0.0
+        epoch_correct = 0
+        batches = 0
+
+        for start in range(0, n, batch_size):
+            bi = idx[start:start + batch_size]
+            xb = data_x[bi]
+            yb = data_y[bi]
+            bs = len(xb)
+
+            # --- Forward ---
+            z1 = xb @ W1 + b1            # (bs, 32)
+            a1 = _relu(z1)
+            z2 = a1 @ W2 + b2            # (bs, 16)
+            a2 = _relu(z2)
+            z3 = a2 @ W3 + b3            # (bs, 1)
+            a3 = _sigmoid(z3)
+
+            # --- Loss ---
+            loss = _binary_cross_entropy(a3, yb)
+
+            # FedProx proximal term
+            if mu > 0 and global_weights is not None:
+                prox = 0.0
+                for w_local, w_glob in zip([W1, b1, W2, b2, W3, b3], global_weights):
+                    prox += np.sum((w_local - w_glob) ** 2)
+                loss += (mu / 2.0) * prox
+
+            epoch_loss += loss * bs
+            epoch_correct += np.sum((a3 >= 0.5).astype(np.float32) == yb)
+            batches += 1
+
+            # --- Backward ---
+            dz3 = (a3 - yb) / bs          # (bs, 1)
+            dW3 = a2.T @ dz3
+            db3 = np.sum(dz3, axis=0)
+
+            da2 = dz3 @ W3.T
+            dz2 = da2 * _relu_deriv(z2)
+            dW2 = a1.T @ dz2
+            db2 = np.sum(dz2, axis=0)
+
+            da1 = dz2 @ W2.T
+            dz1 = da1 * _relu_deriv(z1)
+            dW1 = xb.T @ dz1
+            db1 = np.sum(dz1, axis=0)
+
+            # FedProx gradient contribution
+            if mu > 0 and global_weights is not None:
+                dW1 += mu * (W1 - global_weights[0])
+                db1 += mu * (b1 - global_weights[1])
+                dW2 += mu * (W2 - global_weights[2])
+                db2 += mu * (b2 - global_weights[3])
+                dW3 += mu * (W3 - global_weights[4])
+                db3 += mu * (b3 - global_weights[5])
+
+            # --- SGD update ---
+            W1 -= lr * dW1
+            b1 -= lr * db1
+            W2 -= lr * dW2
+            b2 -= lr * db2
+            W3 -= lr * dW3
+            b3 -= lr * db3
+
+        final_loss = epoch_loss / n
+        final_acc = epoch_correct / n
+
+    return [W1, b1, W2, b2, W3, b3], float(final_loss), float(final_acc)
+
 class FederatedLearningSystem:
     """
     Sistema di Federated Learning per la simulazione.
@@ -166,18 +306,32 @@ class FederatedLearningSystem:
         client_model = client["model"]
 
         if not HAS_TF:
-            # Numpy-only simulation: perturb weights and generate plausible metrics
-            for i, w in enumerate(client_model):
-                client_model[i] = w + np.random.randn(*w.shape).astype(np.float32) * 0.01
+            # Real numpy training with optional FedProx proximal term
+            use_prox = self.algorithm == "fedprox"
+            global_w = [w.copy() for w in self.global_model] if use_prox else None
+            mu = self.mu if use_prox else 0.0
+
+            updated_weights, loss, accuracy = numpy_train(
+                weights=client_model,
+                data_x=data_x,
+                data_y=data_y,
+                epochs=5,
+                lr=0.05,
+                batch_size=32,
+                mu=mu,
+                global_weights=global_w,
+            )
+            # Write back updated weights to client
+            for i in range(len(updated_weights)):
+                client_model[i] = updated_weights[i]
+
             client["data_size"] = len(data_x)
             client["last_round"] = self.round
-            # Simulate improving metrics over rounds
-            base_acc = min(0.5 + self.round * 0.05, 0.95)
-            metrics = {
-                "loss": max(0.7 - self.round * 0.05, 0.1) + np.random.uniform(-0.02, 0.02),
-                "accuracy": base_acc + np.random.uniform(-0.03, 0.03),
-            }
-            logger.info(f"Client {client_id} trained (numpy-sim) with {len(data_x)} samples")
+            metrics = {"loss": loss, "accuracy": accuracy}
+            logger.info(
+                f"Client {client_id} trained (numpy) {len(data_x)} samples | "
+                f"loss={loss:.4f} acc={accuracy:.4f}"
+            )
             return metrics, [w.copy() for w in client_model]
 
         # --- TensorFlow path ---
@@ -238,20 +392,22 @@ class FederatedLearningSystem:
         logger.info(f"Client {client_id} trained with {len(data_x)} samples")
         return metrics, updated_weights
     
-    def aggregate_models(self, client_updates: Dict[str, Dict]) -> Dict[str, float]:
+    def aggregate_models(self, client_updates: Dict[str, Dict],
+                         client_metrics: Optional[Dict[str, Dict[str, float]]] = None) -> Dict[str, float]:
         """
         Aggrega i modelli dei client in base all'algoritmo scelto
-        
+
         Args:
             client_updates: Dizionario di aggiornamenti dei client {client_id: weights}
-            
+            client_metrics: Optional per-client metrics {client_id: {"loss": ..., "accuracy": ...}}
+
         Returns:
             Metriche di aggregazione
         """
         if not client_updates:
             logger.warning("No client updates to aggregate")
             return {}
-            
+
         # Recupera pesi e dimensioni dei dati
         weights = []
         data_sizes = []
@@ -270,16 +426,9 @@ class FederatedLearningSystem:
         normalized_weights = [size / total_size for size in data_sizes]
 
         if self.algorithm == "fedavg":
-            # FedAvg: media pesata standard
             avg_weights = self._weighted_average(weights, normalized_weights)
-
         elif self.algorithm == "fedprox":
-            # FedProx: media pesata con termine prossimale
-            # Il termine prossimale mu * ||w - w_global||^2 viene applicato
-            # durante il training locale (lato client). L'aggregazione è
-            # identica a FedAvg; la differenza è nella loss del client.
             avg_weights = self._weighted_average(weights, normalized_weights)
-
         else:
             logger.warning(f"Unknown algorithm '{self.algorithm}', falling back to fedavg")
             avg_weights = self._weighted_average(weights, normalized_weights)
@@ -290,17 +439,43 @@ class FederatedLearningSystem:
         else:
             self.global_model = avg_weights
 
-        logger.info(f"Aggregated models from {len(weights)} clients using {self.algorithm} in round {self.round}")
-            
         self.round += 1
-        
-        # Calcola e restituisci metriche di aggregazione
+
+        # --- Compute aggregated accuracy / loss from client metrics ---
+        round_acc = 0.0
+        round_loss = 0.0
+        if client_metrics:
+            for cid, nw in zip(client_updates.keys(), normalized_weights):
+                cm = client_metrics.get(cid, {})
+                round_acc += cm.get("accuracy", 0.0) * nw
+                round_loss += cm.get("loss", 0.0) * nw
+        elif not HAS_TF:
+            # Evaluate global model on a shared validation set via forward pass
+            val_x, val_y = generate_client_data("__global_val__", n_samples=200, seed=42)
+            W1, b1, W2, b2, W3, b3 = self.global_model
+            a1 = _relu(val_x @ W1 + b1)
+            a2 = _relu(a1 @ W2 + b2)
+            a3 = _sigmoid(a2 @ W3 + b3)
+            round_loss = _binary_cross_entropy(a3, val_y)
+            round_acc = float(np.mean((a3 >= 0.5).astype(np.float32) == val_y))
+
+        self.metrics["accuracy"].append(round(round_acc, 4))
+        self.metrics["loss"].append(round(round_loss, 4))
+        self.metrics["communication_overhead"].append(len(client_updates))
+
+        logger.info(
+            f"Round {self.round} aggregated {len(weights)} clients | "
+            f"acc={round_acc:.4f} loss={round_loss:.4f}"
+        )
+
         metrics = {
             "round": self.round,
             "clients_participated": len(client_updates),
-            "total_clients": len(self.clients)
+            "total_clients": len(self.clients),
+            "accuracy": round_acc,
+            "loss": round_loss,
         }
-        
+
         return metrics
     
     def _weighted_average(self, weights_list: List[List[np.ndarray]], weight_factors: List[float]) -> List[np.ndarray]:

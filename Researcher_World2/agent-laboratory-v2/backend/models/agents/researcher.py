@@ -332,8 +332,8 @@ class ResearcherAgent(Agent):
         if hasattr(self.model, 'grid') and self.model.grid:
             try:
                 self.model.grid.move_agent(self, tuple(next_tile))
-            except Exception:
-                pass  # Grid may not support this position
+            except Exception as e:
+                logger.debug(f"grid.move_agent failed: {e}")
 
         # Add persona event to new tile
         event = self.scratch.get_curr_event_and_desc()
