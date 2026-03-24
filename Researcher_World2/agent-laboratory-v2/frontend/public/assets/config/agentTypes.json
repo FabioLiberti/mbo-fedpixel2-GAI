@@ -1,7 +1,7 @@
 {
     "professor": {
-      "title": "Professor",
-      "description": "Esperto accademico che supervisiona le ricerche sul federated learning",
+      "title": "Professoressa",
+      "description": "Accademica esperta che supervisiona le ricerche sul federated learning",
       "skills": [
         "FL Systems Architecture",
         "Theoretical Guarantees",
@@ -13,8 +13,22 @@
       "spritesheetPath": "assets/characters/professor_spritesheet.png",
       "iconPath": "assets/sprites/1024x1536/_Professor3.png"
     },
+    "professor_senior": {
+      "title": "Professore Senior",
+      "description": "Professore anziano con vasta esperienza accademica e di ricerca",
+      "skills": [
+        "Research Leadership",
+        "Grant Management",
+        "Academic Mentoring"
+      ],
+      "role": "Dirige il dipartimento e coordina i progetti di ricerca inter-laboratorio",
+      "background": "Decenni di esperienza in ricerca e insegnamento universitario",
+      "color": "#0D47A1",
+      "spritesheetPath": "assets/characters/professor_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_Professor2.png"
+    },
     "researcher": {
-      "title": "Researcher",
+      "title": "Researcher Post-Doc",
       "description": "Ricercatore post-doc che conduce esperimenti e sviluppa algoritmi",
       "skills": [
         "Secure Aggregation",
@@ -41,6 +55,20 @@
       "spritesheetPath": "assets/characters/student_spritesheet.png",
       "iconPath": "assets/sprites/1024x1536/_PHDStudent.png"
     },
+    "student_postdoc": {
+      "title": "PhD Student",
+      "description": "Studente di dottorato con focus su implementazione pratica di algoritmi FL",
+      "skills": [
+        "Algorithm Implementation",
+        "Data Preprocessing",
+        "Experimental Design"
+      ],
+      "role": "Implementa e testa prototipi di algoritmi federati",
+      "background": "Background in informatica con specializzazione in sistemi distribuiti",
+      "color": "#E65100",
+      "spritesheetPath": "assets/characters/student_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_PostDoc.png"
+    },
     "doctor": {
       "title": "Medical Doctor",
       "description": "Medico specializzato nell'applicazione del federated learning in contesti clinici",
@@ -52,7 +80,8 @@
       "role": "Fornisce esperienza clinica e valida i modelli da una prospettiva medica",
       "background": "Formazione medica con specializzazione in informatica medica",
       "color": "#8E24AA",
-      "spritesheetPath": "assets/characters/doctor_spritesheet.png"
+      "spritesheetPath": "assets/characters/doctor_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_Dottore.png"
     },
     "engineer": {
       "title": "ML Engineer",
@@ -67,6 +96,20 @@
       "color": "#F44336",
       "spritesheetPath": "assets/characters/engineer_spritesheet.png",
       "iconPath": "assets/sprites/1024x1536/_MLEngineer.png"
+    },
+    "sw_engineer": {
+      "title": "SW Engineer",
+      "description": "Ingegnere software specializzata nello sviluppo di piattaforme FL",
+      "skills": [
+        "Platform Development",
+        "API Design",
+        "Cloud Infrastructure"
+      ],
+      "role": "Sviluppa e mantiene l'infrastruttura software per il federated learning",
+      "background": "Esperienza nello sviluppo di sistemi distribuiti e piattaforme cloud",
+      "color": "#26A69A",
+      "spritesheetPath": "assets/characters/engineer_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_SWEngineer.png"
     },
     "privacy_specialist": {
       "title": "Privacy Specialist",
