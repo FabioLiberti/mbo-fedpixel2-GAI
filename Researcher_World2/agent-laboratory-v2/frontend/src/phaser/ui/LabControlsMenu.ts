@@ -282,19 +282,19 @@ export class LabControlsMenu {
   private toggleAgentsLegend(): void {
     try {
       if (this.scene.agentsLegend) {
-        const legends = this.scene.children.getAll().filter(
-          (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
-        );
-        legends.forEach((el: Phaser.GameObjects.GameObject) => this.scene.children.remove(el));
-        this.scene.children.remove(this.scene.agentsLegend);
+        // Chiudi solo la legenda
+        if ((this.scene.agentsLegend as any).getContainer) {
+          (this.scene.agentsLegend as any).getContainer().destroy();
+        }
         this.scene.agentsLegend = null;
       } else {
+        this.closeAllSubPanels();
+        this.closePanel();
         integrateAgentsLegend(this.scene as any);
-        // Hide auto-generated titles
-        const titles = this.scene.children.getAll().filter(
-          (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
-        );
-        titles.forEach((el: Phaser.GameObjects.GameObject) => (el as any).setVisible?.(false));
+        // Apri espansa
+        if (this.scene.agentsLegend && (this.scene.agentsLegend as any).expand) {
+          (this.scene.agentsLegend as any).expand();
+        }
       }
     } catch (err) { console.error('[LabControlsMenu] toggleAgentsLegend:', err); }
   }
@@ -308,6 +308,7 @@ export class LabControlsMenu {
 
   /** Apre/chiude il pannello React LLMDialogPanel via DOM event */
   private toggleLLMDialogPanel(): void {
+    this.closeAllSubPanels();
     this.closePanel();
     document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: {} }));
   }
@@ -320,19 +321,52 @@ export class LabControlsMenu {
     }
   }
 
+  /** Chiude tutti i sotto-pannelli aperti a sinistra */
+  private closeAllSubPanels(): void {
+    // Chiudi AgentsLegend
+    if (this.scene.agentsLegend) {
+      const legends = this.scene.children.getAll().filter(
+        (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
+      );
+      legends.forEach((el: Phaser.GameObjects.GameObject) => this.scene.children.remove(el));
+      if ((this.scene.agentsLegend as any).getContainer) {
+        (this.scene.agentsLegend as any).getContainer().destroy();
+      }
+      this.scene.agentsLegend = null;
+    }
+    // Chiudi LLM Dashboard
+    if (this.llmControlPanel) {
+      this.llmControlPanel.hide();
+      this.llmControlPanel.destroy();
+      this.llmControlPanel = null;
+    }
+    // Chiudi SimpleLLMPanel
+    if (this.simpleLLMPanel) {
+      this.simpleLLMPanel.destroy();
+      this.simpleLLMPanel = null;
+    }
+    // Chiudi LLM Dialog Panel (React)
+    const llmPanelEl = document.getElementById('llm-dialog-panel');
+    if (llmPanelEl && llmPanelEl.style.display !== 'none') {
+      document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: {} }));
+    }
+  }
+
   private toggleLLMPanel(): void {
     try {
       if (this.llmControlPanel) {
         this.llmControlPanel.hide();
-        setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
+        this.llmControlPanel.destroy();
+        this.llmControlPanel = null;
         return;
       }
+      this.closeAllSubPanels();
       this.closePanel();
-      // Posiziona a sinistra, lontano dal pannello Controlli Lab (destra)
       const x = 20;
       this.llmControlPanel = new LLMControlPanel(this.scene, x, 50, () => {
         this.llmControlPanel?.hide();
-        setTimeout(() => { this.llmControlPanel?.destroy(); this.llmControlPanel = null; }, 300);
+        this.llmControlPanel?.destroy();
+        this.llmControlPanel = null;
       });
       if (this.dialogController) this.llmControlPanel.setDialogController(this.dialogController);
     } catch (err) { console.error('[LabControlsMenu] toggleLLMPanel:', err); }
@@ -341,11 +375,12 @@ export class LabControlsMenu {
   private toggleSimpleLLMPanel(): void {
     try {
       if (this.simpleLLMPanel) {
-        this.simpleLLMPanel.toggle();
+        this.simpleLLMPanel.destroy();
+        this.simpleLLMPanel = null;
         return;
       }
+      this.closeAllSubPanels();
       this.closePanel();
-      // Posiziona a sinistra, lontano dal pannello Controlli Lab (destra)
       const x = 20;
       this.simpleLLMPanel = new SimpleLLMPanel(this.scene, x, 120);
       if (this.dialogController) this.simpleLLMPanel.setDialogController(this.dialogController);

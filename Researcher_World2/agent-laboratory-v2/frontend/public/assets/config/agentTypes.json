@@ -62,7 +62,8 @@
       "role": "Trasforma gli algoritmi teorici in implementazioni efficienti",
       "background": "Esperienza nell'ingegneria del software e machine learning applicato",
       "color": "#F44336",
-      "spritesheetPath": "assets/characters/engineer_spritesheet.png"
+      "spritesheetPath": "assets/characters/engineer_spritesheet.png",
+      "iconPath": "assets/sprites/1024x1536/_MLEngineer.png"
     },
     "privacy_specialist": {
       "title": "Privacy Specialist",
@@ -75,6 +76,7 @@
       "role": "Garantisce che i protocolli FL rispettino gli standard di privacy",
       "background": "Formazione in crittografia e privacy computazionale",
       "color": "#607D8B",
-      "spritesheetPath": "assets/characters/privacy_specialist.png"
+      "spritesheetPath": "assets/characters/privacy_specialist.png",
+      "iconPath": "assets/sprites/1024x1536/_Manager.png"
     }
   }

@@ -42,15 +42,9 @@ export class AgentsLegend {
     
     // Inizializza la grafica
     this.initializeGraphics();
-    
-    // Aggiungi i tipi di agenti
-    this.createAgentItems();
-    
-    // Per default inizia collassato
-    this.collapse();
-    
-    // Mostra la legenda
-    this.show();
+
+    // Carica icone grandi se disponibili, poi crea gli item
+    this.loadIconsAndCreateItems();
   }
   
   /**
@@ -105,6 +99,35 @@ export class AgentsLegend {
   }
   
   /**
+   * Carica le icone grandi per i tipi che hanno iconPath, poi crea gli item
+   */
+  private loadIconsAndCreateItems(): void {
+    const toLoad: { key: string; path: string }[] = [];
+    Object.entries(this.agentTypes).forEach(([agentType, info]) => {
+      if (info.iconPath) {
+        const iconKey = `icon_${agentType}`;
+        if (!this.scene.textures.exists(iconKey)) {
+          toLoad.push({ key: iconKey, path: info.iconPath });
+        }
+      }
+    });
+
+    if (toLoad.length > 0) {
+      toLoad.forEach(({ key, path }) => this.scene.load.image(key, path));
+      this.scene.load.once('complete', () => {
+        this.createAgentItems();
+        this.collapse();
+        this.show();
+      });
+      this.scene.load.start();
+    } else {
+      this.createAgentItems();
+      this.collapse();
+      this.show();
+    }
+  }
+
+  /**
    * Crea gli item per ogni tipo di agente
    */
   private createAgentItems(): void {
@@ -134,26 +157,27 @@ export class AgentsLegend {
       
       itemContainer.add(itemBg);
       
-      // Sprite dell'agente
-      let agentSprite: Phaser.GameObjects.Sprite;
-      
-      // Verifica se la texture esiste
-      if (this.scene.textures.exists(agentType)) {
-        agentSprite = this.scene.add.sprite(this.padding + 16, this.itemHeight / 2, agentType, 0);
+      // Icona dell'agente
+      const iconKey = `icon_${agentType}`;
+      if (info.iconPath && this.scene.textures.exists(iconKey)) {
+        // Usa l'icona grande scalata
+        const iconImage = this.scene.add.image(this.padding + 16, this.itemHeight / 2, iconKey);
+        const targetH = this.itemHeight - 8;
+        const scaleY = targetH / iconImage.height;
+        const scaleX = scaleY; // mantieni proporzioni
+        iconImage.setScale(scaleX, scaleY);
+        itemContainer.add(iconImage);
+      } else if (this.scene.textures.exists(agentType)) {
+        const agentSprite = this.scene.add.sprite(this.padding + 16, this.itemHeight / 2, agentType, 0);
         agentSprite.setScale(1.2);
+        itemContainer.add(agentSprite);
       } else {
-        // Crea un placeholder colorato se la texture non esiste
+        // Placeholder colorato
         const placeholderGraphics = this.scene.add.graphics();
         placeholderGraphics.fillStyle(bgColor, 0.8);
         placeholderGraphics.fillCircle(this.padding + 16, this.itemHeight / 2, 16);
         itemContainer.add(placeholderGraphics);
-        
-        // Mettiamo uno sprite vuoto che useremo solo per l'interattività
-        agentSprite = this.scene.add.sprite(this.padding + 16, this.itemHeight / 2, '');
-        agentSprite.setVisible(false);
       }
-      
-      itemContainer.add(agentSprite);
       
       // Testo con il titolo dell'agente
       const titleText = this.scene.add.text(

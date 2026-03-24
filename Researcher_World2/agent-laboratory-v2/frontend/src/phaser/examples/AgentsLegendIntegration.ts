@@ -21,34 +21,14 @@ export function integrateAgentsLegend(scene: Phaser.Scene): void {
       // Carica il file di configurazione degli agenti
       const agentTypes: Record<string, AgentTypeInfo> = await AgentsLegend.loadAgentTypesConfig(scene);
       
-      // Crea la legenda in alto a destra
-      // Utilizziamo esplicitamente legend per evitare warning
+      // Crea la legenda a sinistra (a destra c'è Controlli Lab)
       const legend = new AgentsLegend(
-        scene, 
-        scene.cameras.main.width - 220, 
-        20, 
+        scene,
+        20,
+        60,
         agentTypes
       );
-      
-      // Opzionalmente, aggiungi un pulsante nella UI per toggle della legenda
-      const toggleButton = scene.add.text(
-        scene.cameras.main.width - 100, 
-        scene.cameras.main.height - 40, 
-        'Legenda', 
-        { 
-          fontSize: '14px',
-          backgroundColor: '#3f51b5',
-          padding: { left: 10, right: 10, top: 5, bottom: 5 }
-        }
-      );
-      toggleButton.setInteractive({ useHandCursor: true });
-      toggleButton.on('pointerdown', () => {
-        // Utilizziamo legend per il toggle
-        legend.toggleVisibility();
-      });
-      toggleButton.setScrollFactor(0);
-      toggleButton.setDepth(100);
-      
+
       console.log('Agents legend created successfully');
       
       // Esporti legend come proprietà della scena per usarlo altrove

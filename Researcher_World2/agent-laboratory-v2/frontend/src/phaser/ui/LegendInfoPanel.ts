@@ -13,6 +13,7 @@ export interface AgentTypeInfo {
   background: string;
   color: string;
   spritesheetPath: string;
+  iconPath?: string;
 }
 
 /**
