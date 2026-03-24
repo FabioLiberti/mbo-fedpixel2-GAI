@@ -6,25 +6,26 @@ import { MercatorumLabScene } from './MercatorumLabScene';
 // Precarica tutti gli asset necessari
 export function preloadAssets(scene: MercatorumLabScene): void {
   try {
-    // Carica gli sprite dei personaggi
-    scene.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', { 
-      frameWidth: 32, 
-      frameHeight: 48 
+    // Carica gli sprite dei personaggi (Mercatorum: professor, privacy_specialist, researcher, student_postdoc)
+    scene.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', {
+      frameWidth: 32,
+      frameHeight: 48
     });
-    
-    scene.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { 
-      frameWidth: 32, 
-      frameHeight: 48 
+
+    scene.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
+      frameWidth: 32,
+      frameHeight: 48
     });
-    
-    scene.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { 
-      frameWidth: 32, 
-      frameHeight: 48 
+
+    scene.load.spritesheet('privacy_specialist', 'assets/characters/privacy_specialist.png', {
+      frameWidth: 32,
+      frameHeight: 48
     });
-    
-    scene.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', { 
-      frameWidth: 32, 
-      frameHeight: 48 
+
+    // student_postdoc usa la stessa spritesheet di student
+    scene.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png', {
+      frameWidth: 32,
+      frameHeight: 48
     });
     
     // Debug events for all assets
@@ -120,7 +121,7 @@ export function setupTextures(scene: MercatorumLabScene): void {
 // Crea nuove texture placeholder direttamente nel formato corretto
 export function createMissingTextures(scene: MercatorumLabScene): void {
   try {
-    const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+    const characterTypes = ['professor', 'researcher', 'privacy_specialist', 'student_postdoc'];
     
     characterTypes.forEach(type => {
       if (!scene.textures.exists(type)) {
@@ -141,14 +142,14 @@ export function createImprovedPlaceholders(scene: MercatorumLabScene): void {
     console.log('Creating improved placeholders for missing textures');
     
     // Lista dei tipi di personaggi che richiedono placeholder
-    const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+    const characterTypes = ['professor', 'researcher', 'privacy_specialist', 'student_postdoc'];
     
     // Definizione dei colori per tipo
-    const typeColors = {
-      professor: { main: '#d2691e', accent: '#8b4513' },  // Terracotta
-      researcher: { main: '#1a365d', accent: '#0c1b2e' }, // Blu navy
-      student: { main: '#f5f5dc', accent: '#dcdcaa' },    // Crema
-      doctor: { main: '#228b22', accent: '#006400' }      // Verde
+    const typeColors: Record<string, { main: string; accent: string }> = {
+      professor: { main: '#1E88E5', accent: '#1565C0' },
+      researcher: { main: '#43A047', accent: '#2E7D32' },
+      privacy_specialist: { main: '#607D8B', accent: '#455A64' },
+      student_postdoc: { main: '#E65100', accent: '#BF360C' }
     };
     
     // Per ogni tipo, crea una texture placeholder migliorata
@@ -284,14 +285,14 @@ export function createDirectPlaceholderTexture(
     if (!ctx) return;
     
     // Colori
-    const colors = {
-      professor: '#d2691e',  // Terracotta
-      researcher: '#1a365d', // Blu navy
-      student: '#f5f5dc',    // Crema
-      doctor: '#228b22'      // Verde
+    const colors: Record<string, string> = {
+      professor: '#1E88E5',
+      researcher: '#43A047',
+      privacy_specialist: '#607D8B',
+      student_postdoc: '#E65100'
     };
-    
-    const color = colors[key as keyof typeof colors] || '#FF00FF';
+
+    const color = colors[key] || '#FF00FF';
     
     // Disegna 4 frame diversi
     for (let i = 0; i < 4; i++) {
@@ -368,7 +369,7 @@ function createCharacterAnimations(scene: MercatorumLabScene): void {
   try {
     console.log('Creating animations for all character types');
     
-    const characters = ['professor', 'researcher', 'student', 'doctor'];
+    const characters = ['professor', 'researcher', 'privacy_specialist', 'student_postdoc'];
     
     characters.forEach(char => {
       // Verifica se la texture esiste
@@ -453,7 +454,7 @@ export function createAllCharacterAnimations(scene: MercatorumLabScene): void {
   try {
     console.log('Creating animations for all character types');
     
-    const characters = ['professor', 'researcher', 'student', 'doctor'];
+    const characters = ['professor', 'researcher', 'privacy_specialist', 'student_postdoc'];
     
     characters.forEach(char => {
       // Verifica se la texture esiste e ha frame
@@ -536,7 +537,7 @@ export function runTextureDebug(scene: MercatorumLabScene): void {
     
     // Debug dettagliato delle texture che ci interessano
     const textureKeysToDebug = [
-      'professor', 'researcher', 'student', 'doctor'
+      'professor', 'researcher', 'privacy_specialist', 'student_postdoc'
     ];
     
     textureKeysToDebug.forEach(key => {

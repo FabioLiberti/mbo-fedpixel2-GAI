@@ -17,8 +17,8 @@ const AGENT_CONFIG = {
   blekinge: {
     agents: [
       {
-        type: 'professor',
-        name: 'Anna Lindberg',
+        type: 'professor_senior',
+        name: 'Lars Lindberg',
         position: { x: 150, y: 200 },
         specialization: 'fl_architecture'
       },
@@ -29,10 +29,16 @@ const AGENT_CONFIG = {
         specialization: 'communication_efficiency'
       },
       {
-        type: 'researcher',
+        type: 'sw_engineer',
         name: 'Sara Nilsson',
         position: { x: 200, y: 150 },
-        specialization: 'non_iid_data'
+        specialization: 'platform_development'
+      },
+      {
+        type: 'engineer',
+        name: 'Nils Eriksson',
+        position: { x: 350, y: 180 },
+        specialization: 'model_optimization'
       }
     ]
   }
@@ -123,34 +129,24 @@ export class BlekingeLabScene extends BaseScene {
         }
       });
       
-      // Percorso corretto identificato: assets/characters/*_spritesheet.png
-      this.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', { 
-        frameWidth: 32, 
-        frameHeight: 48 
-      });
-      
-      this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { 
-        frameWidth: 32, 
-        frameHeight: 48 
-      });
-      
-      this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { 
-        frameWidth: 32, 
-        frameHeight: 48 
-      });
-      
-      // Aggiungi questi eventi di debug:
-      this.load.on('filecomplete-spritesheet-student', () => {
-          console.log("Student spritesheet caricato con successo!");
-      });
-    
-      this.load.on('loaderror', (file: any) => {
-          if (file.key === 'student') {
-          console.error("Errore caricamento spritesheet studente:", file.url);
-          }
+      // Blekinge: professor_senior, student, sw_engineer, engineer
+      this.load.spritesheet('professor_senior', 'assets/characters/professor_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
       });
 
-      this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
+      this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
+      });
+
+      // sw_engineer e engineer usano la stessa spritesheet
+      this.load.spritesheet('sw_engineer', 'assets/characters/engineer_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
+      });
+
+      this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', {
         frameWidth: 32,
         frameHeight: 48
       });
@@ -480,7 +476,7 @@ export class BlekingeLabScene extends BaseScene {
    */
   private createMissingTextures(): void {
     try {
-      const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+      const characterTypes = ['professor_senior', 'student', 'sw_engineer', 'engineer'];
       
       characterTypes.forEach(type => {
         if (!this.textures.exists(type)) {
@@ -640,14 +636,14 @@ export class BlekingeLabScene extends BaseScene {
       console.log('Creating improved placeholders for missing textures');
       
       // Lista dei tipi di personaggi che richiedono placeholder
-      const characterTypes = ['professor', 'researcher', 'student', 'doctor'];
+      const characterTypes = ['professor_senior', 'student', 'sw_engineer', 'engineer'];
       
       // Definizione dei colori per tipo
-      const typeColors = {
-        professor: { main: '#1E88E5', accent: '#0D47A1' },  // Blu
-        researcher: { main: '#43A047', accent: '#1B5E20' }, // Verde
-        student: { main: '#FB8C00', accent: '#E65100' },    // Arancione
-        doctor: { main: '#8E24AA', accent: '#4A148C' }      // Viola
+      const typeColors: Record<string, { main: string; accent: string }> = {
+        professor_senior: { main: '#0D47A1', accent: '#0A3780' },
+        student: { main: '#FB8C00', accent: '#E65100' },
+        sw_engineer: { main: '#26A69A', accent: '#00897B' },
+        engineer: { main: '#F44336', accent: '#C62828' }
       };
       
       // Per ogni tipo, crea una texture placeholder migliorata
@@ -780,14 +776,14 @@ export class BlekingeLabScene extends BaseScene {
       if (!ctx) return;
       
       // Colori
-      const colors = {
-        professor: '#FF5722',
-        researcher: '#4CAF50',
-        student: '#2196F3',
-        doctor: '#9C27B0'
+      const colors: Record<string, string> = {
+        professor_senior: '#0D47A1',
+        student: '#FB8C00',
+        sw_engineer: '#26A69A',
+        engineer: '#F44336'
       };
-      
-      const color = colors[key as keyof typeof colors] || '#FF00FF';
+
+      const color = colors[key] || '#FF00FF';
       
       // Disegna 4 frame diversi
       for (let i = 0; i < 4; i++) {
@@ -854,7 +850,7 @@ export class BlekingeLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['professor', 'researcher', 'student', 'doctor'];
+      const characters = ['professor_senior', 'student', 'sw_engineer', 'engineer'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste
@@ -935,7 +931,7 @@ export class BlekingeLabScene extends BaseScene {
       
       // Debug dettagliato delle texture che ci interessano
       const textureKeysToDebug = [
-        'professor', 'researcher', 'student', 'doctor'
+        'professor_senior', 'student', 'sw_engineer', 'engineer'
       ];
       
       textureKeysToDebug.forEach(key => {
@@ -964,7 +960,7 @@ export class BlekingeLabScene extends BaseScene {
       this.rawSprites = [];
       
       // Texture da testare
-      const texturesToTest = ['professor', 'researcher', 'student', 'doctor'];
+      const texturesToTest = ['professor_senior', 'student', 'sw_engineer', 'engineer'];
       
       // Posizione iniziale
       let x = 400;
@@ -1112,7 +1108,7 @@ export class BlekingeLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['professor', 'researcher', 'student', 'doctor'];
+      const characters = ['professor_senior', 'student', 'sw_engineer', 'engineer'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste e ha frame

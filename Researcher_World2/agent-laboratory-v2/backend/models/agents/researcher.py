@@ -61,6 +61,14 @@ class Specialization(Enum):
     FL_ARCHITECTURE = "fl_architecture"
     THEORETICAL_GUARANTEES = "theoretical_guarantees"
     PRIVACY_ECONOMICS = "privacy_economics"
+    # Engineer
+    MODEL_OPTIMIZATION = "model_optimization"
+    PLATFORM_DEVELOPMENT = "platform_development"
+    SYSTEMS_INTEGRATION = "systems_integration"
+    # Doctor
+    CLINICAL_DATA = "clinical_data"
+    # Privacy Specialist
+    COMPLIANCE_VERIFICATION = "compliance_verification"
 
 
 class FLRole(Enum):

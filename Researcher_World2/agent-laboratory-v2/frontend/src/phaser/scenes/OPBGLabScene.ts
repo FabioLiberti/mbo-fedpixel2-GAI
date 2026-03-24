@@ -16,22 +16,28 @@ const AGENT_CONFIG = {
   opbg: {
     agents: [
       {
-        type: 'researcher',
-        name: 'Giulia Romano',
-        position: { x: 150, y: 200 },
-        specialization: 'privacy_engineering'
-      },
-      {
         type: 'doctor',
         name: 'Matteo Ferri',
         position: { x: 300, y: 250 },
-        specialization: 'medical_imaging'
+        specialization: 'clinical_data'
       },
       {
-        type: 'student',
-        name: 'Chiara Mancini',
+        type: 'student_postdoc',
+        name: 'Marco Romano',
+        position: { x: 150, y: 200 },
+        specialization: 'data_science'
+      },
+      {
+        type: 'engineer',
+        name: 'Lorenzo Mancini',
         position: { x: 200, y: 150 },
-        specialization: 'bias_fairness'
+        specialization: 'model_optimization'
+      },
+      {
+        type: 'researcher',
+        name: 'Giulia Conti',
+        position: { x: 250, y: 180 },
+        specialization: 'privacy_engineering'
       }
     ]
   }
@@ -116,31 +122,25 @@ export class OPBGLabScene extends BaseScene {
         this.updateDebugInfo(`Error loading: ${file.key}`);
       });
       
-      // Carica gli sprite per OPBG (researcher, doctor, student)
-      this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
-        frameWidth: 32,
-        frameHeight: 48
-      });
-
+      // OPBG: doctor, student_postdoc, engineer, researcher
       this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
         frameWidth: 32,
         frameHeight: 48
       });
 
-      this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', {
+      this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png', {
         frameWidth: 32,
         frameHeight: 48
       });
-      
-      // Aggiungi questi eventi di debug:
-      this.load.on('filecomplete-spritesheet-doctor', () => {
-          console.log("Doctor spritesheet caricato con successo!");
+
+      this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
       });
-    
-      this.load.on('loaderror', (file: any) => {
-          if (file.key === 'doctor') {
-            console.error("Errore caricamento spritesheet doctor:", file.url);
-          }
+
+      this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
+        frameWidth: 32,
+        frameHeight: 48
       });
 
       // Carica risorse specifiche per questo laboratorio
@@ -457,7 +457,7 @@ export class OPBGLabScene extends BaseScene {
    */
   private createMissingTextures(): void {
     try {
-      const characterTypes = ['doctor', 'researcher', 'student', 'professor'];
+      const characterTypes = ['doctor', 'student_postdoc', 'engineer', 'researcher'];
       
       characterTypes.forEach(type => {
         if (!this.textures.exists(type)) {
@@ -480,14 +480,14 @@ export class OPBGLabScene extends BaseScene {
       console.log('Creating improved placeholders for missing textures');
       
       // Lista dei tipi di personaggi che richiedono placeholder
-      const characterTypes = ['doctor', 'researcher', 'student', 'professor'];
+      const characterTypes = ['doctor', 'student_postdoc', 'engineer', 'researcher'];
       
       // Definizione dei colori per tipo
-      const typeColors = {
-        doctor: { main: '#00b8d4', accent: '#0089a1' },       // Verde acqua
-        student: { main: '#ffb6c1', accent: '#cc9299' },      // Rosa pallido
-        professor: { main: '#4fc7ff', accent: '#3a95bf' },    // Blu cielo
-        researcher: { main: '#4fc3f7', accent: '#0093c4' }    // Azzurro
+      const typeColors: Record<string, { main: string; accent: string }> = {
+        doctor: { main: '#8E24AA', accent: '#6A1B9A' },
+        student_postdoc: { main: '#E65100', accent: '#BF360C' },
+        engineer: { main: '#F44336', accent: '#C62828' },
+        researcher: { main: '#43A047', accent: '#2E7D32' }
       };
       
       // Per ogni tipo, crea una texture placeholder migliorata
@@ -643,14 +643,14 @@ export class OPBGLabScene extends BaseScene {
       if (!ctx) return;
       
       // Colori più vivaci per ambiente pediatrico
-      const colors = {
-        doctor: '#00b8d4',    // Verde acqua
-        student: '#ffb6c1',   // Rosa pallido
-        professor: '#4fc7ff', // Blu cielo
-        researcher: '#4fc3f7' // Azzurro
+      const colors: Record<string, string> = {
+        doctor: '#8E24AA',
+        student_postdoc: '#E65100',
+        engineer: '#F44336',
+        researcher: '#43A047'
       };
-      
-      const color = colors[key as keyof typeof colors] || '#FF00FF';
+
+      const color = colors[key] || '#FF00FF';
       
       // Disegna 4 frame diversi
       for (let i = 0; i < 4; i++) {
@@ -717,7 +717,7 @@ export class OPBGLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['doctor', 'researcher', 'student', 'professor'];
+      const characters = ['doctor', 'student_postdoc', 'engineer', 'researcher'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste
@@ -798,7 +798,7 @@ export class OPBGLabScene extends BaseScene {
       
       // Debug dettagliato delle texture che ci interessano
       const textureKeysToDebug = [
-        'doctor', 'researcher', 'student', 'professor'
+        'doctor', 'student_postdoc', 'engineer', 'researcher'
       ];
       
       textureKeysToDebug.forEach(key => {
@@ -822,7 +822,7 @@ export class OPBGLabScene extends BaseScene {
     try {
       console.log('Creating animations for all character types');
       
-      const characters = ['doctor', 'researcher', 'student', 'professor'];
+      const characters = ['doctor', 'student_postdoc', 'engineer', 'researcher'];
       
       characters.forEach(char => {
         // Verifica se la texture esiste e ha frame

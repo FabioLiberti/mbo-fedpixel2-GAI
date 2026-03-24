@@ -73,27 +73,31 @@ export const MERCATORUM_THEME: LabTheme = {
 };
 
 // Configurazione degli agenti per Mercatorum (allineata al backend PERSONA_REGISTRY)
-// Backend roles: Marco_Rossi=phd_student, Elena_Conti=researcher, Luca_Bianchi=professor
-// Frontend sprite types: professor, researcher, student, doctor
 export const MERCATORUM_AGENT_CONFIG: MercatorumLabConfig = {
   agents: [
     {
-      type: 'student',
-      name: 'Marco Rossi',
-      position: { x: 200, y: 150 },
-      specialization: 'data_science'
+      type: 'professor',
+      name: 'Elena Conti',
+      position: { x: 150, y: 200 },
+      specialization: 'privacy_economics'
+    },
+    {
+      type: 'privacy_specialist',
+      name: 'Luca Bianchi',
+      position: { x: 300, y: 250 },
+      specialization: 'compliance_verification'
     },
     {
       type: 'researcher',
-      name: 'Elena Conti',
-      position: { x: 150, y: 200 },
+      name: 'Marco Rossi',
+      position: { x: 200, y: 150 },
       specialization: 'secure_aggregation'
     },
     {
-      type: 'professor',
-      name: 'Luca Bianchi',
-      position: { x: 300, y: 250 },
-      specialization: 'optimization_theory'
+      type: 'student_postdoc',
+      name: 'Davide Greco',
+      position: { x: 350, y: 180 },
+      specialization: 'data_science'
     }
   ]
 };

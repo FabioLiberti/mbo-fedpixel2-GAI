@@ -26,27 +26,35 @@ PERSONAS_BASE = os.path.join(os.path.dirname(__file__), "..", "config", "persona
 # Persona definitions: lab_id -> list of (persona_name, role, specialization_enum)
 PERSONA_REGISTRY = {
     "mercatorum": [
-        ("Marco_Rossi",  "phd_student", Specialization.DATA_SCIENCE),
-        ("Elena_Conti",  "researcher",  Specialization.SECURE_AGGREGATION),
-        ("Luca_Bianchi", "professor",   Specialization.OPTIMIZATION_THEORY),
+        ("Elena_Conti",    "professor",           Specialization.PRIVACY_ECONOMICS),
+        ("Luca_Bianchi",   "privacy_specialist",  Specialization.COMPLIANCE_VERIFICATION),
+        ("Marco_Rossi",    "researcher",           Specialization.SECURE_AGGREGATION),
+        ("Davide_Greco",   "phd_student",          Specialization.DATA_SCIENCE),
     ],
     "blekinge": [
-        ("Anna_Lindberg",   "professor",   Specialization.FL_ARCHITECTURE),
-        ("Erik_Johansson",  "phd_student", Specialization.COMMUNICATION_EFFICIENCY),
-        ("Sara_Nilsson",    "researcher",  Specialization.NON_IID_DATA),
+        ("Lars_Lindberg",   "professor_senior",  Specialization.FL_ARCHITECTURE),
+        ("Erik_Johansson",  "phd_student",       Specialization.COMMUNICATION_EFFICIENCY),
+        ("Sara_Nilsson",    "sw_engineer",       Specialization.PLATFORM_DEVELOPMENT),
+        ("Nils_Eriksson",   "engineer",          Specialization.MODEL_OPTIMIZATION),
     ],
     "opbg": [
-        ("Giulia_Romano",  "researcher",  Specialization.PRIVACY_ENGINEERING),
-        ("Matteo_Ferri",   "researcher",  Specialization.DATA_SCIENCE),
-        ("Chiara_Mancini", "phd_student", Specialization.DATA_SCIENCE),
+        ("Matteo_Ferri",     "doctor",           Specialization.CLINICAL_DATA),
+        ("Marco_Romano",     "phd_student",      Specialization.DATA_SCIENCE),
+        ("Lorenzo_Mancini",  "engineer",         Specialization.MODEL_OPTIMIZATION),
+        ("Giulia_Conti",     "researcher",       Specialization.PRIVACY_ENGINEERING),
     ],
 }
 
 # Role-based default parameters
 ROLE_DEFAULTS = {
-    "phd_student": {"speed": 1.2, "social_tendency": 0.7, "research_efficiency": 0.5},
-    "researcher":  {"speed": 1.0, "social_tendency": 0.5, "research_efficiency": 0.8},
-    "professor":   {"speed": 0.8, "social_tendency": 0.6, "research_efficiency": 1.0},
+    "phd_student":          {"speed": 1.2, "social_tendency": 0.7, "research_efficiency": 0.5},
+    "researcher":           {"speed": 1.0, "social_tendency": 0.5, "research_efficiency": 0.8},
+    "professor":            {"speed": 0.8, "social_tendency": 0.6, "research_efficiency": 1.0},
+    "professor_senior":     {"speed": 0.7, "social_tendency": 0.6, "research_efficiency": 1.0},
+    "doctor":               {"speed": 0.9, "social_tendency": 0.6, "research_efficiency": 0.8},
+    "engineer":             {"speed": 1.0, "social_tendency": 0.4, "research_efficiency": 0.7},
+    "sw_engineer":          {"speed": 1.0, "social_tendency": 0.4, "research_efficiency": 0.7},
+    "privacy_specialist":   {"speed": 0.9, "social_tendency": 0.5, "research_efficiency": 0.8},
 }
 
 
