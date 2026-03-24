@@ -59,6 +59,8 @@ export class LabControlsMenu {
   constructor(scene: ILabControlScene & Phaser.Scene, config: LabControlConfig) {
     this.scene = scene;
     this.config = config;
+    // Chiudi eventuali sotto-pannelli React rimasti aperti da scene precedenti
+    document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: { visible: false } }));
     this.build();
   }
 
@@ -345,11 +347,8 @@ export class LabControlsMenu {
       this.simpleLLMPanel.destroy();
       this.simpleLLMPanel = null;
     }
-    // Chiudi LLM Dialog Panel (React)
-    const llmPanelEl = document.getElementById('llm-dialog-panel');
-    if (llmPanelEl && llmPanelEl.style.display !== 'none') {
-      document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: {} }));
-    }
+    // Chiudi LLM Dialog Panel (React) — forza chiusura esplicita
+    document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: { visible: false } }));
   }
 
   private toggleLLMPanel(): void {

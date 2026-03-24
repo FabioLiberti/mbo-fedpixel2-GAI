@@ -1661,27 +1661,7 @@ private createAgentsFromConfig(): void {
       // Posiziona la camera al centro
       this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
       
-      // Aggiungi controlli di zoom (mousewheel)
-      this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
-        const currentZoom = this.cameras.main.zoom;
-        let newZoom = currentZoom;
-        
-        if (deltaY > 0) {
-          newZoom = Math.max(0.8, currentZoom - 0.1);
-        } else {
-          newZoom = Math.min(2, currentZoom + 0.1);
-        }
-        
-        this.cameras.main.setZoom(newZoom);
-      });
-      
-      // Aggiungi controlli di trascinamento per la camera
-      this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-        if (pointer.isDown) {
-          this.cameras.main.scrollX -= pointer.velocity.x / 10;
-          this.cameras.main.scrollY -= pointer.velocity.y / 10;
-        }
-      });
+      // Zoom e trascinamento disabilitati nelle scene lab
     } catch (error) {
       console.error('Error in setupCamera:', error);
     }

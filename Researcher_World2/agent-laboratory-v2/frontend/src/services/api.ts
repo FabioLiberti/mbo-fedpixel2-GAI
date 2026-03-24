@@ -375,7 +375,7 @@ export const api = {
       console.error('API error:', error);
       // In caso di errore, restituisci un dialogo di fallback
       return {
-        dialog: "Let's discuss this research...",
+        dialog: "Discutiamo di questa ricerca...",
         isLLMGenerated: false
       };
     }
@@ -428,7 +428,7 @@ export const api = {
     } catch (error) {
       console.error('API error:', error);
       return {
-        thinking: "I should consider the implications of this interaction...",
+        thinking: "Devo considerare le implicazioni di questa interazione...",
         isLLMGenerated: false
       };
     }
@@ -462,7 +462,7 @@ export const api = {
     } catch (error) {
       console.error('API error:', error);
       return {
-        decision: "Based on the data, we should proceed with the standard approach.",
+        decision: "In base ai dati, dovremmo procedere con l'approccio standard.",
         isLLMGenerated: false
       };
     }
@@ -496,7 +496,7 @@ export const api = {
     } catch (error) {
       console.error('API error:', error);
       return {
-        plan: "I need to gather more data and analyze the current model performance.",
+        plan: "Devo raccogliere più dati e analizzare le prestazioni del modello attuale.",
         isLLMGenerated: false
       };
     }
@@ -530,7 +530,7 @@ export const api = {
     } catch (error) {
       console.error('API error:', error);
       return {
-        reaction: "This is an interesting development. We should adapt our approach.",
+        reaction: "Questo è uno sviluppo interessante. Dovremmo adattare il nostro approccio.",
         isLLMGenerated: false
       };
     }

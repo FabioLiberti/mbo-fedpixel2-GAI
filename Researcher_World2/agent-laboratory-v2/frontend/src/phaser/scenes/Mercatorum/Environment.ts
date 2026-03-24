@@ -399,27 +399,7 @@ export function setupCamera(scene: IMercatorumLabScene): void {
     // Posiziona la camera al centro
     scene.cameras.main.centerOn(scene.cameras.main.width / 2, scene.cameras.main.height / 2);
     
-    // Aggiungi controlli di zoom (mousewheel)
-    scene.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number) => {
-      const currentZoom = scene.cameras.main.zoom;
-      let newZoom = currentZoom;
-      
-      if (deltaY > 0) {
-        newZoom = Math.max(0.8, currentZoom - 0.1);
-      } else {
-        newZoom = Math.min(2, currentZoom + 0.1);
-      }
-      
-      scene.cameras.main.setZoom(newZoom);
-    });
-    
-    // Aggiungi controlli di trascinamento per la camera
-    scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.isDown) {
-        scene.cameras.main.scrollX -= pointer.velocity.x / 10;
-        scene.cameras.main.scrollY -= pointer.velocity.y / 10;
-      }
-    });
+    // Zoom e trascinamento disabilitati nelle scene lab
   } catch (error) {
     console.error('Error in setupCamera:', error);
   }
