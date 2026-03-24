@@ -60,7 +60,7 @@ export class LegendInfoPanel {
     this.background = this.scene.add.graphics();
     this.container.add(this.background);
     
-    // Crea lo sprite dell'agente (posizione verrà aggiornata quando mostrato)
+    // Immagine agente (sprite o icona grande)
     this.agentSprite = this.scene.add.sprite(this.width / 2, 60, '');
     this.agentSprite.setScale(2);
     this.container.add(this.agentSprite);
@@ -170,32 +170,30 @@ export class LegendInfoPanel {
       this.placeholderCircle = null;
     }
     
-    // Aggiorna lo sprite dell'agente
-    if (this.scene.textures.exists(agentType)) {
-      this.agentSprite.setTexture(agentType);
-      this.agentSprite.setFrame(0); // Usa il primo frame
+    // Aggiorna l'immagine dell'agente — preferisci iconPath (grande) se disponibile
+    const iconKey = `icon_${agentType}`;
+    if (info.iconPath && this.scene.textures.exists(iconKey)) {
+      this.agentSprite.setTexture(iconKey);
       this.agentSprite.setVisible(true);
-      
-      // Avvia un'animazione statica per mostrare l'agente
+      // Scala per adattare l'icona grande (target ~80px altezza)
+      const targetH = 80;
+      const scale = targetH / this.agentSprite.height;
+      this.agentSprite.setScale(scale);
+    } else if (this.scene.textures.exists(agentType)) {
+      this.agentSprite.setTexture(agentType);
+      this.agentSprite.setFrame(0);
+      this.agentSprite.setVisible(true);
+      this.agentSprite.setScale(2);
       if (this.scene.anims.exists(`${agentType}_idle`)) {
         this.agentSprite.play(`${agentType}_idle`);
       }
     } else {
-      console.warn(`Texture for ${agentType} not found`);
-      // Nascondi lo sprite
       this.agentSprite.setVisible(false);
-      
-      // Crea un cerchio colorato come placeholder
-      this.placeholderCircle = this.scene.add.graphics();
-      if (this.placeholderCircle) {
-        this.placeholderCircle.fillStyle(bgColor, 1);
-        this.placeholderCircle.fillCircle(this.width / 2, 60, 30);
-      }
-      
-      // Aggiungi il cerchio al container
-      if (this.placeholderCircle) {
-        this.container.add(this.placeholderCircle);
-      }
+      const ph = this.scene.add.graphics();
+      ph.fillStyle(bgColor, 1);
+      ph.fillCircle(this.width / 2, 60, 30);
+      this.placeholderCircle = ph;
+      this.container.add(ph);
     }
     
     // Mostra il pannello

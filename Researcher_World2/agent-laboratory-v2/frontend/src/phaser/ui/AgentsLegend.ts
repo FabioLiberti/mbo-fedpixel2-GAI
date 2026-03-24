@@ -160,11 +160,16 @@ export class AgentsLegend {
       // Icona dell'agente
       const iconKey = `icon_${agentType}`;
       if (info.iconPath && this.scene.textures.exists(iconKey)) {
+        // Sfondo scuro uniforme dietro l'icona
+        const iconBg = this.scene.add.graphics();
+        iconBg.fillStyle(0x333333, 0.9);
+        iconBg.fillRoundedRect(this.padding, 4, 32, this.itemHeight - 8, 4);
+        itemContainer.add(iconBg);
         // Usa l'icona grande scalata
         const iconImage = this.scene.add.image(this.padding + 16, this.itemHeight / 2, iconKey);
         const targetH = this.itemHeight - 8;
         const scaleY = targetH / iconImage.height;
-        const scaleX = scaleY; // mantieni proporzioni
+        const scaleX = scaleY;
         iconImage.setScale(scaleX, scaleY);
         itemContainer.add(iconImage);
       } else if (this.scene.textures.exists(agentType)) {
