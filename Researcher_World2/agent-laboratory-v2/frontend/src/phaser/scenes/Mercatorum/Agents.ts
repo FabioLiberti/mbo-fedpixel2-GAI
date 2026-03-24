@@ -30,15 +30,17 @@ export function createAgents(scene: IMercatorumLabScene): void {
           // La creazione del placeholder viene gestita dal modulo Textures
         }
         
-        // Crea l'agente con scala aumentata a 5.0
+        // Scala: ritratti 1024x1536 → ~0.15, spritesheets 32x48 → 5.0
+        const portraitTypes = ['professor', 'privacy_specialist'];
+        const agentScale = portraitTypes.includes(agentConfig.type) ? 0.15 : 5.0;
+
         const agent = createAgent(scene, {
           type: agentConfig.type,
           name: agentConfig.name,
           position: agentConfig.position,
           role: agentConfig.type,
-          scale: 5.0, // Aumentato per renderli più grandi rispetto all'ambiente
-          // Riduce la velocità per un movimento più naturale
-          speed: 25  // Velocità ulteriormente ridotta per agenti più grandi
+          scale: agentScale,
+          speed: 25
         });
         
         // Aggiungi l'agente alla scena e alla lista

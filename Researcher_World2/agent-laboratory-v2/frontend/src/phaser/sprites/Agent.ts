@@ -452,9 +452,9 @@ export class Agent extends Phaser.GameObjects.Sprite {
         if (this.anims.exists(walkAnim)) {
           this.play(walkAnim);
         } else {
-          // Fallback se l'animazione non esiste
-          console.warn(`Animation ${walkAnim} does not exist, using default`);
-          this.play({ key: walkAnim, startFrame: 0 });
+          // Fallback se l'animazione non esiste (es. sprite ritratto singolo-frame)
+          console.warn(`Animation ${walkAnim} does not exist, using idle`);
+          this.playIdleAnimation();
         }
         break;
       
