@@ -498,11 +498,9 @@ export class Agent extends Phaser.GameObjects.Sprite {
     const idleAnim = `${this.role}_idle`;
     if (this.anims.exists(idleAnim)) {
       this.play(idleAnim);
-    } else {
-      // Fallback assoluto se nessuna animazione esiste
-      console.warn(`No idle animation found for ${this.role}`);
-      this.setFrame(0);
     }
+    // Se non esiste animazione, lo sprite mostra il frame di default della texture
+    // (funziona sia per spritesheets che per immagini statiche)
   }
   
   /**
