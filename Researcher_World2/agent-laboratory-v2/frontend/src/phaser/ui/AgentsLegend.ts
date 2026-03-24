@@ -5,7 +5,6 @@ import { LegendInfoPanel, AgentTypeInfo } from './LegendInfoPanel';
 
 /**
  * Componente che visualizza una legenda con tutti i tipi di agenti
- * Mostra sia l'immagine dello sprite che la classe dell'agente
  */
 export class AgentsLegend {
   private scene: Phaser.Scene;
@@ -16,70 +15,50 @@ export class AgentsLegend {
   private toggleButton!: Phaser.GameObjects.Text;
   private isExpanded: boolean = false;
   private infoPanel: LegendInfoPanel;
-  
+
   private agentTypes: Record<string, AgentTypeInfo> = {};
-  private width: number = 200;
-  private itemHeight: number = 50;
-  private padding: number = 10;
+  private width: number = 240;
+  private itemHeight: number = 42;
+  private padding: number = 8;
   private isVisible: boolean = false;
   private expandedHeight: number = 0;
-  private collapsedHeight: number = 40;
-  
+  private collapsedHeight: number = 36;
+  private iconSize: number = 34;
+
   constructor(scene: Phaser.Scene, x: number, y: number, agentTypes: Record<string, AgentTypeInfo>) {
     this.scene = scene;
     this.agentTypes = agentTypes;
-    
-    // Calcola l'altezza espansa in base al numero di tipi di agenti
+
     const agentTypeCount = Object.keys(this.agentTypes).length;
     this.expandedHeight = this.collapsedHeight + (agentTypeCount * this.itemHeight) + this.padding;
-    
-    // Crea un container per raggruppare tutti gli elementi della legenda
-    this.container = this.scene.add.container(x, y);
-    this.container.setDepth(500); // Assicura che sia sopra la maggior parte degli elementi
-    
-    // Crea il pannello informativo
-    this.infoPanel = new LegendInfoPanel(this.scene);
-    
-    // Inizializza la grafica
-    this.initializeGraphics();
 
-    // Carica icone grandi se disponibili, poi crea gli item
+    this.container = this.scene.add.container(x, y);
+    this.container.setDepth(500);
+    this.container.setScrollFactor(0);
+
+    this.infoPanel = new LegendInfoPanel(this.scene);
+
+    this.initializeGraphics();
     this.loadIconsAndCreateItems();
   }
-  
-  /**
-   * Inizializza gli elementi grafici della legenda
-   */
+
   private initializeGraphics(): void {
-    // Crea lo sfondo
     this.background = this.scene.add.graphics();
     this.container.add(this.background);
-    
-    // Titolo
+
+    // Titolo compatto con icona
     this.title = this.scene.add.text(
-      this.width / 2, 
-      this.padding, 
-      'Agenti', 
-      { 
-        fontSize: '18px', 
-        color: '#ffffff', 
-        fontStyle: 'bold' 
-      }
+      this.padding + 4, this.padding,
+      '👥 Agenti',
+      { fontSize: '15px', color: '#e0e0e0', fontStyle: 'bold' }
     );
-    this.title.setOrigin(0.5, 0);
     this.container.add(this.title);
-    
-    // Pulsante di toggle
+
+    // Toggle button
     this.toggleButton = this.scene.add.text(
-      this.width - this.padding, 
-      this.padding, 
-      '▼', 
-      { 
-        fontSize: '16px', 
-        color: '#ffffff',
-        backgroundColor: '#444444',
-        padding: { left: 5, right: 5, top: 2, bottom: 2 }
-      }
+      this.width - this.padding, this.padding,
+      '▼',
+      { fontSize: '14px', color: '#aaaaaa', padding: { left: 4, right: 4, top: 2, bottom: 2 } }
     );
     this.toggleButton.setOrigin(1, 0);
     this.toggleButton.setInteractive({ useHandCursor: true });
@@ -88,19 +67,11 @@ export class AgentsLegend {
     });
     this.container.add(this.toggleButton);
   }
-  
-  /**
-   * Aggiunge un pulsante per attivare/disattivare la modalità debug
-   * Mantenuta per compatibilità ma non mostra più il pulsante nella legenda
-   */
-  public addDebugToggleButton(callback: () => void): void {
-    // Non fare nulla - il pulsante debug è stato rimosso
-    console.log("Debug toggle button feature has been removed from AgentsLegend");
+
+  public addDebugToggleButton(_callback: () => void): void {
+    // Rimosso
   }
-  
-  /**
-   * Carica le icone grandi per i tipi che hanno iconPath, poi crea gli item
-   */
+
   private loadIconsAndCreateItems(): void {
     const toLoad: { key: string; path: string }[] = [];
     Object.entries(this.agentTypes).forEach(([agentType, info]) => {
@@ -127,232 +98,145 @@ export class AgentsLegend {
     }
   }
 
-  /**
-   * Crea gli item per ogni tipo di agente
-   */
   private createAgentItems(): void {
-    // Rimuovi gli item esistenti
     this.agentItems.forEach(item => item.destroy());
     this.agentItems = [];
-    
-    // Posizione base per il primo item
+
     let yPos = this.collapsedHeight;
-    
-    // Crea un item per ogni tipo di agente
+
     Object.entries(this.agentTypes).forEach(([agentType, info], index) => {
-      // Container per l'item
       const itemContainer = this.scene.add.container(0, yPos);
-      
-      // Sfondo per l'item
-      const itemBg = this.scene.add.graphics();
       const bgColor = Phaser.Display.Color.HexStringToColor(info.color).color;
-      itemBg.fillStyle(bgColor, 0.2);
+
+      // Sfondo riga alternata
+      const itemBg = this.scene.add.graphics();
+      const rowAlpha = index % 2 === 0 ? 0.15 : 0.08;
+      itemBg.fillStyle(bgColor, rowAlpha);
       itemBg.fillRect(0, 0, this.width, this.itemHeight);
-      
-      // Aggiungi bordo quando l'item è pari (per leggibilità)
-      if (index % 2 === 0) {
-        itemBg.lineStyle(1, bgColor, 0.5);
-        itemBg.strokeRect(0, 0, this.width, this.itemHeight);
-      }
-      
+      // Bordo sottile sinistro colorato
+      itemBg.fillStyle(bgColor, 0.8);
+      itemBg.fillRect(0, 0, 3, this.itemHeight);
       itemContainer.add(itemBg);
-      
-      // Icona dell'agente
+
+      // Icona con sfondo circolare scuro
+      const iconX = this.padding + this.iconSize / 2 + 4;
+      const iconY = this.itemHeight / 2;
+      const iconBg = this.scene.add.graphics();
+      iconBg.fillStyle(0x2a2a2a, 1);
+      iconBg.fillCircle(iconX, iconY, this.iconSize / 2 + 2);
+      iconBg.lineStyle(1.5, bgColor, 0.6);
+      iconBg.strokeCircle(iconX, iconY, this.iconSize / 2 + 2);
+      itemContainer.add(iconBg);
+
       const iconKey = `icon_${agentType}`;
       if (info.iconPath && this.scene.textures.exists(iconKey)) {
-        // Sfondo scuro uniforme dietro l'icona
-        const iconBg = this.scene.add.graphics();
-        iconBg.fillStyle(0x333333, 0.9);
-        iconBg.fillRoundedRect(this.padding, 4, 32, this.itemHeight - 8, 4);
-        itemContainer.add(iconBg);
-        // Usa l'icona grande scalata
-        const iconImage = this.scene.add.image(this.padding + 16, this.itemHeight / 2, iconKey);
-        const targetH = this.itemHeight - 8;
-        const scaleY = targetH / iconImage.height;
-        const scaleX = scaleY;
-        iconImage.setScale(scaleX, scaleY);
+        const iconImage = this.scene.add.image(iconX, iconY, iconKey);
+        const scale = this.iconSize / Math.max(iconImage.width, iconImage.height);
+        iconImage.setScale(scale);
         itemContainer.add(iconImage);
       } else if (this.scene.textures.exists(agentType)) {
-        const agentSprite = this.scene.add.sprite(this.padding + 16, this.itemHeight / 2, agentType, 0);
-        agentSprite.setScale(1.2);
+        const agentSprite = this.scene.add.sprite(iconX, iconY, agentType, 0);
+        agentSprite.setScale(1.4);
         itemContainer.add(agentSprite);
-      } else {
-        // Placeholder colorato
-        const placeholderGraphics = this.scene.add.graphics();
-        placeholderGraphics.fillStyle(bgColor, 0.8);
-        placeholderGraphics.fillCircle(this.padding + 16, this.itemHeight / 2, 16);
-        itemContainer.add(placeholderGraphics);
       }
-      
-      // Testo con il titolo dell'agente
-      const titleText = this.scene.add.text(
-        this.padding + 40, 
-        this.itemHeight / 2, 
-        info.title, 
-        { 
-          fontSize: '14px', 
-          color: '#ffffff',
-          fontStyle: 'bold'
-        }
-      );
+
+      // Testo titolo
+      const textX = this.padding + this.iconSize + 14;
+      const titleText = this.scene.add.text(textX, iconY, info.title, {
+        fontSize: '13px',
+        color: '#ffffff',
+        fontStyle: 'bold',
+      });
       titleText.setOrigin(0, 0.5);
       itemContainer.add(titleText);
-      
-      // Rendi l'item interattivo
-      itemBg.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.width, this.itemHeight), Phaser.Geom.Rectangle.Contains);
-      
-      // Gestisci click sull'item
+
+      // Interattività
+      itemBg.setInteractive(
+        new Phaser.Geom.Rectangle(0, 0, this.width, this.itemHeight),
+        Phaser.Geom.Rectangle.Contains
+      );
+
       itemBg.on('pointerdown', () => {
-        // Calcola la posizione esatta per il pannello informativo
-        // che deve essere adiacente alla legenda
-        
-        // Ottieni le coordinate assolute del contenitore della legenda
-        const legendX = this.container.x;
-        const legendY = this.container.y;
-        
-        // Posiziona il pannello info immediatamente a destra della legenda
-        // Il +5 aggiunge un piccolo spazio tra la legenda e il pannello info
-        const infoPanelX = legendX + this.width + 5;
-        
-        // Allinea verticalmente con il top della legenda
-        // per mantenere l'allineamento superiore richiesto
-        const infoPanelY = legendY;
-        
-        // Mostra il pannello informativo nella nuova posizione
+        const infoPanelX = this.container.x + this.width + 8;
+        const infoPanelY = this.container.y;
         this.infoPanel.showAgentInfo(agentType, info, infoPanelX, infoPanelY);
       });
-      
-      // Effetto hover
+
       itemBg.on('pointerover', () => {
         itemBg.clear();
-        itemBg.fillStyle(bgColor, 0.4);
+        itemBg.fillStyle(bgColor, 0.35);
         itemBg.fillRect(0, 0, this.width, this.itemHeight);
-        
-        if (index % 2 === 0) {
-          itemBg.lineStyle(1, bgColor, 0.7);
-          itemBg.strokeRect(0, 0, this.width, this.itemHeight);
-        }
+        itemBg.fillStyle(bgColor, 1);
+        itemBg.fillRect(0, 0, 3, this.itemHeight);
+        titleText.setColor('#ffdd44');
       });
-      
+
       itemBg.on('pointerout', () => {
         itemBg.clear();
-        itemBg.fillStyle(bgColor, 0.2);
+        itemBg.fillStyle(bgColor, rowAlpha);
         itemBg.fillRect(0, 0, this.width, this.itemHeight);
-        
-        if (index % 2 === 0) {
-          itemBg.lineStyle(1, bgColor, 0.5);
-          itemBg.strokeRect(0, 0, this.width, this.itemHeight);
-        }
+        itemBg.fillStyle(bgColor, 0.8);
+        itemBg.fillRect(0, 0, 3, this.itemHeight);
+        titleText.setColor('#ffffff');
       });
-      
-      // Aggiungi l'item al container e alla lista
+
       this.container.add(itemContainer);
       this.agentItems.push(itemContainer);
-      
-      // Incrementa la posizione Y per il prossimo item
       yPos += this.itemHeight;
     });
   }
-  
-  /**
-   * Espande la legenda mostrando tutti i tipi di agenti
-   */
+
   public expand(): void {
     this.isExpanded = true;
-    
-    // Aggiorna il pulsante di toggle
     this.toggleButton.setText('▲');
-    
-    // Mostra tutti gli item
     this.agentItems.forEach(item => item.setVisible(true));
-
-    // Ridisegna lo sfondo
     this.redrawBackground(this.expandedHeight);
-    
-    // Se il pannello informativo è visibile, adatta la sua posizione
-    // in base alla nuova dimensione della legenda
-    if (this.infoPanel.getIsVisible()) {
-      // Nascondi il pannello, verrà riaperto dall'utente se necessario
-      this.infoPanel.hide();
-    }
+    if (this.infoPanel.getIsVisible()) this.infoPanel.hide();
   }
-  
-  /**
-   * Collassa la legenda mostrando solo il titolo
-   */
+
   public collapse(): void {
     this.isExpanded = false;
-    
-    // Aggiorna il pulsante di toggle
     this.toggleButton.setText('▼');
-    
-    // Nascondi tutti gli item
     this.agentItems.forEach(item => item.setVisible(false));
-
-    // Ridisegna lo sfondo
     this.redrawBackground(this.collapsedHeight);
-
-    // Nascondi anche il pannello informativo se è visibile
-    if (this.infoPanel.getIsVisible()) {
-      this.infoPanel.hide();
-    }
+    if (this.infoPanel.getIsVisible()) this.infoPanel.hide();
   }
-  
-  /**
-   * Ridisegna lo sfondo con l'altezza specificata
-   */
+
   private redrawBackground(height: number): void {
     this.background.clear();
-    this.background.fillStyle(0x222222, 0.85);
-    this.background.fillRoundedRect(0, 0, this.width, height, 5);
-    this.background.lineStyle(2, 0x444444, 1);
-    this.background.strokeRoundedRect(0, 0, this.width, height, 5);
+    // Sfondo principale
+    this.background.fillStyle(0x1a1a2e, 0.92);
+    this.background.fillRoundedRect(0, 0, this.width, height, 8);
+    // Bordo
+    this.background.lineStyle(1.5, 0x555577, 0.7);
+    this.background.strokeRoundedRect(0, 0, this.width, height, 8);
+    // Linea separatrice sotto il titolo
+    this.background.lineStyle(1, 0x444466, 0.5);
+    this.background.lineBetween(8, this.collapsedHeight - 2, this.width - 8, this.collapsedHeight - 2);
   }
-  
-  /**
-   * Mostra la legenda
-   */
+
   public show(): void {
     this.container.setVisible(true);
     this.isVisible = true;
   }
-  
-  /**
-   * Nasconde la legenda
-   */
+
   public hide(): void {
     this.container.setVisible(false);
     this.isVisible = false;
-    
-    // Nascondi anche il pannello informativo
     this.infoPanel.hide();
   }
-  
-  /**
-   * Toggle visibilità della legenda
-   */
+
   public toggleVisibility(): void {
     this.isVisible ? this.hide() : this.show();
   }
-  
-  /**
-   * Restituisce il riferimento al container
-   */
+
   public getContainer(): Phaser.GameObjects.Container {
     return this.container;
   }
-  
-  /**
-   * Metodo per caricare il file di configurazione degli agenti
-   * @param scene La scena Phaser
-   * @returns Una Promise che risolve con i dati degli agenti
-   */
+
   public static async loadAgentTypesConfig(scene: Phaser.Scene): Promise<Record<string, AgentTypeInfo>> {
     return new Promise((resolve, reject) => {
-      // Carica il file JSON
       scene.load.json('agentTypesConfig', 'assets/config/agentTypes.json');
-      
-      // Gestisci il completamento del caricamento
       scene.load.once('complete', () => {
         try {
           const config = scene.cache.json.get('agentTypesConfig');
@@ -362,8 +246,6 @@ export class AgentsLegend {
           reject(error);
         }
       });
-      
-      // Avvia il caricamento
       scene.load.start();
     });
   }
