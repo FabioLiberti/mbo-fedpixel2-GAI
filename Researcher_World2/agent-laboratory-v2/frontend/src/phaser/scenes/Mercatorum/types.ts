@@ -88,16 +88,16 @@ export const MERCATORUM_AGENT_CONFIG: MercatorumLabConfig = {
       specialization: 'compliance_verification'
     },
     {
-      type: 'researcher',
+      type: 'student',
       name: 'Marco Rossi',
       position: { x: 200, y: 150 },
-      specialization: 'secure_aggregation'
+      specialization: 'data_science'
     },
     {
-      type: 'student_postdoc',
-      name: 'Davide Greco',
+      type: 'researcher',
+      name: 'Sofia Greco',
       position: { x: 350, y: 180 },
-      specialization: 'data_science'
+      specialization: 'privacy_engineering'
     }
   ]
 };
