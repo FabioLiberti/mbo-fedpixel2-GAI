@@ -99,9 +99,17 @@ export class LabControlsMenu {
       ],
     });
 
-    // 3. LLM
+    // 2. LLM Dialoghi (pannello React)
     sections.push({
-      title: 'LLM',
+      title: 'LLM Dialoghi',
+      buttons: [
+        { label: 'Apri/Chiudi Dialoghi', cb: () => this.toggleLLMDialogPanel() },
+      ],
+    });
+
+    // 3. LLM Strumenti
+    sections.push({
+      title: 'LLM Strumenti',
       buttons: [
         { label: 'LLM Dashboard', cb: () => this.toggleLLMPanel() },
         { label: 'LLM Simple', cb: () => this.toggleSimpleLLMPanel() },
@@ -296,6 +304,12 @@ export class LabControlsMenu {
     this.scene.agents.forEach(agent => {
       agent.moveTo(Math.random() * cam.width, Math.random() * cam.height);
     });
+  }
+
+  /** Apre/chiude il pannello React LLMDialogPanel via DOM event */
+  private toggleLLMDialogPanel(): void {
+    this.closePanel();
+    document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: {} }));
   }
 
   /** Chiude il pannello laterale per evitare sovrapposizioni */

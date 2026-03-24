@@ -2,7 +2,6 @@
 
 import * as Phaser from 'phaser';
 import { LegendInfoPanel, AgentTypeInfo } from './LegendInfoPanel';
-import { LLMControlPanel } from './LLMControlPanel'; // Nuova importazione
 
 /**
  * Componente che visualizza una legenda con tutti i tipi di agenti
@@ -17,11 +16,6 @@ export class AgentsLegend {
   private toggleButton!: Phaser.GameObjects.Text;
   private isExpanded: boolean = false;
   private infoPanel: LegendInfoPanel;
-  
-  // Nuove proprietà per LLM
-  private llmControlPanel: LLMControlPanel | null = null;
-  private llmButton: Phaser.GameObjects.Container | null = null;
-  private isLLMPanelOpen: boolean = false;
   
   private agentTypes: Record<string, AgentTypeInfo> = {};
   private width: number = 200;
@@ -51,9 +45,6 @@ export class AgentsLegend {
     
     // Aggiungi i tipi di agenti
     this.createAgentItems();
-    
-    // Aggiungi sezioni aggiuntive alla legenda
-    this.createLLMSection();
     
     // Per default inizia collassato
     this.collapse();
@@ -102,196 +93,6 @@ export class AgentsLegend {
       this.isExpanded ? this.collapse() : this.expand();
     });
     this.container.add(this.toggleButton);
-  }
-  
-  /**
-   * Crea la sezione LLM nella legenda
-   */
-  private createLLMSection(): void {
-    // Creiamo una nuova sezione per i controlli LLM
-    // La posizione si basa sull'altezza espansa della sezione degli agenti
-    const sectionY = this.expandedHeight + 10;
-    
-    // Titolo della sezione
-    const llmTitle = this.scene.add.text(
-      this.width / 2, 
-      sectionY, 
-      'LLM Controls', 
-      { 
-        fontSize: '16px', 
-        color: '#ffffff', 
-        fontStyle: 'bold' 
-      }
-    );
-    llmTitle.setOrigin(0.5, 0);
-    this.container.add(llmTitle);
-    
-    // Pulsante per aprire/chiudere il pannello LLM
-    const buttonY = sectionY + 30;
-    const buttonContainer = this.scene.add.container(this.width / 2, buttonY);
-    
-    // Sfondo del pulsante
-    const buttonBackground = this.scene.add.graphics();
-    buttonBackground.fillStyle(0x4477cc, 1);
-    buttonBackground.fillRoundedRect(-80, -15, 160, 30, 8);
-    buttonBackground.lineStyle(2, 0x5588ee, 1);
-    buttonBackground.strokeRoundedRect(-80, -15, 160, 30, 8);
-    
-    // Etichetta del pulsante
-    const buttonText = this.scene.add.text(
-      0, 
-      0, 
-      'LLM Dashboard', 
-      { 
-        fontSize: '14px', 
-        color: '#ffffff',
-        fontStyle: 'bold'
-      }
-    );
-    buttonText.setOrigin(0.5);
-    
-    // Icona del pulsante (AI)
-    const icon = this.scene.add.text(
-      -65,
-      0,
-      "AI",
-      {
-        fontSize: '12px',
-        color: '#ffffff',
-        backgroundColor: '#2255aa',
-        padding: { left: 4, right: 4, top: 2, bottom: 2 }
-      }
-    );
-    icon.setOrigin(0.5);
-    
-    // Aggiungi elementi al container del pulsante
-    buttonContainer.add(buttonBackground);
-    buttonContainer.add(buttonText);
-    buttonContainer.add(icon);
-    
-    // Rendi il pulsante interattivo
-    buttonBackground.setInteractive(new Phaser.Geom.Rectangle(-80, -15, 160, 30), Phaser.Geom.Rectangle.Contains);
-    
-    // Evento click sul pulsante
-    buttonBackground.on('pointerdown', () => {
-      this.toggleLLMPanel();
-    });
-    
-    // Effetti hover
-    buttonBackground.on('pointerover', () => {
-      buttonBackground.clear();
-      buttonBackground.fillStyle(0x5588ee, 1);
-      buttonBackground.fillRoundedRect(-80, -15, 160, 30, 8);
-      buttonBackground.lineStyle(2, 0x6699ff, 1);
-      buttonBackground.strokeRoundedRect(-80, -15, 160, 30, 8);
-    });
-    
-    buttonBackground.on('pointerout', () => {
-      buttonBackground.clear();
-      buttonBackground.fillStyle(0x4477cc, 1);
-      buttonBackground.fillRoundedRect(-80, -15, 160, 30, 8);
-      buttonBackground.lineStyle(2, 0x5588ee, 1);
-      buttonBackground.strokeRoundedRect(-80, -15, 160, 30, 8);
-    });
-    
-    // Salva il riferimento e aggiungi al container principale
-    this.llmButton = buttonContainer;
-    this.container.add(buttonContainer);
-    
-    // Aggiorna l'altezza espansa per includere la sezione LLM
-    this.expandedHeight = buttonY + 50;
-  }
-  
-  /**
-   * Apre o chiude il pannello di controllo LLM
-   */
-  private toggleLLMPanel(): void {
-    // Se il pannello non esiste, crealo
-    if (!this.llmControlPanel) {
-      try {
-        // Posiziona il pannello accanto alla legenda
-        const panelX = this.container.x + this.width + 20;
-        const panelY = this.container.y;
-        
-        // Crea il pannello LLM
-        this.llmControlPanel = new LLMControlPanel(
-          this.scene, 
-          panelX, 
-          panelY,
-          // Callback per chiudere il pannello
-          () => { this.closeLLMPanel(); }
-        );
-        
-        // Ottieni il controller dei dialoghi dalla scena
-        const dialogController = (this.scene as any).agentController?.dialogController;
-        if (dialogController) {
-          this.llmControlPanel.setDialogController(dialogController);
-        } else {
-          console.warn('DialogController not found in scene');
-        }
-        
-        this.isLLMPanelOpen = true;
-        
-        // Cambia il testo del pulsante
-        if (this.llmButton) {
-          const buttonText = this.llmButton.getByName('buttonText') as Phaser.GameObjects.Text;
-          if (buttonText) {
-            buttonText.setText('Close Dashboard');
-          }
-        }
-      } catch (error) {
-        console.error('Error creating LLM panel:', error);
-      }
-    } else {
-      // Se il pannello esiste, chiudilo o mostralo
-      if (this.isLLMPanelOpen) {
-        this.closeLLMPanel();
-      } else {
-        this.openLLMPanel();
-      }
-    }
-  }
-  
-  /**
-   * Chiude il pannello di controllo LLM
-   */
-  private closeLLMPanel(): void {
-    if (this.llmControlPanel) {
-      this.llmControlPanel.hide();
-      this.isLLMPanelOpen = false;
-      
-      // Cambia il testo del pulsante
-      if (this.llmButton) {
-        const buttonText = this.llmButton.list.find(
-          (item) => item.type === 'Text' && (item as Phaser.GameObjects.Text).text !== 'AI'
-        ) as Phaser.GameObjects.Text;
-        
-        if (buttonText) {
-          buttonText.setText('LLM Dashboard');
-        }
-      }
-    }
-  }
-  
-  /**
-   * Apre il pannello di controllo LLM
-   */
-  private openLLMPanel(): void {
-    if (this.llmControlPanel) {
-      this.llmControlPanel.show();
-      this.isLLMPanelOpen = true;
-      
-      // Cambia il testo del pulsante
-      if (this.llmButton) {
-        const buttonText = this.llmButton.list.find(
-          (item) => item.type === 'Text' && (item as Phaser.GameObjects.Text).text !== 'AI'
-        ) as Phaser.GameObjects.Text;
-        
-        if (buttonText) {
-          buttonText.setText('Close Dashboard');
-        }
-      }
-    }
   }
   
   /**
@@ -435,12 +236,7 @@ export class AgentsLegend {
     
     // Mostra tutti gli item
     this.agentItems.forEach(item => item.setVisible(true));
-    
-    // Mostra il pulsante LLM
-    if (this.llmButton) {
-      this.llmButton.setVisible(true);
-    }
-    
+
     // Ridisegna lo sfondo
     this.redrawBackground(this.expandedHeight);
     
@@ -463,22 +259,14 @@ export class AgentsLegend {
     
     // Nascondi tutti gli item
     this.agentItems.forEach(item => item.setVisible(false));
-    
-    // Nascondi il pulsante LLM
-    if (this.llmButton) {
-      this.llmButton.setVisible(false);
-    }
-    
+
     // Ridisegna lo sfondo
     this.redrawBackground(this.collapsedHeight);
-    
+
     // Nascondi anche il pannello informativo se è visibile
     if (this.infoPanel.getIsVisible()) {
       this.infoPanel.hide();
     }
-    
-    // Nascondi anche il pannello LLM se è aperto
-    this.closeLLMPanel();
   }
   
   /**
@@ -509,9 +297,6 @@ export class AgentsLegend {
     
     // Nascondi anche il pannello informativo
     this.infoPanel.hide();
-    
-    // Nascondi anche il pannello LLM
-    this.closeLLMPanel();
   }
   
   /**
