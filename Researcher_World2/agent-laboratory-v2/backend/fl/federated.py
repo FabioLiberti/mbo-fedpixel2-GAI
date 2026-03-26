@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
@@ -36,28 +37,76 @@ def _binary_cross_entropy(y_pred: np.ndarray, y_true: np.ndarray) -> float:
     return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
 
 
-def generate_client_data(client_id: str, n_samples: int = 100, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+# =========================================================================
+# Heart Disease UCI dataset loading (non-IID partitioned by age)
+# =========================================================================
+
+_HEART_DATA: Optional[Dict[str, Any]] = None  # lazy-loaded cache
+
+_LAB_AGE_RANGES = {
+    "mercatorum": (0, 50),     # younger cohort
+    "blekinge":   (50, 60),    # middle cohort
+    "opbg":       (60, 200),   # older cohort
+}
+
+def _load_heart_dataset() -> Dict[str, Any]:
+    """Load and normalize the Heart Disease UCI dataset (303 rows, 13 features)."""
+    global _HEART_DATA
+    if _HEART_DATA is not None:
+        return _HEART_DATA
+
+    csv_path = os.path.join(os.path.dirname(__file__), "data", "heart.csv")
+    # Load with numpy — skip header, handle '?' as NaN
+    raw = np.genfromtxt(csv_path, delimiter=",", skip_header=1, filling_values=np.nan)
+    # raw shape: (303, 14) — 13 features + 1 target
+
+    X = raw[:, :13].astype(np.float64)
+    y = raw[:, 13:14].astype(np.float32)
+
+    # Replace NaN with column median
+    for col in range(X.shape[1]):
+        mask = np.isnan(X[:, col])
+        if mask.any():
+            median = np.nanmedian(X[:, col])
+            X[mask, col] = median
+
+    # Min-max normalize to [0, 1]
+    col_min = X.min(axis=0)
+    col_max = X.max(axis=0)
+    col_range = col_max - col_min
+    col_range[col_range == 0] = 1.0  # avoid division by zero
+    X = ((X - col_min) / col_range).astype(np.float32)
+
+    ages = raw[:, 0]  # original un-normalized age for partitioning
+
+    _HEART_DATA = {"X": X, "y": y, "ages": ages}
+    logger.info(f"Heart Disease dataset loaded: {X.shape[0]} rows, {X.shape[1]} features")
+    return _HEART_DATA
+
+
+def generate_client_data(client_id: str, n_samples: int = 200, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Generate non-IID synthetic data for a client.
-    Uses an XOR-like pattern with client-specific distribution shift.
-    Input dim = 10, but only first 2 features carry the signal.
+    Return non-IID Heart Disease data for a client.
+    Each lab gets a different age-range partition (naturally non-IID).
+    Input dim = 13 (age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal).
     """
-    # Deterministic seed from client_id string + global seed
-    h = hash(client_id) & 0xFFFFFFFF
-    rng = np.random.RandomState(seed ^ h)
+    data = _load_heart_dataset()
+    rng = np.random.RandomState(seed ^ (hash(client_id) & 0xFFFFFFFF))
 
-    X = rng.randn(n_samples, 10).astype(np.float32)
+    age_range = _LAB_AGE_RANGES.get(client_id)
+    if age_range:
+        lo, hi = age_range
+        mask = (data["ages"] >= lo) & (data["ages"] < hi)
+    else:
+        # Validation or unknown client: random 20% sample from all data
+        mask = np.ones(len(data["X"]), dtype=bool)
 
-    # Non-IID: shift the decision boundary per client
-    shift = (h % 7) * 0.3 - 0.9  # range ~ [-0.9, 0.9]
-    xor_signal = ((X[:, 0] + shift) > 0).astype(np.float32) != (X[:, 1] > 0).astype(np.float32)
-    y = xor_signal.reshape(-1, 1).astype(np.float32)
+    X = data["X"][mask]
+    y = data["y"][mask]
 
-    # Add ~10% label noise for realism
-    flip_mask = rng.rand(n_samples) < 0.10
-    y[flip_mask] = 1.0 - y[flip_mask]
-
-    return X, y
+    # Shuffle and cap at n_samples
+    idx = rng.permutation(len(X))[:min(n_samples, len(X))]
+    return X[idx], y[idx]
 
 
 def numpy_train(
@@ -71,12 +120,12 @@ def numpy_train(
     global_weights: Optional[List[np.ndarray]] = None,
 ) -> Tuple[List[np.ndarray], float, float]:
     """
-    Train a 2-layer NN (10->32 relu ->16 relu ->1 sigmoid) with SGD.
+    Train a 2-layer NN (13->32 relu ->16 relu ->1 sigmoid) with SGD.
 
     Returns (updated_weights, final_loss, final_accuracy).
     If mu > 0 and global_weights is provided, adds FedProx proximal term.
     """
-    # Unpack: W1(10,32) b1(32) W2(32,16) b2(16) W3(16,1) b3(1)
+    # Unpack: W1(13,32) b1(32) W2(32,16) b2(16) W3(16,1) b3(1)
     W1, b1, W2, b2, W3, b3 = [w.copy() for w in weights]
     n = len(data_x)
 
@@ -204,7 +253,8 @@ class FederatedLearningSystem:
             "accuracy": [],
             "loss": [],
             "communication_overhead": [],
-            "privacy_budget": 1.0
+            "privacy_budget": 1.0,
+            "per_client": [],
         }
         
         # Inizializza il modello globale
@@ -216,7 +266,7 @@ class FederatedLearningSystem:
         """Inizializza il modello globale in base al tipo specificato"""
         if HAS_TF and self.model_type == "simple_nn":
             self.global_model = tf.keras.Sequential([
-                tf.keras.layers.Dense(32, activation='relu', input_shape=(10,)),
+                tf.keras.layers.Dense(32, activation='relu', input_shape=(13,)),
                 tf.keras.layers.Dense(16, activation='relu'),
                 tf.keras.layers.Dense(1, activation='sigmoid')
             ])
@@ -228,7 +278,7 @@ class FederatedLearningSystem:
         elif not HAS_TF:
             # Numpy-only simulation: store weights as list of numpy arrays
             self.global_model = [
-                np.random.randn(10, 32).astype(np.float32) * 0.1,
+                np.random.randn(13, 32).astype(np.float32) * 0.1,
                 np.zeros(32, dtype=np.float32),
                 np.random.randn(32, 16).astype(np.float32) * 0.1,
                 np.zeros(16, dtype=np.float32),
@@ -462,6 +512,10 @@ class FederatedLearningSystem:
         self.metrics["accuracy"].append(round(round_acc, 4))
         self.metrics["loss"].append(round(round_loss, 4))
         self.metrics["communication_overhead"].append(len(client_updates))
+        if client_metrics:
+            self.metrics["per_client"].append(
+                {cid: dict(cm) for cid, cm in client_metrics.items()}
+            )
 
         logger.info(
             f"Round {self.round} aggregated {len(weights)} clients | "
