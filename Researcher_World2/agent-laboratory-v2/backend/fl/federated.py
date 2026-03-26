@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -44,9 +45,9 @@ def _binary_cross_entropy(y_pred: np.ndarray, y_true: np.ndarray) -> float:
 _HEART_DATA: Optional[Dict[str, Any]] = None  # lazy-loaded cache
 
 _LAB_AGE_RANGES = {
-    "mercatorum": (0, 50),     # younger cohort
+    "mercatorum": (60, 200),   # older cohort (business university)
     "blekinge":   (50, 60),    # middle cohort
-    "opbg":       (60, 200),   # older cohort
+    "opbg":       (0, 50),     # younger/pediatric cohort
 }
 
 def _load_heart_dataset() -> Dict[str, Any]:
@@ -213,6 +214,9 @@ class FederatedLearningSystem:
     la valutazione della convergenza.
     """
     
+    # Default checkpoint directory (next to this source file)
+    _DEFAULT_CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), "checkpoints")
+
     def __init__(
         self,
         algorithm: str = "fedavg",
@@ -220,7 +224,8 @@ class FederatedLearningSystem:
         client_fraction: float = 0.8,
         model_type: str = "simple_nn",
         mu: float = 0.01,
-        seed: int = 42
+        seed: int = 42,
+        checkpoint_dir: Optional[str] = None,
     ):
         """
         Inizializza il sistema di Federated Learning
@@ -232,19 +237,21 @@ class FederatedLearningSystem:
             model_type: Tipo di modello da utilizzare
             mu: Coefficiente del termine prossimale per FedProx
             seed: Seed per riproducibilità
+            checkpoint_dir: Directory per salvataggio checkpoint (None = default)
         """
         self.algorithm = algorithm
         self.aggregation_rounds = aggregation_rounds
         self.client_fraction = client_fraction
         self.model_type = model_type
         self.mu = mu
-        
+        self.checkpoint_dir = checkpoint_dir or self._DEFAULT_CHECKPOINT_DIR
+
         # Imposta seed per riproducibilità
         self.random = random.Random(seed)
         if HAS_TF:
             tf.random.set_seed(seed)
         np.random.seed(seed)
-        
+
         # Stato della federazione
         self.round = 0
         self.clients = {}  # ID cliente -> modello cliente
@@ -255,11 +262,13 @@ class FederatedLearningSystem:
             "communication_overhead": [],
             "privacy_budget": 1.0,
             "per_client": [],
+            "local_vs_global": [],   # per-round: {lab: {local_acc, global_acc, gain}}
+            "cross_eval": [],        # per-round: {eval_lab: {train_lab: acc, ...}}
         }
-        
+
         # Inizializza il modello globale
         self._initialize_global_model()
-        
+
         logger.info(f"Federated Learning system initialized with algorithm: {algorithm}")
     
     def _initialize_global_model(self):
@@ -517,10 +526,24 @@ class FederatedLearningSystem:
                 {cid: dict(cm) for cid, cm in client_metrics.items()}
             )
 
+        # A: local-vs-global evaluation
+        lvg = self._evaluate_local_vs_global(client_updates)
+        self.metrics["local_vs_global"].append(lvg)
+
+        # B: cross-evaluation (global model on each lab's data)
+        cross = self._evaluate_cross()
+        self.metrics["cross_eval"].append(cross)
+
         logger.info(
             f"Round {self.round} aggregated {len(weights)} clients | "
             f"acc={round_acc:.4f} loss={round_loss:.4f}"
         )
+        if lvg:
+            for cid, v in lvg.items():
+                logger.info(
+                    f"  {cid}: local_acc={v['local_acc']:.4f} "
+                    f"global_acc={v['global_acc']:.4f} gain={v['gain']:+.4f}"
+                )
 
         metrics = {
             "round": self.round,
@@ -528,10 +551,61 @@ class FederatedLearningSystem:
             "total_clients": len(self.clients),
             "accuracy": round_acc,
             "loss": round_loss,
+            "local_vs_global": lvg,
+            "cross_eval": cross,
         }
+
+        # Auto-save checkpoint after each aggregation
+        try:
+            self.save_checkpoint()
+        except Exception as e:
+            logger.warning(f"Auto-save checkpoint failed: {e}")
 
         return metrics
     
+    @staticmethod
+    def _eval_weights(weights: List[np.ndarray], data_x: np.ndarray, data_y: np.ndarray) -> Dict[str, float]:
+        """Forward-pass evaluation of numpy weights on given data."""
+        W1, b1, W2, b2, W3, b3 = weights
+        a1 = _relu(data_x @ W1 + b1)
+        a2 = _relu(a1 @ W2 + b2)
+        a3 = _sigmoid(a2 @ W3 + b3)
+        loss = float(_binary_cross_entropy(a3, data_y))
+        acc = float(np.mean((a3 >= 0.5).astype(np.float32) == data_y))
+        return {"accuracy": round(acc, 4), "loss": round(loss, 4)}
+
+    def _evaluate_local_vs_global(self, client_updates: Dict[str, List[np.ndarray]]) -> Dict[str, Dict]:
+        """Compare local model vs global model accuracy on each client's own data.
+        Returns {lab_id: {local_acc, global_acc, gain}}."""
+        if HAS_TF:
+            return {}
+        result = {}
+        for cid in client_updates:
+            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round)
+            local_eval = self._eval_weights(client_updates[cid], data_x, data_y)
+            global_eval = self._eval_weights(self.global_model, data_x, data_y)
+            gain = round(global_eval["accuracy"] - local_eval["accuracy"], 4)
+            result[cid] = {
+                "local_acc": local_eval["accuracy"],
+                "global_acc": global_eval["accuracy"],
+                "gain": gain,
+            }
+        return result
+
+    def _evaluate_cross(self) -> Dict[str, Dict[str, float]]:
+        """Evaluate global model on each lab's data — measures generalization
+        to data the model never saw directly (privacy-preserving benefit).
+        Returns {eval_lab: {accuracy, loss, samples}}."""
+        if HAS_TF:
+            return {}
+        result = {}
+        for cid in self.clients:
+            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round)
+            ev = self._eval_weights(self.global_model, data_x, data_y)
+            ev["samples"] = len(data_x)
+            result[cid] = ev
+        return result
+
     def _weighted_average(self, weights_list: List[List[np.ndarray]], weight_factors: List[float]) -> List[np.ndarray]:
         """
         Calcola la media pesata dei pesi dei modelli
@@ -580,3 +654,99 @@ class FederatedLearningSystem:
                 client["model"] = [w.copy() for w in self.global_model]
 
         logger.info(f"Updated {len(self.clients)} client models with global weights")
+
+    # =========================================================================
+    # Checkpoint persistence (weights + metrics + FL state)
+    # =========================================================================
+
+    def save_checkpoint(self) -> str:
+        """Save global model weights, metrics, and FL state to disk.
+        Returns the path of the saved checkpoint directory."""
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+
+        # 1) Weights (.npz)
+        weights_path = os.path.join(self.checkpoint_dir, "global_weights.npz")
+        if not HAS_TF:
+            np.savez(weights_path, *self.global_model)
+        else:
+            np.savez(weights_path, *self.global_model.get_weights())
+
+        # 2) State + metrics (.json)
+        state = {
+            "algorithm": self.algorithm,
+            "round": self.round,
+            "aggregation_rounds": self.aggregation_rounds,
+            "client_fraction": self.client_fraction,
+            "model_type": self.model_type,
+            "mu": self.mu,
+            "client_ids": list(self.clients.keys()),
+            "metrics": {
+                "accuracy": self.metrics["accuracy"],
+                "loss": self.metrics["loss"],
+                "communication_overhead": self.metrics["communication_overhead"],
+                "privacy_budget": self.metrics["privacy_budget"],
+                "per_client": self.metrics["per_client"],
+                "local_vs_global": self.metrics["local_vs_global"],
+                "cross_eval": self.metrics["cross_eval"],
+            },
+        }
+        state_path = os.path.join(self.checkpoint_dir, "fl_state.json")
+        with open(state_path, "w") as f:
+            json.dump(state, f, indent=2, default=lambda o: float(o) if isinstance(o, (np.floating,)) else int(o) if isinstance(o, (np.integer,)) else o)
+
+        logger.info(f"Checkpoint saved: round {self.round}, {weights_path}")
+        return self.checkpoint_dir
+
+    def load_checkpoint(self) -> bool:
+        """Load checkpoint from disk. Returns True if successful."""
+        weights_path = os.path.join(self.checkpoint_dir, "global_weights.npz")
+        state_path = os.path.join(self.checkpoint_dir, "fl_state.json")
+
+        if not os.path.exists(weights_path) or not os.path.exists(state_path):
+            logger.info("No checkpoint found, starting fresh")
+            return False
+
+        try:
+            # 1) Load state
+            with open(state_path, "r") as f:
+                state = json.load(f)
+
+            self.round = state["round"]
+            self.algorithm = state.get("algorithm", self.algorithm)
+            self.aggregation_rounds = state.get("aggregation_rounds", self.aggregation_rounds)
+            self.client_fraction = state.get("client_fraction", self.client_fraction)
+            self.mu = state.get("mu", self.mu)
+            self.metrics = {
+                "accuracy": state["metrics"].get("accuracy", []),
+                "loss": state["metrics"].get("loss", []),
+                "communication_overhead": state["metrics"].get("communication_overhead", []),
+                "privacy_budget": state["metrics"].get("privacy_budget", 1.0),
+                "per_client": state["metrics"].get("per_client", []),
+                "local_vs_global": state["metrics"].get("local_vs_global", []),
+                "cross_eval": state["metrics"].get("cross_eval", []),
+            }
+
+            # 2) Load weights
+            data = np.load(weights_path)
+            weight_arrays = [data[f"arr_{i}"] for i in range(len(data.files))]
+
+            if not HAS_TF:
+                self.global_model = weight_arrays
+            else:
+                self.global_model.set_weights(weight_arrays)
+
+            # 3) Re-register clients and distribute global weights
+            for cid in state.get("client_ids", []):
+                if cid not in self.clients:
+                    self.register_client(cid)
+            self.update_client_models()
+
+            logger.info(
+                f"Checkpoint loaded: round {self.round}, "
+                f"acc={self.metrics['accuracy'][-1] if self.metrics['accuracy'] else 'N/A'}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to load checkpoint: {e}")
+            return False

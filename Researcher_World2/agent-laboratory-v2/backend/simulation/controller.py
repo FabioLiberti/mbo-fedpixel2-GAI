@@ -68,7 +68,7 @@ class SimulationController:
                 f"maze_adapter ready, sim_time={self.model.sim_time}"
             )
 
-            # Initialize FL system
+            # Initialize FL system (try to restore from checkpoint)
             self.fl_system = FederatedLearningSystem(
                 algorithm="fedavg",
                 aggregation_rounds=5,
@@ -76,7 +76,10 @@ class SimulationController:
                 model_type="simple_nn"
             )
             self._register_labs_as_clients()
-            logger.info("Federated Learning system initialized")
+            if self.fl_system.load_checkpoint():
+                logger.info(f"FL system restored from checkpoint (round {self.fl_system.round})")
+            else:
+                logger.info("FL system initialized fresh (no checkpoint)")
 
             return True
         except Exception as e:
@@ -154,6 +157,108 @@ class SimulationController:
         for lab_id in target_labs:
             for agent in self.model.get_lab_agents(lab_id):
                 self._inject_fl_event(agent, desc)
+
+    # Lab demographic descriptions for agent awareness
+    _LAB_DEMOGRAPHICS = {
+        "mercatorum": "pazienti anziani (over 60)",
+        "blekinge": "pazienti di mezza età (50-59 anni)",
+        "opbg": "pazienti pediatrici e giovani (under 50)",
+    }
+
+    # Role → what kind of insight they notice
+    _ROLE_INSIGHT_TEMPLATES = {
+        "professor": (
+            "Il dataset {lab} contiene solo {demo}. "
+            "Il modello locale ha accuracy {local_acc:.0%} ma il modello federato "
+            "raggiunge {global_acc:.0%} ({gain_word} di {abs_gain:.1%} grazie alla collaborazione). "
+            "La federazione permette di generalizzare su fasce demografiche mai osservate localmente."
+        ),
+        "privacy_specialist": (
+            "I dati dei pazienti {demo} di {lab} non sono mai stati condivisi con gli altri laboratori. "
+            "Nonostante ciò, il modello federato funziona con accuracy {global_acc:.0%} "
+            "anche sui dati di {other_labs}. "
+            "Questo dimostra il valore del federated learning per la privacy dei dati sanitari."
+        ),
+        "student": (
+            "Ho osservato che il nostro dataset {lab} ha solo {demo}. "
+            "Il modello locale ha accuracy {local_acc:.0%}, "
+            "ma quello federato è a {global_acc:.0%} ({gain_word} {abs_gain:.1%}). "
+            "La collaborazione con gli altri laboratori sta migliorando le predizioni."
+        ),
+        "researcher": (
+            "Analisi round {fl_round}: il modello globale su dati {lab} ({demo}) "
+            "ha accuracy {global_acc:.0%} vs locale {local_acc:.0%} (delta {gain:+.1%}). "
+            "Cross-evaluation sugli altri lab: {cross_summary}."
+        ),
+    }
+
+    def _inject_fl_awareness_events(self):
+        """Inject role-specific bias-awareness insights after each FL round completion."""
+        if not self.model or not self.fl_system:
+            return
+
+        fl_state = self.fl_system.get_state()
+        fl_round = fl_state["round"]
+        metrics = fl_state["metrics"]
+
+        # Get latest local_vs_global and cross_eval
+        lvg_list = metrics.get("local_vs_global", [])
+        cross_list = metrics.get("cross_eval", [])
+        if not lvg_list or not cross_list:
+            return
+
+        lvg = lvg_list[-1]   # {lab_id: {local_acc, global_acc, gain}}
+        cross = cross_list[-1]  # {lab_id: {accuracy, loss, samples}}
+
+        for lab_id in self.model.get_lab_ids():
+            lab_lvg = lvg.get(lab_id, {})
+            local_acc = lab_lvg.get("local_acc", 0)
+            global_acc = lab_lvg.get("global_acc", 0)
+            gain = lab_lvg.get("gain", 0)
+            abs_gain = abs(gain)
+            gain_word = "miglioramento" if gain >= 0 else "differenza"
+            demo = self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti")
+
+            # Other labs for privacy specialist
+            other_labs = [lid for lid in self.model.get_lab_ids() if lid != lab_id]
+            other_labs_str = " e ".join(other_labs)
+
+            # Cross-eval summary for researcher
+            cross_parts = []
+            for olid in other_labs:
+                c = cross.get(olid, {})
+                cross_parts.append(f"{olid} {c.get('accuracy', 0):.0%}")
+            cross_summary = ", ".join(cross_parts)
+
+            for agent in self.model.get_lab_agents(lab_id):
+                role = getattr(agent, "role", "researcher")
+                template = self._ROLE_INSIGHT_TEMPLATES.get(
+                    role, self._ROLE_INSIGHT_TEMPLATES["researcher"]
+                )
+
+                try:
+                    insight = template.format(
+                        lab=lab_id,
+                        demo=demo,
+                        local_acc=local_acc,
+                        global_acc=global_acc,
+                        gain=gain,
+                        abs_gain=abs_gain,
+                        gain_word=gain_word,
+                        fl_round=fl_round,
+                        other_labs=other_labs_str,
+                        cross_summary=cross_summary,
+                    )
+                except KeyError:
+                    insight = (
+                        f"FL round {fl_round} completato per {lab_id}: "
+                        f"accuracy globale {global_acc:.0%}, locale {local_acc:.0%}."
+                    )
+
+                # High poignancy (8) to trigger reflection
+                self._inject_fl_event(agent, insight, poignancy=8)
+
+        logger.info(f"Injected FL bias-awareness events for round {fl_round}")
 
     # =========================================================================
     # Simulation Lifecycle
@@ -320,6 +425,10 @@ class SimulationController:
 
             # Inject round-completed event into all agents
             self._inject_fl_round_events("completed")
+
+            # Inject bias-aware insights per lab (uses local_vs_global + cross_eval)
+            self._inject_fl_awareness_events()
+
             logger.info("FL round completed")
 
     def _collect_client_updates(self) -> Dict[str, Any]:
