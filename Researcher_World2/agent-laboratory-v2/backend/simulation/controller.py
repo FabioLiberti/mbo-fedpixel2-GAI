@@ -282,13 +282,14 @@ class SimulationController:
         """Generate post-round FL conversations between agent pairs in each lab.
 
         Selects one pair per lab (two agents with different roles) and generates
-        a short FL-focused dialog. The conversations are stored in
-        self.fl_conversations for broadcast to the frontend.
+        a short FL-focused dialog. LLM calls are parallelized across labs (~17s
+        for 3 labs instead of ~36s sequential).
         """
         if not self.model or not self.fl_system:
             return
 
         from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+        from concurrent.futures import ThreadPoolExecutor
 
         fl_state = self.fl_system.get_state()
         fl_round = fl_state["round"]
@@ -298,8 +299,10 @@ class SimulationController:
         lvg_list = metrics.get("local_vs_global", [])
         lvg = lvg_list[-1] if lvg_list else {}
 
-        new_convos = []
+        use_llm = is_llm_enabled()
 
+        # Prepare tasks: (pair, fl_context) per lab
+        tasks = []
         for lab_id in self.model.get_lab_ids():
             agents = self.model.get_lab_agents(lab_id)
             if len(agents) < 2:
@@ -316,7 +319,6 @@ class SimulationController:
             if len(pair) < 2:
                 pair = [agents[0], agents[1]]
 
-            # Build FL context
             lab_lvg = lvg.get(lab_id, {})
             fl_context = {
                 "round": fl_round,
@@ -326,38 +328,55 @@ class SimulationController:
                 "lab_id": lab_id,
                 "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
             }
+            tasks.append((pair, fl_context))
 
-            convo = generate_fl_conversation(
-                pair[0], pair[1], fl_context, use_llm=is_llm_enabled()
-            )
+        # Generate conversations (parallel if LLM, sequential is fine for stubs)
+        def _gen(args):
+            pair, ctx = args
+            try:
+                return pair, ctx, generate_fl_conversation(
+                    pair[0], pair[1], ctx, use_llm=use_llm
+                )
+            except Exception as e:
+                logger.warning(f"FL convo for {ctx['lab_id']} failed: {e}")
+                return pair, ctx, None
 
-            if convo:
-                # Update agent dialog state for WebSocket broadcast
-                for name, utterance in convo[-2:]:  # Last 2 turns as visible dialog
-                    for agent in pair:
-                        if agent.name == name:
-                            agent.last_dialog = utterance
-                            agent.dialog_is_llm = is_llm_enabled()
-                # Set chatting_with on both agents
-                pair[0].scratch.chatting_with = pair[1].name
-                pair[1].scratch.chatting_with = pair[0].name
+        if use_llm and len(tasks) > 1:
+            with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+                results = list(pool.map(_gen, tasks))
+        else:
+            results = [_gen(t) for t in tasks]
 
-                new_convos.append({
-                    "lab_id": lab_id,
-                    "round": fl_round,
-                    "agents": [pair[0].name, pair[1].name],
-                    "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
-                    "dialog": convo,
-                })
+        new_convos = []
+        for pair, ctx, convo in results:
+            if not convo:
+                continue
 
-                # Also inject conversation as memory events
-                full_text = " | ".join([f"{n}: {u}" for n, u in convo])
+            # Update agent dialog state for WebSocket broadcast
+            for name, utterance in convo[-2:]:
                 for agent in pair:
-                    self._inject_fl_event(
-                        agent,
-                        f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
-                        poignancy=7,
-                    )
+                    if agent.name == name:
+                        agent.last_dialog = utterance
+                        agent.dialog_is_llm = use_llm
+            pair[0].scratch.chatting_with = pair[1].name
+            pair[1].scratch.chatting_with = pair[0].name
+
+            new_convos.append({
+                "lab_id": ctx["lab_id"],
+                "round": fl_round,
+                "agents": [pair[0].name, pair[1].name],
+                "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
+                "dialog": convo,
+            })
+
+            # Inject conversation as memory events
+            full_text = " | ".join([f"{n}: {u}" for n, u in convo])
+            for agent in pair:
+                self._inject_fl_event(
+                    agent,
+                    f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
+                    poignancy=7,
+                )
 
         # Store for broadcast (keep last 3 rounds)
         self.fl_conversations = (self.fl_conversations + new_convos)[-9:]

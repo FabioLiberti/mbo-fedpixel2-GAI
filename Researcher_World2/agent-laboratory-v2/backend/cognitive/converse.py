@@ -241,13 +241,29 @@ def agent_chat_v2(maze, init_persona, target_persona):
 # ==========================================================================
 
 _FL_CONVO_SYSTEM = (
-    "Sei un simulatore di dialoghi tra ricercatori in un progetto di Federated Learning. "
-    "Genera un dialogo realistico in italiano tra i due ricercatori sul round appena completato. "
-    "Ogni battuta deve essere breve (1-2 frasi). Il dialogo deve essere naturale e coerente "
-    "con i ruoli e i dati forniti. Rispondi SOLO con il dialogo, una battuta per riga nel formato:\n"
-    "NomeAgente: battuta\n"
-    "Genera esattamente 4 battute alternate."
+    "Genera un dialogo realistico in italiano tra due ricercatori che discutono "
+    "i risultati dell'ultimo round di Federated Learning. "
+    "REGOLE:\n"
+    "- Ogni battuta: 1-2 frasi, naturale, coerente col ruolo\n"
+    "- Il dialogo deve riflettere le competenze specifiche di ciascun ruolo\n"
+    "- Usa i DATI REALI forniti (accuracy, gain, budget privacy)\n"
+    "- Se ci sono RICORDI degli agenti, integra quei pensieri nel dialogo\n"
+    "- Rispondi SOLO con il dialogo, formato: NomeAgente: battuta\n"
+    "- Esattamente 4 battute alternate"
 )
+
+# Role-specific conversation style hints for richer LLM prompts
+_ROLE_CONVO_HINTS = {
+    "professor": "analizza criticamente i risultati, pone domande profonde sul bias e la generalizzazione",
+    "privacy_specialist": "si concentra sulla protezione dei dati, epsilon budget, rumore gaussiano, compliance",
+    "researcher": "cita numeri precisi, confronta metriche, propone esperimenti futuri",
+    "student": "chiede spiegazioni, mostra curiosità, collega teoria e pratica",
+    "doctor": "ragiona sulle implicazioni cliniche, si preoccupa della validità per i pazienti reali",
+    "professor_senior": "visione strategica, paragona con altri approcci, guida il team",
+    "sw_engineer": "discute implementazione, performance del sistema, scalabilità",
+    "engineer": "si concentra sull'infrastruttura, comunicazione tra nodi, efficienza",
+    "student_postdoc": "analisi approfondita, propone miglioramenti metodologici",
+}
 
 _FL_CONVO_STUBS = {
     "professor": [
@@ -278,6 +294,30 @@ _FL_CONVO_STUBS = {
 }
 
 
+def _retrieve_agent_fl_memories(agent, n=2) -> str:
+    """Retrieve recent FL-related memories from an agent's associative memory.
+    Returns a short string (max 2 memories) for prompt enrichment."""
+    try:
+        spec = getattr(agent.scratch, 'fl_specialization', None) or "federated learning"
+        retrieved = new_retrieve(agent, [spec, "round", "accuracy"], n_count=5)
+        memories = []
+        for _fp, nodes in retrieved.items():
+            for node in nodes:
+                key = getattr(node, 'embedding_key', '') or ''
+                if key and any(kw in key.lower() for kw in ['fl ', 'round', 'accuracy', 'federato', 'privacy', 'modello']):
+                    memories.append(key.strip())
+        # Deduplicate and cap
+        seen = set()
+        unique = []
+        for m in memories:
+            if m not in seen:
+                seen.add(m)
+                unique.append(m)
+        return "\n".join(unique[:n])
+    except Exception:
+        return ""
+
+
 def generate_fl_conversation(
     agent_a,
     agent_b,
@@ -300,7 +340,13 @@ def generate_fl_conversation(
     role_b = getattr(agent_b, 'role', 'researcher')
 
     if use_llm:
-        return _generate_fl_convo_llm(name_a, name_b, role_a, role_b, fl_context)
+        # Retrieve FL memories for richer context (quick, ~0s for stubs)
+        mem_a = _retrieve_agent_fl_memories(agent_a)
+        mem_b = _retrieve_agent_fl_memories(agent_b)
+        return _generate_fl_convo_llm(
+            name_a, name_b, role_a, role_b, fl_context,
+            memories_a=mem_a, memories_b=mem_b,
+        )
     else:
         return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, fl_context)
 
@@ -335,9 +381,10 @@ def _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx):
     ]
 
 
-def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx):
-    """Generate an FL conversation via LLM call."""
-    from .prompts.gpt_structure import ChatGPT_single_request
+def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
+                           memories_a="", memories_b=""):
+    """Generate an FL conversation via LLM call with agent memories."""
+    from .prompts.gpt_structure import ollama_chat_request
 
     rnd = ctx.get("round", 0)
     acc = ctx.get("accuracy", 0)
@@ -346,22 +393,42 @@ def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx):
     lab = ctx.get("lab_id", "")
     demo = ctx.get("demo", "pazienti")
 
+    hint_a = _ROLE_CONVO_HINTS.get(role_a, "discute i risultati FL")
+    hint_b = _ROLE_CONVO_HINTS.get(role_b, "discute i risultati FL")
+
+    # Build memory section only if available
+    mem_section = ""
+    if memories_a:
+        mem_section += f"\nRicordi recenti di {name_a}:\n{memories_a}\n"
+    if memories_b:
+        mem_section += f"\nRicordi recenti di {name_b}:\n{memories_b}\n"
+
+    # Gain interpretation
+    if gain > 0.02:
+        gain_note = f"La federazione migliora l'accuracy di {gain:+.1%} rispetto al modello locale"
+    elif gain < -0.02:
+        gain_note = f"Il modello locale è ancora migliore di {abs(gain):.1%} — il globale deve convergere"
+    else:
+        gain_note = "Modello locale e globale hanno performance simili"
+
     prompt = (
         f"{_FL_CONVO_SYSTEM}\n\n"
-        f"Contesto:\n"
-        f"- Laboratorio: {lab} ({demo})\n"
-        f"- Round FL completato: {rnd}\n"
-        f"- Accuracy globale: {acc:.1%}\n"
-        f"- Gain federazione vs locale: {gain:+.1%}\n"
-        f"- Budget privacy residuo: {dp_budget:.0%}\n\n"
-        f"Personaggi:\n"
-        f"- {name_a}: {role_a}\n"
-        f"- {name_b}: {role_b}\n\n"
-        f"Genera 4 battute alternate ({name_a}, {name_b}, {name_a}, {name_b}):"
+        f"DATI ROUND:\n"
+        f"- Lab: {lab} (specializzato in {demo})\n"
+        f"- Round completato: {rnd}\n"
+        f"- Accuracy modello globale: {acc:.1%}\n"
+        f"- {gain_note}\n"
+        f"- Budget privacy (DP-SGD): {dp_budget:.0%} rimanente"
+        f"{' — ATTENZIONE: quasi esaurito!' if dp_budget < 0.2 else ''}\n"
+        f"{mem_section}\n"
+        f"PERSONAGGI:\n"
+        f"- {name_a} ({role_a}): {hint_a}\n"
+        f"- {name_b} ({role_b}): {hint_b}\n\n"
+        f"Dialogo (4 battute: {name_a}, {name_b}, {name_a}, {name_b}):"
     )
 
     try:
-        response = ChatGPT_single_request(prompt)
+        response = ollama_chat_request(prompt, max_tokens=250)
         return _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx)
     except Exception as e:
         logger.warning(f"FL convo LLM failed: {e}, falling back to stubs")
