@@ -34,7 +34,7 @@ const TYPE_COLORS: Record<string, { main: string; accent: string }> = {
 // ---------------------------------------------------------------------------
 export class BlekingeLabScene extends BaseLabScene {
 
-  protected theme: LabTheme = {
+  public theme: LabTheme = {
     name: 'Blekinge University Lab',
     backgroundColor: 0x88ccee,
     tilesetKey: 'tiles_blekinge',
@@ -60,9 +60,7 @@ export class BlekingeLabScene extends BaseLabScene {
     // Assets lab-specific
     this.load.image('blekinge_background', 'assets/labs/blekinge/background.png');
     this.load.image('blekinge_furniture', 'assets/labs/blekinge/furniture.png');
-    this.load.image(this.theme.tilesetKey, 'assets/labs/blekinge/tileset.png');
     this.load.image('blekinge-logo', 'assets/ui/blekinge-logo.png');
-    this.load.tilemapJSON('blekinge-map', 'assets/tilemaps/blekinge-map.json');
     this.load.json('labAgentTypesConfig', 'assets/config/labAgentTypes.json');
   }
 
@@ -123,7 +121,7 @@ export class BlekingeLabScene extends BaseLabScene {
           { label: '→ Vai a OPBG Lab',     sceneKey: 'OPBGLabScene' },
         ],
       };
-      this.labControlsMenu = new LabControlsMenu(this as any, controlConfig);
+      this.labControlsMenu = new LabControlsMenu(this, controlConfig);
       const dc = this.agentController.getDialogController();
       if (dc) this.labControlsMenu.setDialogController(dc);
 

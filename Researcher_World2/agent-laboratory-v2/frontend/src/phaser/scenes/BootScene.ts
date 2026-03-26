@@ -297,8 +297,8 @@ export class BootScene extends BaseScene {
 
     // Caricamento sprite statici per ricercatori (fallback)
     const researcherTypes = [
-      'professor', 'researcher', 'phd_student', 'ml_engineer',
-      'data_engineer', 'privacy_specialist', 'doctor', 'biomedical'
+      'professor', 'professor_senior', 'researcher', 'student', 'student_postdoc',
+      'doctor', 'engineer', 'sw_engineer', 'privacy_specialist'
     ];
 
     researcherTypes.forEach(type => {

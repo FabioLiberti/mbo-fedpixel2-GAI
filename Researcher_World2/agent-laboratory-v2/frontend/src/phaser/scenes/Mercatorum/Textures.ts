@@ -34,12 +34,6 @@ export function preloadAssets(scene: MercatorumLabScene): void {
     scene.load.image('mercatorum_background', 'assets/labs/mercatorum/background.png');
     scene.load.image('mercatorum_furniture', 'assets/labs/mercatorum/furniture.png');
     
-    // Carica tileset specifico
-    scene.load.image(scene.theme.tilesetKey, 'assets/tileset/mercatorum-tiles.png');
-    
-    // Carica la mappa
-    scene.load.tilemapJSON('mercatorum-map', 'assets/tilemaps/mercatorum-map.json');
-    
     // Carica il file di configurazione degli agenti specifici per laboratorio
     scene.load.json('labAgentTypesConfig', 'assets/config/labAgentTypes.json');
     

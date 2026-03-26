@@ -34,7 +34,7 @@ const TYPE_COLORS: Record<string, { main: string; accent: string }> = {
 // ---------------------------------------------------------------------------
 export class OPBGLabScene extends BaseLabScene {
 
-  protected theme: LabTheme = {
+  public theme: LabTheme = {
     name: 'OPBG IRCCS Lab',
     backgroundColor: 0xf0f0f0,
     tilesetKey: 'tiles_opbg',
@@ -61,8 +61,6 @@ export class OPBGLabScene extends BaseLabScene {
     this.load.image('opbg_background', 'assets/labs/opbg/background.png');
     this.load.image('opbg_furniture', 'assets/labs/opbg/furniture.png');
     this.load.image('medical_icons', 'assets/labs/opbg/medical_icons.png');
-    this.load.image(this.theme.tilesetKey, 'assets/tileset/opbg-tiles.png');
-    this.load.tilemapJSON('opbg-map', 'assets/tilemaps/opbg-map.json');
     this.load.json('labAgentTypesConfig', 'assets/config/labAgentTypes.json');
     this.load.image('opbg-logo', 'assets/ui/opbg-logo.png');
     this.load.image('medical_equipment', 'assets/labs/opbg/medical_equipment.png');
@@ -126,7 +124,7 @@ export class OPBGLabScene extends BaseLabScene {
           { label: '→ Vai a Blekinge Lab',   sceneKey: 'BlekingeLabScene' },
         ],
       };
-      this.labControlsMenu = new LabControlsMenu(this as any, controlConfig);
+      this.labControlsMenu = new LabControlsMenu(this, controlConfig);
       const dc = this.agentController.getDialogController();
       if (dc) this.labControlsMenu.setDialogController(dc);
 

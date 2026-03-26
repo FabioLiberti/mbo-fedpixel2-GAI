@@ -236,7 +236,7 @@ export class DialogState {
     const map: Record<string, DialogType> = {
       professor: DialogType.RESEARCH,
       researcher: DialogType.RESEARCH,
-      phd_student: DialogType.RESEARCH,
+      student_postdoc: DialogType.RESEARCH,
       student: DialogType.RESEARCH,
       doctor: DialogType.DATA,
       engineer: DialogType.MODEL,

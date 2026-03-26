@@ -85,6 +85,21 @@ export class WorldMapScene extends BaseScene {
     this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
       frameWidth: 32, frameHeight: 48
     });
+    this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('professor_senior', 'assets/characters/professor_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('sw_engineer', 'assets/characters/researcher_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('privacy_specialist', 'assets/characters/researcher_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
 
     // Precarica il file di configurazione degli agenti per la legenda
     this.load.json('agentTypesConfig', 'assets/config/agentTypes.json');

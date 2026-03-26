@@ -149,7 +149,7 @@ async def get_config():
         },
         "agents": {
             "count": state.get("agent_count", 0),
-            "types": ["phd_student", "researcher", "professor"]
+            "types": ["student", "student_postdoc", "researcher", "professor", "doctor", "engineer", "sw_engineer", "privacy_specialist"]
         },
         "fl": {
             "algorithm": "fedavg",

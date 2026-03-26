@@ -301,7 +301,7 @@ export class DialogRenderer {
         "L'efficienza della comunicazione è la sfida principale.",
         "Ho trovato un modo per ridurre il budget di privacy.",
       ],
-      phd_student: [
+      student_postdoc: [
         "Sto implementando un nuovo metodo di aggregazione.",
         "Potresti rivedere il mio design sperimentale?",
         "L'eterogeneità dei dati sta causando problemi.",

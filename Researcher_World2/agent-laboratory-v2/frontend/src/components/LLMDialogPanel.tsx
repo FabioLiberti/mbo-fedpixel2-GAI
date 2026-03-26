@@ -37,7 +37,7 @@ const SCENE_TO_LAB: Record<string, string> = {
 const ROLE_COLORS: Record<string, string> = {
   professor: '#e6b800',
   researcher: '#3498db',
-  phd_student: '#2ecc71',
+  student_postdoc: '#2ecc71',
   doctor: '#e74c3c',
   student: '#9b59b6',
 };

@@ -11,21 +11,11 @@ export const ASSETS = {
       mercatorumLogo: '/assets/ui/mercatorum_logo.png'
     },
     
-    // Tilesets per i laboratori
+    // Tilesets per i laboratori (TODO: generate real tilesets)
     tilesets: {
-      main: '/assets/tilesets/main_tileset.png',
-      mercatorum: '/assets/labs/mercatorum/tileset.png',
       blekinge: '/assets/labs/blekinge/tileset.png',
-      opbg: '/assets/labs/opbg/tileset.png'
     },
-    
-    // Tilemaps per i laboratori
-    tilemaps: {
-      mercatorum: '/assets/labs/mercatorum/map.json',
-      blekinge: '/assets/labs/blekinge/map.json',
-      opbg: '/assets/labs/opbg/map.json'
-    },
-    
+
     // Asset per i laboratori specifici
     labs: {
       mercatorum: {

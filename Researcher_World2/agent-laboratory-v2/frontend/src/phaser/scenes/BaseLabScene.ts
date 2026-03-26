@@ -10,7 +10,7 @@ import { DialogController } from '../controllers/DialogController';
 import { FLDialogIntegrator } from '../fl/FLDialogIntegrator';
 import { loadDialogAssets } from '../loader';
 import { DialogDebugger } from '../utils/dialogDebugger';
-import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
+import { LabControlsMenu, type LabControlConfig, type ILabControlScene } from '../ui/LabControlsMenu';
 import { SimpleLLMPanel } from '../ui/simple/SimpleLLMPanel';
 import { AgentsLegend } from '../ui/AgentsLegend';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
@@ -57,7 +57,7 @@ export interface LabTheme {
  * Contiene metodi condivisi per debug, texture, animazioni, agenti, camera, interazioni.
  * Le sottoclassi forniscono solo le parti specifiche (background, titolo, zone, config).
  */
-export class BaseLabScene extends BaseScene {
+export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Agenti presenti nel laboratorio
   public agents: Agent[] = [];
 
@@ -83,7 +83,7 @@ export class BaseLabScene extends BaseScene {
   protected labTypeId: LabTypeId = LAB_TYPES.MERCATORUM;
 
   // Tema del laboratorio (da sovrascrivere nelle classi derivate)
-  protected theme: LabTheme = {
+  public theme: LabTheme = {
     name: "Base Laboratory",
     backgroundColor: 0x333333,
     tilesetKey: 'tiles_default',
@@ -220,7 +220,7 @@ export class BaseLabScene extends BaseScene {
 
   protected initializeControlsMenu(): void {
     try {
-      this.labControlsMenu = new LabControlsMenu(this as any, {
+      this.labControlsMenu = new LabControlsMenu(this, {
         labId: 'default', labName: 'Lab', labDescription: '',
         theme: { primary: 0x3f51b5, secondary: 0x1a1a2e, accent: 0xf5f5dc },
         navigation: [],
@@ -374,7 +374,7 @@ export class BaseLabScene extends BaseScene {
     }
   }
 
-  protected updateDebugInfo(text: string): void {
+  public updateDebugInfo(text: string): void {
     if (this.debugText && this.debugText.scene) {
       try { this.debugText.setText(text); } catch (error) {
         console.error('Error in updateDebugInfo:', error);

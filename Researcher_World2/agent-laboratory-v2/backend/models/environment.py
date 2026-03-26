@@ -28,18 +28,18 @@ PERSONA_REGISTRY = {
     "mercatorum": [
         ("Elena_Conti",    "professor",           Specialization.PRIVACY_ECONOMICS),
         ("Luca_Bianchi",   "privacy_specialist",  Specialization.COMPLIANCE_VERIFICATION),
-        ("Marco_Rossi",    "phd_student",          Specialization.DATA_SCIENCE),
+        ("Marco_Rossi",    "student",               Specialization.DATA_SCIENCE),
         ("Sofia_Greco",    "researcher",           Specialization.PRIVACY_ENGINEERING),
     ],
     "blekinge": [
         ("Lars_Lindberg",   "professor_senior",  Specialization.FL_ARCHITECTURE),
-        ("Erik_Johansson",  "phd_student",       Specialization.COMMUNICATION_EFFICIENCY),
+        ("Erik_Johansson",  "student",           Specialization.COMMUNICATION_EFFICIENCY),
         ("Sara_Nilsson",    "sw_engineer",       Specialization.PLATFORM_DEVELOPMENT),
         ("Nils_Eriksson",   "engineer",          Specialization.MODEL_OPTIMIZATION),
     ],
     "opbg": [
         ("Matteo_Ferri",     "doctor",           Specialization.CLINICAL_DATA),
-        ("Marco_Romano",     "phd_student",      Specialization.DATA_SCIENCE),
+        ("Marco_Romano",     "student_postdoc",  Specialization.DATA_SCIENCE),
         ("Lorenzo_Mancini",  "engineer",         Specialization.MODEL_OPTIMIZATION),
         ("Giulia_Conti",     "researcher",       Specialization.PRIVACY_ENGINEERING),
     ],
@@ -47,7 +47,8 @@ PERSONA_REGISTRY = {
 
 # Role-based default parameters
 ROLE_DEFAULTS = {
-    "phd_student":          {"speed": 1.2, "social_tendency": 0.7, "research_efficiency": 0.5},
+    "student":              {"speed": 1.2, "social_tendency": 0.7, "research_efficiency": 0.5},
+    "student_postdoc":      {"speed": 1.1, "social_tendency": 0.6, "research_efficiency": 0.6},
     "researcher":           {"speed": 1.0, "social_tendency": 0.5, "research_efficiency": 0.8},
     "professor":            {"speed": 0.8, "social_tendency": 0.6, "research_efficiency": 1.0},
     "professor_senior":     {"speed": 0.7, "social_tendency": 0.6, "research_efficiency": 1.0},

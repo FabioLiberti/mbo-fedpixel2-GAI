@@ -140,7 +140,6 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Accede al gioco in modo sicuro attraverso la scena
    */
   protected getGameEvents(): Phaser.Events.EventEmitter {
-    // Fallback per emettitore di eventi
     const sceneAny = this.scene as any;
     if (sceneAny.game?.events) {
       return sceneAny.game.events;

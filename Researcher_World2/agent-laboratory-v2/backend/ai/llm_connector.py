@@ -304,7 +304,8 @@ class LLMConnector:
                 "enable_caching": True,
                 "cache_expiry_seconds": 3600,
                 "fallback_dialogs": {
-                    "phd_student": "Sto lavorando sull'ottimizzazione del nostro algoritmo di federated learning per una migliore privacy.",
+                    "student": "Sto lavorando sull'ottimizzazione del nostro algoritmo di federated learning per una migliore privacy.",
+                    "student_postdoc": "Sto analizzando i dati clinici per migliorare il modello federato con tecniche di data science.",
                     "researcher": "Sto analizzando le proprietà di convergenza del nostro modello con dati non-IID.",
                     "professor": "Vi mostro le garanzie teoriche del nostro approccio al federated learning.",
                     "default": "Sono concentrato sulla mia ricerca in federated learning."
