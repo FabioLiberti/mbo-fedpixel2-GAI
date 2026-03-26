@@ -16,6 +16,7 @@ import { AgentsLegend } from '../ui/AgentsLegend';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
 import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
+import { generateTilesetCanvas, TilesetTheme, TILE } from '../utils/tilesetGenerator';
 
 /**
  * Interfaccia per i dati di interazione tra agenti
@@ -112,6 +113,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   public agentsLegend: AgentsLegend | null = null;
   public agentController: GlobalAgentController | null = null;
   public dialogEventTracker: DialogEventTracker | null = null;
+
+  // Tilemap (when using tilemap-based layout instead of procedural)
+  protected labTilemap: Phaser.Tilemaps.Tilemap | null = null;
 
   constructor(key: string) {
     super(key);
@@ -660,6 +664,94 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       furniture.setDepth(-5);
     } catch (error) {
       console.error('Error in createTemporaryMap:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Tilemap-based lab layout
+  // ------------------------------------------------------------------
+
+  /**
+   * Creates a tilemap-based lab layout using a runtime-generated tileset.
+   * Subclasses provide `tilesetTheme` and `layoutFn` to define the appearance.
+   *
+   * @param tilesetTheme  Color palette for the tileset
+   * @param layoutFn      Callback that places tiles on the floor/furniture layers
+   * @param cols          Grid columns (default: derived from camera width)
+   * @param rows          Grid rows (default: derived from camera height)
+   */
+  protected createLabTilemap(
+    tilesetTheme: TilesetTheme,
+    layoutFn: (floor: Phaser.Tilemaps.TilemapLayer, furniture: Phaser.Tilemaps.TilemapLayer, cols: number, rows: number) => void,
+    cols?: number,
+    rows?: number,
+  ): void {
+    try {
+      const c = cols ?? Math.floor(this.cameras.main.width / 32);
+      const r = rows ?? Math.floor(this.cameras.main.height / 32);
+
+      // 1. Generate tileset texture
+      const tilesetKey = `tileset_${this.scene.key}`;
+      if (!this.textures.exists(tilesetKey)) {
+        const canvas = generateTilesetCanvas(tilesetTheme);
+        this.textures.addCanvas(tilesetKey, canvas);
+      }
+
+      // 2. Create blank tilemap
+      const map = this.make.tilemap({
+        tileWidth: 32,
+        tileHeight: 32,
+        width: c,
+        height: r,
+      });
+      if (!map) {
+        console.error('Failed to create tilemap');
+        return;
+      }
+      this.labTilemap = map;
+
+      // 3. Add the runtime tileset image
+      const tileset = map.addTilesetImage('lab-tiles', tilesetKey, 32, 32, 0, 0);
+      if (!tileset) {
+        console.error('Failed to add tileset image');
+        return;
+      }
+
+      // 4. Create layers
+      const floorLayer = map.createBlankLayer('floor', tileset, 0, 0);
+      const furnitureLayer = map.createBlankLayer('furniture', tileset, 0, 0);
+      if (!floorLayer || !furnitureLayer) {
+        console.error('Failed to create tilemap layers');
+        return;
+      }
+
+      floorLayer.setDepth(-8);
+      furnitureLayer.setDepth(-4);
+
+      // 5. Fill floor with checkerboard pattern
+      for (let y = 0; y < r; y++) {
+        for (let x = 0; x < c; x++) {
+          floorLayer.putTileAt((x + y) % 2 === 0 ? TILE.FLOOR : TILE.FLOOR_ALT, x, y);
+        }
+      }
+
+      // 6. Let subclass populate the furniture
+      layoutFn(floorLayer, furnitureLayer, c, r);
+
+      // 7. Update pathfinding grid from furniture layer
+      this.grid = Array(r).fill(0).map(() => Array(c).fill(0));
+      for (let y = 0; y < r; y++) {
+        for (let x = 0; x < c; x++) {
+          const tile = furnitureLayer.getTileAt(x, y);
+          if (tile && tile.index !== -1) {
+            this.grid[y][x] = 1; // blocked
+          }
+        }
+      }
+
+      console.log(`Tilemap created for ${this.scene.key}: ${c}x${r} tiles`);
+    } catch (error) {
+      console.error('Error in createLabTilemap:', error);
     }
   }
 

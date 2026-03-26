@@ -9,6 +9,7 @@ import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
 import { LAB_TYPES } from '../types/LabTypeConstants';
+import { THEME_OPBG, TILE } from '../utils/tilesetGenerator';
 
 // ---------------------------------------------------------------------------
 // Agent config — aligned with backend PERSONA_REGISTRY["opbg"]
@@ -88,10 +89,40 @@ export class OPBGLabScene extends BaseLabScene {
       this.createMissingTextures(CHARACTER_TYPES);
       this.createAllCharacterAnimations(CHARACTER_TYPES);
 
-      // Scene layout
+      // Scene layout: background + tilemap
       this.createHospitalBackground();
-      this.createHospitalTemporaryMap();
-      this.initializeGrid();
+      this.createLabTilemap(THEME_OPBG, (floor, furn, cols, rows) => {
+        // Walls — hospital corridor style
+        for (let x = 0; x < cols; x++) { furn.putTileAt(TILE.WALL_H, x, 0); furn.putTileAt(TILE.WALL_H, x, rows - 1); }
+        for (let y = 1; y < rows - 1; y++) { furn.putTileAt(TILE.WALL, 0, y); furn.putTileAt(TILE.WALL, cols - 1, y); }
+        furn.putTileAt(TILE.WALL_CORNER, 0, 0); furn.putTileAt(TILE.WALL_CORNER, cols - 1, 0);
+        furn.putTileAt(TILE.WALL_CORNER, 0, rows - 1); furn.putTileAt(TILE.WALL_CORNER, cols - 1, rows - 1);
+        // Doors
+        furn.putTileAt(TILE.DOOR, 1, rows - 1); furn.putTileAt(TILE.DOOR, cols - 2, rows - 1);
+        // Windows along top
+        for (let x = 2; x < cols - 2; x += 2) furn.putTileAt(TILE.WINDOW, x, 0);
+        // Central server room (data sensibili)
+        const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+        for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) {
+          if (Math.abs(dx) === 2 || Math.abs(dy) === 1) furn.putTileAt(TILE.CABINET, cx + dx, cy + dy);
+          else furn.putTileAt(TILE.SERVER, cx + dx, cy + dy);
+        }
+        // Workstations (left side)
+        for (let y = 3; y < rows - 3; y += 3) {
+          furn.putTileAt(TILE.DESK, 1, y); furn.putTileAt(TILE.MONITOR, 2, y);
+          furn.putTileAt(TILE.CHAIR, 2, y + 1);
+        }
+        // Clinical area (right side) — equipment + cabinets
+        furn.putTileAt(TILE.EQUIPMENT, cols - 3, 2); furn.putTileAt(TILE.EQUIPMENT, cols - 2, 2);
+        furn.putTileAt(TILE.EQUIPMENT, cols - 3, 3); furn.putTileAt(TILE.CABINET, cols - 2, 3);
+        furn.putTileAt(TILE.CABINET, cols - 3, 5); furn.putTileAt(TILE.CABINET, cols - 2, 5);
+        // Meeting area (bottom center)
+        for (let dx = -1; dx <= 1; dx++) furn.putTileAt(TILE.TABLE, cx + dx, rows - 3);
+        furn.putTileAt(TILE.CHAIR, cx - 2, rows - 3); furn.putTileAt(TILE.CHAIR, cx + 2, rows - 3);
+        // Plants for pediatric atmosphere
+        furn.putTileAt(TILE.PLANT, 1, 1); furn.putTileAt(TILE.PLANT, cols - 2, 1);
+        furn.putTileAt(TILE.PLANT, 1, rows - 2); furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
+      });
       this.createInteractionZones();
 
       // Agents
@@ -194,66 +225,7 @@ export class OPBGLabScene extends BaseLabScene {
 
   // ---- Scene-specific: Hospital temporary map ---------------------------
 
-  private createHospitalTemporaryMap(): void {
-    try {
-      if (this.textures.exists('opbg_furniture')) {
-        const f = this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'opbg_furniture');
-        f.setDepth(-5);
-        this.createGridFromImage(f);
-        return;
-      }
-
-      const gs = 32;
-      const w = Math.ceil(this.cameras.main.width / gs);
-      const h = Math.ceil(this.cameras.main.height / gs);
-      this.grid = Array(h).fill(0).map(() => Array(w).fill(0));
-
-      const furniture = this.add.graphics();
-      const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
-
-      // Server Room
-      furniture.fillStyle(this.theme.colorPalette.primary, 0.2);
-      furniture.lineStyle(2, this.theme.colorPalette.primary, 0.8);
-      furniture.fillRoundedRect(w * gs / 2 - 80, h * gs / 2 - 40, 160, 80, 10);
-      furniture.strokeRoundedRect(w * gs / 2 - 80, h * gs / 2 - 40, 160, 80, 10);
-      this.add.text(w * gs / 2, h * gs / 2, 'Server Room\nDati Sensibili', { fontSize: '14px', color: '#333333', align: 'center' }).setOrigin(0.5);
-      for (let y = cy - 1; y <= cy + 1; y++) {
-        for (let x = cx - 2; x <= cx + 2; x++) {
-          if (y >= 0 && y < h && x >= 0 && x < w) this.grid[y][x] = 1;
-        }
-      }
-
-      // Work stations (left)
-      furniture.fillStyle(this.theme.colorPalette.secondary, 0.7);
-      for (let y = 2; y < h - 2; y += 3) {
-        furniture.fillRect(gs, y * gs, gs * 2, gs);
-        if (y >= 0 && y < h) { this.grid[y][1] = 1; this.grid[y][2] = 1; }
-      }
-
-      // Clinical area
-      furniture.fillStyle(this.theme.colorPalette.accent, 0.2);
-      furniture.lineStyle(2, this.theme.colorPalette.accent, 0.8);
-      furniture.fillRoundedRect(w * gs - 200, h * gs / 2 - 60, 180, 120, 10);
-      furniture.strokeRoundedRect(w * gs - 200, h * gs / 2 - 60, 180, 120, 10);
-      this.add.text(w * gs - 110, h * gs / 2 - 50, 'Area Clinica', { fontSize: '14px', color: '#333333', align: 'center' }).setOrigin(0.5);
-
-      // Hospital beds (simplified)
-      furniture.fillStyle(0xffffff, 1);
-      furniture.fillRect(w * gs - 180, h * gs / 2 - 30, 60, 30);
-      furniture.fillRect(w * gs - 100, h * gs / 2 - 30, 60, 30);
-      furniture.fillRect(w * gs - 180, h * gs / 2 + 30, 60, 30);
-      furniture.fillRect(w * gs - 100, h * gs / 2 + 30, 60, 30);
-
-      // Pediatric star decorations
-      furniture.fillStyle(this.theme.colorPalette.secondary, 0.5);
-      furniture.fillStar(50, 50, 5, 10, 15);
-      furniture.fillStar(w * gs - 50, 50, 5, 10, 15);
-
-      furniture.setDepth(-5);
-    } catch (error) {
-      console.error('Error in createHospitalTemporaryMap:', error);
-    }
-  }
+  // createHospitalTemporaryMap removed — replaced by tilemap in create()
 
   // ---- Scene-specific: Interaction zones --------------------------------
 

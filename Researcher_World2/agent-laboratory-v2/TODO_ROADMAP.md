@@ -229,20 +229,15 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 ## FEATURE-3: Tilemap reali con Tiled
 
-**Stato**: tutte le scene usano fallback procedurale
+**Stato**: COMPLETATO (v0.6.3)
 **Priorità**: FEATURE (estetica)
 
-### Stato attuale
-- Mercatorum: `mercatorum-map.json` esiste (1294 bytes) ma non è usato (fallback)
-- Blekinge: background/furniture/tileset reali (~2MB ciascuno) ma tilemap rimossa
-- OPBG: solo background.png, tutto il resto procedurale
-
-### Azione
-1. Creare tilemap con Tiled editor per ogni lab (32x32 tile size)
-2. Esportare come JSON e posizionare in `frontend/public/assets/tilemaps/`
-3. Creare tileset PNG corrispondenti
-4. Riattivare il caricamento nelle scene (`this.load.tilemapJSON(...)`)
-5. Usare `this.make.tilemap()` in create() al posto dei metodi fallback
+### Implementazione
+- Tileset generati a runtime via canvas (`tilesetGenerator.ts`) con 24 tile types tematizzati
+- 3 temi colore: THEME_MERCATORUM (terracotta), THEME_BLEKINGE (scandinavo), THEME_OPBG (ospedaliero)
+- `BaseLabScene.createLabTilemap()` crea blank tilemap + layers programmaticamente
+- Ogni scena definisce il proprio layout con callback (muri, scrivanie, librerie, server, etc.)
+- Grid pathfinding aggiornata automaticamente dal furniture layer
 
 ---
 
@@ -257,4 +252,4 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 | LOW-5 | Verifica | Build frontend pulita | Bassa |
 | FEATURE-1 | Feature | Miglioramento prompt cognitivi | Alta |
 | FEATURE-2 | Feature | FL dataset reale + persistenza | Alta |
-| FEATURE-3 | Feature | Tilemap reali con Tiled | Media |
+| FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ COMPLETATO | Media |

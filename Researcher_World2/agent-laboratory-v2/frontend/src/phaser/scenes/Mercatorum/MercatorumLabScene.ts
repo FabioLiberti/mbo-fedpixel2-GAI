@@ -9,6 +9,7 @@ import { LabControlsMenu, type LabControlConfig } from '../../ui/LabControlsMenu
 import { GlobalAgentController } from '../../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../../controllers/DialogEventTracker';
 import { LAB_TYPES } from '../../types/LabTypeConstants';
+import { THEME_MERCATORUM, TILE } from '../../utils/tilesetGenerator';
 
 // ---------------------------------------------------------------------------
 // Agent config — aligned with backend PERSONA_REGISTRY["mercatorum"]
@@ -87,10 +88,38 @@ export class MercatorumLabScene extends BaseLabScene {
       this.createMissingTextures(SPRITESHEET_TYPES);
       this.createAllCharacterAnimations(SPRITESHEET_TYPES);
 
-      // Scene layout
+      // Scene layout: background + tilemap
       this.createItalianClassicBackground();
-      this.createTemporaryMap('mercatorum_furniture');
-      this.initializeGrid();
+      this.createLabTilemap(THEME_MERCATORUM, (floor, furn, cols, rows) => {
+        // Walls around perimeter
+        for (let x = 0; x < cols; x++) { furn.putTileAt(TILE.WALL_H, x, 0); furn.putTileAt(TILE.WALL_H, x, rows - 1); }
+        for (let y = 1; y < rows - 1; y++) { furn.putTileAt(TILE.WALL, 0, y); furn.putTileAt(TILE.WALL, cols - 1, y); }
+        furn.putTileAt(TILE.WALL_CORNER, 0, 0); furn.putTileAt(TILE.WALL_CORNER, cols - 1, 0);
+        furn.putTileAt(TILE.WALL_CORNER, 0, rows - 1); furn.putTileAt(TILE.WALL_CORNER, cols - 1, rows - 1);
+        // Bookshelves along top wall
+        for (let x = 2; x < cols - 2; x++) furn.putTileAt(TILE.BOOKSHELF, x, 1);
+        // Doors
+        furn.putTileAt(TILE.DOOR, Math.floor(cols / 2), rows - 1);
+        // Desks along left/right walls
+        for (let y = 3; y < rows - 3; y += 3) {
+          furn.putTileAt(TILE.DESK, 1, y); furn.putTileAt(TILE.CHAIR, 2, y);
+          furn.putTileAt(TILE.DESK, cols - 2, y); furn.putTileAt(TILE.CHAIR, cols - 3, y);
+        }
+        // Central meeting table
+        const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+        for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) furn.putTileAt(TILE.TABLE, cx + dx, cy + dy);
+        // Rug under table area
+        for (let dx = -3; dx <= 3; dx++) for (let dy = -2; dy <= 2; dy++) {
+          const tx = cx + dx, ty = cy + dy;
+          if (!furn.getTileAt(tx, ty) || furn.getTileAt(tx, ty)!.index === -1) floor.putTileAt(TILE.RUG, tx, ty);
+        }
+        // Plants in corners
+        furn.putTileAt(TILE.PLANT, 1, rows - 2); furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
+        // Server rack
+        furn.putTileAt(TILE.SERVER, 1, 1); furn.putTileAt(TILE.SERVER, 1, 2);
+        // Whiteboard
+        furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) - 1, 1); furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) + 1, 1);
+      });
       this.createInteractionZones();
 
       // Agents (portrait types get 0.15 scale, spritesheets get 5.0)

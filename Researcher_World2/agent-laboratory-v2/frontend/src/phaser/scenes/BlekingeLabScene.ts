@@ -9,6 +9,7 @@ import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
 import { LAB_TYPES } from '../types/LabTypeConstants';
+import { THEME_BLEKINGE, TILE } from '../utils/tilesetGenerator';
 
 // ---------------------------------------------------------------------------
 // Agent config — aligned with backend PERSONA_REGISTRY["blekinge"]
@@ -85,10 +86,40 @@ export class BlekingeLabScene extends BaseLabScene {
       this.createMissingTextures(CHARACTER_TYPES);
       this.createAllCharacterAnimations(CHARACTER_TYPES);
 
-      // Scene layout
+      // Scene layout: background + tilemap
       this.createScandinavianBackground();
-      this.createTemporaryMap('blekinge_furniture');
-      this.initializeGrid();
+      this.createLabTilemap(THEME_BLEKINGE, (floor, furn, cols, rows) => {
+        // Minimal walls — Scandinavian open plan
+        for (let x = 0; x < cols; x++) { furn.putTileAt(TILE.WALL_H, x, 0); }
+        for (let y = 1; y < rows; y++) { furn.putTileAt(TILE.WALL, 0, y); furn.putTileAt(TILE.WALL, cols - 1, y); }
+        furn.putTileAt(TILE.WALL_CORNER, 0, 0); furn.putTileAt(TILE.WALL_CORNER, cols - 1, 0);
+        // Windows along top wall
+        for (let x = 3; x < cols - 3; x += 3) furn.putTileAt(TILE.WINDOW, x, 0);
+        // Innovation corner (bottom-left)
+        furn.putTileAt(TILE.COUCH, 2, rows - 3); furn.putTileAt(TILE.COUCH, 3, rows - 3);
+        furn.putTileAt(TILE.TABLE, 2, rows - 4); furn.putTileAt(TILE.PLANT, 1, rows - 2);
+        // Data wall (top) — whiteboards and monitors
+        for (let x = 2; x < cols - 2; x += 2) furn.putTileAt(TILE.WHITEBOARD, x, 1);
+        for (let x = 3; x < cols - 2; x += 2) furn.putTileAt(TILE.MONITOR, x, 1);
+        // Workstation clusters (center)
+        const cx = Math.floor(cols / 2);
+        // Cluster left
+        furn.putTileAt(TILE.DESK, cx - 4, 5); furn.putTileAt(TILE.DESK, cx - 3, 5);
+        furn.putTileAt(TILE.CHAIR, cx - 4, 6); furn.putTileAt(TILE.CHAIR, cx - 3, 6);
+        // Cluster right
+        furn.putTileAt(TILE.DESK, cx + 2, 5); furn.putTileAt(TILE.DESK, cx + 3, 5);
+        furn.putTileAt(TILE.CHAIR, cx + 2, 6); furn.putTileAt(TILE.CHAIR, cx + 3, 6);
+        // Server area (right side)
+        furn.putTileAt(TILE.SERVER, cols - 2, 2); furn.putTileAt(TILE.SERVER, cols - 2, 3);
+        furn.putTileAt(TILE.SERVER, cols - 2, 4);
+        // Relax area (bottom-right)
+        furn.putTileAt(TILE.COUCH, cols - 4, rows - 3); furn.putTileAt(TILE.COUCH, cols - 3, rows - 3);
+        furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
+        // Rug in relax area
+        for (let dx = -2; dx <= 0; dx++) for (let dy = -1; dy <= 1; dy++) {
+          floor.putTileAt(TILE.RUG, cols - 3 + dx, rows - 3 + dy);
+        }
+      });
       this.createInteractionZones();
 
       // Agents
