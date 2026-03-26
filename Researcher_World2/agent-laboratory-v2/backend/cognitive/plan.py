@@ -296,10 +296,44 @@ def _long_term_planning(persona, new_day):
                               thought_embedding_pair, None)
 
 
+def _retrieve_fl_insights(persona):
+    """Retrieve recent FL insights from long-term memory to inform action decisions.
+
+    Returns a short context string summarizing recent reflections relevant to
+    the agent's FL specialization.  If no insights exist, returns an empty string.
+    """
+    spec = persona.scratch.fl_specialization or "federated learning"
+    # Use specialization + generic FL terms as focal points
+    focal_points = [spec, "federated learning", "model training"]
+    try:
+        retrieved = new_retrieve(persona, focal_points, n_count=5)
+    except Exception:
+        return ""
+
+    insights = []
+    for _fp, nodes in retrieved.items():
+        for node in nodes:
+            if node.type == "thought" and node.embedding_key:
+                insights.append(node.embedding_key)
+    if not insights:
+        return ""
+    # Deduplicate and limit
+    seen = set()
+    unique = []
+    for ins in insights:
+        if ins not in seen:
+            seen.add(ins)
+            unique.append(ins)
+    return "\n".join(unique[:3])
+
+
 def _determine_action(persona, maze):
     """
     Create next action for the persona. Decomposes hourly schedule as needed
     and sets up all action variables.
+
+    Uses long-term FL insights (if any) to enrich the action description so
+    that the agent's behavior is informed by past reflections.
     """
     def determine_decomp(act_desp, act_dura):
         if "sleep" not in act_desp and "bed" not in act_desp:
@@ -310,6 +344,9 @@ def _determine_action(persona, maze):
             if act_dura > 60:
                 return False
         return True
+
+    # Retrieve FL insights from long-term memory
+    fl_insights = _retrieve_fl_insights(persona)
 
     curr_index = persona.scratch.get_f_daily_schedule_index()
     curr_index_60 = persona.scratch.get_f_daily_schedule_index(advance=60)
@@ -339,6 +376,12 @@ def _determine_action(persona, maze):
         persona.scratch.f_daily_schedule.append(["sleeping", 1440 - x_emergency])
 
     act_desp, act_dura = persona.scratch.f_daily_schedule[curr_index]
+
+    # Enrich action description with FL insights when available
+    if fl_insights and "sleep" not in act_desp.lower():
+        # Append first insight as sub-context so LLM location prompts see it
+        first_insight = fl_insights.split("\n")[0][:80]
+        act_desp = f"{act_desp} (insight: {first_insight})"
 
     # Determine action location
     act_world = maze.access_tile(persona.scratch.curr_tile)["world"]

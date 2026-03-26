@@ -184,22 +184,22 @@ Verificare che:
 
 ## FEATURE-1: Cognitive pipeline — stub → LLM
 
-**Stato**: funzionante con dual-mode
+**Stato**: COMPLETATO (v0.6.4 + v0.6.5)
 **Priorità**: FEATURE
 
-### Stato attuale
+### Implementazione
 Il pipeline cognitivo (perceive→retrieve→plan→reflect→execute) è **completo e funzionante**.
 Ogni step ha due percorsi:
-- `USE_STUBS=True` (default): valori deterministici, veloce, no Ollama
-- `USE_STUBS=False`: chiamate reali a qwen3.5:4b via Ollama
+- `USE_STUBS=True` (default): valori deterministici FL-specifici, veloce, no Ollama
+- `USE_STUBS=False`: chiamate reali a qwen3.5:4b via Ollama con prompt FL-specializzati
 
 Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
-### Miglioramenti possibili
-1. **Qualità prompt**: i template in `backend/cognitive/prompts/templates/` sono generici — specializzarli per FL
-2. **Memoria a lungo termine**: la riflessione genera insight ma non vengono usati per decision-making FL
-3. **Conversazione multi-turno**: `converse.py` v2 è attivo ma i dialoghi sono brevi (1-2 turni)
-4. **Emoji pronunciatio**: fallback generico (`🙂`) — LLM potrebbe generare emoji contestuali
+### Miglioramenti implementati
+1. **Qualità prompt (v0.6.4)**: 20+ funzioni con contesto FL (ruolo, lab, specializzazione), prompt in italiano, 9 profili ruolo, 3 descrizioni lab, system prompt FL riutilizzabile, 30+ emoji keyword
+2. **Memoria a lungo termine (v0.6.5)**: insight riflessione recuperati prima di `_determine_action()` e iniettati nel contesto conversazione (`agent_chat_v2`); completamento FL task inietta evento ad alta poignancy + boost importance trigger per attivare riflessione
+3. **Conversazione multi-turno (v0.6.5)**: minimo 3 turni enforced (`_MIN_CHAT_TURNS`), contesto arricchito con specializzazioni FL, 3 fasi di risposta (early/mid/late) negli stub
+4. **Emoji pronunciatio (v0.6.4)**: 30+ keyword FL/IT nella mappa emoji, prompt LLM in italiano
 
 ---
 
@@ -250,6 +250,6 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 | LOW-3 | Fix | generate_personas.py nomi vecchi | Bassa |
 | LOW-4 | Quality | Ridurre `as any` (54→~10) | Media |
 | LOW-5 | Verifica | Build frontend pulita | Bassa |
-| FEATURE-1 | Feature | Miglioramento prompt cognitivi | Alta |
+| FEATURE-1 | Feature | ~~Miglioramento prompt cognitivi~~ COMPLETATO | Alta |
 | FEATURE-2 | Feature | FL dataset reale + persistenza | Alta |
 | FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ COMPLETATO | Media |

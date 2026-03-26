@@ -98,34 +98,89 @@ def agent_chat_v1(maze, init_persona, target_persona):
         curr_context, summarized_ideas[0], summarized_ideas[1])
 
 
+def _retrieve_fl_insights_for_convo(persona, target_name):
+    """Retrieve FL insights from long-term memory relevant to a conversation.
+
+    Returns a short string with up to 2 recent insights (thoughts) about FL
+    that can enrich conversation context.
+    """
+    spec = persona.scratch.fl_specialization or "federated learning"
+    focal_points = [spec, target_name]
+    try:
+        retrieved = new_retrieve(persona, focal_points, n_count=5)
+    except Exception:
+        return ""
+
+    insights = []
+    for _fp, nodes in retrieved.items():
+        for node in nodes:
+            if node.type == "thought" and node.embedding_key:
+                insights.append(node.embedding_key)
+    # Deduplicate
+    seen = set()
+    unique = []
+    for ins in insights:
+        if ins not in seen:
+            seen.add(ins)
+            unique.append(ins)
+    return "\n".join(unique[:2])
+
+
+# Minimum number of exchanges before "end" is honored.
+# This prevents overly short conversations (1-2 turns).
+_MIN_CHAT_TURNS = 3
+
+
 def generate_one_utterance(maze, init_persona, target_persona, retrieved, curr_chat):
     """Generate a single utterance in a conversation."""
+    spec_init = init_persona.scratch.fl_specialization or "FL"
+    spec_target = target_persona.scratch.fl_specialization or "FL"
     curr_context = (
-        f"{init_persona.scratch.name} "
-        f"was {init_persona.scratch.act_description} "
-        f"when {init_persona.scratch.name} "
-        f"saw {target_persona.scratch.name} "
-        f"in the middle of {target_persona.scratch.act_description}.\n"
+        f"{init_persona.scratch.name} ({spec_init}) "
+        f"stava {init_persona.scratch.act_description} "
+        f"quando ha visto {target_persona.scratch.name} ({spec_target}) "
+        f"che stava {target_persona.scratch.act_description}.\n"
     )
     curr_context += (
         f"{init_persona.scratch.name} "
-        f"is initiating a conversation with "
-        f"{target_persona.scratch.name}."
+        f"avvia una conversazione con "
+        f"{target_persona.scratch.name} sul progetto FL."
     )
 
     x = run_gpt_generate_iterative_chat_utt(
         maze, init_persona, target_persona,
         retrieved, curr_context, curr_chat)[0]
-    return x["utterance"], x["end"]
+
+    utt = x["utterance"]
+    end = x["end"]
+
+    # Enforce minimum turns: do not end before _MIN_CHAT_TURNS exchanges
+    if end and len(curr_chat) < _MIN_CHAT_TURNS:
+        end = False
+
+    return utt, end
 
 
 def agent_chat_v2(maze, init_persona, target_persona):
-    """Chat version 2: iterative turn-by-turn dialogue."""
+    """Chat version 2: iterative turn-by-turn dialogue.
+
+    Enriched with FL insights from long-term memory and enforces a minimum
+    of _MIN_CHAT_TURNS exchanges before allowing the conversation to end.
+    """
     curr_chat = []
+
+    # Retrieve FL insights to enrich the conversation context
+    insights_init = _retrieve_fl_insights_for_convo(
+        init_persona, target_persona.scratch.name)
+    insights_target = _retrieve_fl_insights_for_convo(
+        target_persona, init_persona.scratch.name)
 
     for _ in range(8):
         # Init persona's turn
         focal_points = [f"{target_persona.scratch.name}"]
+        # Add FL insights as extra focal points for richer retrieval
+        if insights_init:
+            focal_points.append(insights_init.split("\n")[0][:80])
         retrieved = new_retrieve(init_persona, focal_points, 50)
         relationship = generate_summarize_agent_relationship(
             init_persona, target_persona, retrieved)
@@ -133,14 +188,16 @@ def agent_chat_v2(maze, init_persona, target_persona):
         if last_chat:
             focal_points = [
                 f"{relationship}",
-                f"{target_persona.scratch.name} is {target_persona.scratch.act_description}",
+                f"{target_persona.scratch.name} sta {target_persona.scratch.act_description}",
                 last_chat
             ]
         else:
             focal_points = [
                 f"{relationship}",
-                f"{target_persona.scratch.name} is {target_persona.scratch.act_description}"
+                f"{target_persona.scratch.name} sta {target_persona.scratch.act_description}"
             ]
+        if insights_init:
+            focal_points.append(insights_init.split("\n")[0][:80])
         retrieved = new_retrieve(init_persona, focal_points, 15)
         utt, end = generate_one_utterance(
             maze, init_persona, target_persona, retrieved, curr_chat)
@@ -150,6 +207,8 @@ def agent_chat_v2(maze, init_persona, target_persona):
 
         # Target persona's turn
         focal_points = [f"{init_persona.scratch.name}"]
+        if insights_target:
+            focal_points.append(insights_target.split("\n")[0][:80])
         retrieved = new_retrieve(target_persona, focal_points, 50)
         relationship = generate_summarize_agent_relationship(
             target_persona, init_persona, retrieved)
@@ -157,14 +216,16 @@ def agent_chat_v2(maze, init_persona, target_persona):
         if last_chat:
             focal_points = [
                 f"{relationship}",
-                f"{init_persona.scratch.name} is {init_persona.scratch.act_description}",
+                f"{init_persona.scratch.name} sta {init_persona.scratch.act_description}",
                 last_chat
             ]
         else:
             focal_points = [
                 f"{relationship}",
-                f"{init_persona.scratch.name} is {init_persona.scratch.act_description}"
+                f"{init_persona.scratch.name} sta {init_persona.scratch.act_description}"
             ]
+        if insights_target:
+            focal_points.append(insights_target.split("\n")[0][:80])
         retrieved = new_retrieve(target_persona, focal_points, 15)
         utt, end = generate_one_utterance(
             maze, target_persona, init_persona, retrieved, curr_chat)

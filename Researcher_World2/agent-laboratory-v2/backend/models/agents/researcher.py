@@ -214,9 +214,39 @@ class ResearcherAgent(Agent):
 
         if self.fl_progress >= 1.0:
             logger.info(f"Agent '{self.name}' completed FL task: {self.fl_task}")
+            completed_task = self.fl_task
             self.fl_task = None
             self.fl_progress = 0.0
             self.fl_contributing = False
+
+            # Boost importance accumulation to trigger reflection after FL task.
+            # A completed FL round is a significant event worth reflecting on.
+            boost = 50  # ~1/3 of importance_trigger_max (150)
+            self.scratch.importance_trigger_curr = max(
+                0, self.scratch.importance_trigger_curr - boost)
+            logger.debug(
+                f"Agent '{self.name}' FL task '{completed_task}' done — "
+                f"importance_trigger_curr={self.scratch.importance_trigger_curr}"
+            )
+
+            # Inject FL completion as a high-poignancy event into associative memory
+            try:
+                from cognitive.prompts.gpt_structure import get_embedding
+                import datetime
+                spec = self.scratch.fl_specialization or "FL"
+                desc = f"{self.name} ha completato il task FL '{completed_task}' su {spec}"
+                created = self.scratch.curr_time or datetime.datetime.now()
+                expiration = created + datetime.timedelta(days=30)
+                embedding_pair = (desc, get_embedding(desc))
+                self.a_mem.add_event(
+                    created, expiration,
+                    self.name, "completed FL task", completed_task,
+                    desc, {self.name.lower(), "fl", completed_task, spec},
+                    8,  # high poignancy
+                    embedding_pair, None)
+            except Exception as e:
+                logger.debug(f"FL completion event injection failed: {e}")
+
             return True
         return False
 
