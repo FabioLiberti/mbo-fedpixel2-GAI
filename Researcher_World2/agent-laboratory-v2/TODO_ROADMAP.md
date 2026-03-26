@@ -1,8 +1,8 @@
 # TODO Roadmap — mbo-fedpixel2-GAI
 
-> Generato: 2026-03-26 dopo v0.6.1
-> Completati: HIGH + MEDIUM priority
-> Questo file traccia tutte le modifiche residue per evitare perdita di contesto.
+> Aggiornato: 2026-03-26 dopo v0.7.5
+> Completati: LOW-1→5, FEATURE-1→3 (tutto fino a v0.7.5)
+> Questo file traccia tutte le modifiche residue e il piano degli sviluppi futuri.
 
 ---
 
@@ -205,12 +205,12 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 ## FEATURE-2: FL training — miglioramenti
 
-**Stato**: COMPLETATO (v0.7.0 + v0.7.1 + v0.7.2)
+**Stato**: COMPLETATO (v0.7.0 → v0.7.5)
 **Priorità**: FEATURE
 
 ### Implementazione
 - **v0.7.0**: Dataset Heart Disease UCI (303 righe, 13 feature, target binario) al posto di XOR sintetico
-  - Partizioni non-IID per età: mercatorum <50, blekinge 50-59, opbg ≥60
+  - Partizioni non-IID per età: opbg <50 (pediatrico), blekinge 50-59, mercatorum ≥60
   - Lazy-loading con cache, normalizzazione min-max, imputation NaN→mediana
   - NN input dim: 10→13, metriche per-client accumulate
 - **v0.7.1**: Sparkline canvas (200×60px) per accuracy (verde) e loss (rosso) nel pannello FL
@@ -219,12 +219,18 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 - **v0.7.2**: Milestone popup quando accuracy ≥ 80%
   - Overlay centrato con breakdown per-lab (accuracy + loss per client)
   - Auto-dismiss dopo 8s o click, trigger una sola volta per simulazione
-
-### Miglioramenti futuri possibili
-1. **Persistenza modello**: i pesi esistono solo in memoria — salvare/caricare checkpoint
-2. **Privacy budget**: inizializzato a 1.0 ma mai consumato — implementare DP-SGD o accounting
-3. **Communication overhead**: tracciato come metrica ma non implementato realmente
-4. **Agent reasoning su FL**: gli agenti non ragionano sulle scelte FL (iperparametri, strategie) — collegare cognitive pipeline a decisioni FL
+- **v0.7.3**: Persistenza modello + local-vs-global + cross-eval + agent awareness bias
+  - Checkpoint .npz (pesi) + .json (stato/metriche) con auto-save e auto-load
+  - Valutazione local-vs-global per ogni lab, cross-evaluation globale
+  - Template ruolo-specifici iniettati in memoria agenti (professor, privacy_specialist, student, researcher)
+- **v0.7.4**: Frontend Lab Performance e Cross-Evaluation panels + test e2e
+- **v0.7.5**: DP-SGD privacy budget
+  - Gradient clipping per L2 norm + rumore gaussiano calibrato in numpy_train
+  - Epsilon accounting via Gaussian mechanism (sigma=2.0, eps_total=20, ~8 round di budget)
+  - Barra Privacy Budget nel pannello FL con percentuale e epsilon consumato
+  - Sigma per lab in Lab Performance, riga privacy nel milestone popup
+  - Template privacy_specialist aggiornato con insight su epsilon budget
+  - Persistenza DP state in checkpoint
 
 ---
 
@@ -242,15 +248,151 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 ---
 
+## FEATURE-4: Toggle FedAvg / FedProx da UI
+
+**Stato**: DA FARE
+**Priorità**: MEDIA
+**Complessità**: Bassa
+
+Il backend supporta già FedAvg e FedProx (parametro `algorithm` + termine prossimale `mu`), ma il frontend non permette di scegliere l'algoritmo.
+
+### Cosa fare
+- Aggiungere un dropdown/radio nel pannello FL (sotto il toggle On/Off) con opzioni "FedAvg" e "FedProx"
+- Endpoint REST per cambiare algoritmo a runtime (`POST /fl/algorithm`)
+- Mostrare `mu` corrente nel pannello quando FedProx è attivo
+- Opzionale: slider per regolare `mu` (0.001 → 0.1)
+
+### File coinvolti
+- `backend/api/main.py` — nuovo endpoint
+- `backend/fl/federated.py` — `set_algorithm()` method
+- `frontend/src/components/FLStatusPanel.tsx` — dropdown + display mu
+- `frontend/src/components/SimulationContainer.tsx` — passare scelta al backend
+
+---
+
+## FEATURE-5: Dialoghi LLM tra agenti sul FL
+
+**Stato**: DA FARE
+**Priorità**: ALTA
+**Complessità**: Alta
+
+Gli agenti hanno template di awareness iniettati in memoria (v0.7.3), ma non generano ancora dialoghi visibili tra loro basati sui risultati FL.
+
+### Cosa fare
+1. **Trigger conversazione post-round**: dopo ogni FL round, selezionare 2 agenti dello stesso lab con ruoli diversi e avviare una conversazione LLM (via Qwen/Ollama) dove discutono i risultati
+2. **Contesto conversazione**: iniettare nel prompt i dati FL del round (accuracy, gain, bias, epsilon) come contesto, insieme ai ricordi FL degli agenti
+3. **Visualizzazione**: i dialoghi appaiono nelle bolle sopra gli sprite nella scena Phaser + nel LLMDialogPanel React
+4. **Cross-lab (opzionale)**: agenti di lab diversi si incontrano nella WorldMap e discutono differenze nei risultati
+
+### File coinvolti
+- `backend/simulation/controller.py` — orchestrazione dialoghi post-round
+- `backend/cognitive/plan.py` — trigger conversazione FL-aware
+- `backend/cognitive/prompts/gpt_structure.py` — prompt specifici per dialogo FL
+- `frontend/src/components/LLMDialogPanel.tsx` — rendering dialoghi
+- `frontend/src/phaser/sprites/Agent.ts` — trigger bolle dialogo
+
+---
+
+## FEATURE-6: Visualizzazione distribuzione Non-IID
+
+**Stato**: DA FARE
+**Priorità**: MEDIA
+**Complessità**: Media
+
+Mostrare nel pannello FL la composizione demografica di ogni lab per rendere visivamente evidente il bias nei dati.
+
+### Cosa fare
+1. **Mini bar-chart** per ogni lab: distribuzione età (istogramma) + percentuale target positivo
+2. **Endpoint backend**: `GET /fl/data-distribution` che ritorna per ogni lab: n_samples, age_mean, age_std, positive_ratio, age_histogram
+3. **Pannello "Data Distribution"** nel FLStatusPanel (sotto Cross-Evaluation): 3 righe con barre colorate
+4. **Sparkline opzionale**: canvas mini-chart con distribuzione età sovrapposta per i 3 lab
+
+### File coinvolti
+- `backend/fl/federated.py` — `get_data_distribution()` method
+- `backend/api/main.py` — endpoint REST
+- `frontend/src/components/FLStatusPanel.tsx` — sezione Data Distribution
+- `frontend/src/components/FLStatusPanel.css` — stili barre distribuzione
+
+---
+
+## FEATURE-7: Effetti visivi Phaser durante fasi FL
+
+**Stato**: DA FARE
+**Priorità**: BASSA
+**Complessità**: Media
+
+Animazioni di particelle e connessioni durante le fasi FL nelle scene di gioco.
+
+### Cosa fare
+1. **Training**: glow/pulse sugli agenti che stanno addestrando il modello locale
+2. **Sending**: particelle che si muovono dagli agenti verso un punto centrale (server)
+3. **Aggregating**: effetto merge/convergenza al centro della scena
+4. **Receiving**: particelle dal centro verso gli agenti (distribuzione modello globale)
+5. **WorldMap**: linee animate tra i lab durante sending/receiving
+
+### File coinvolti
+- `frontend/src/phaser/fl/FLVisualEffects.ts` — già esiste come skeleton, da implementare
+- `frontend/src/phaser/fl/FLController.ts` — trigger effetti per fase
+- `frontend/src/phaser/sprites/Agent.ts` — glow effect sugli sprite
+
+---
+
+## FEATURE-8: Export metriche FL
+
+**Stato**: DA FARE
+**Priorità**: BASSA
+**Complessità**: Bassa
+
+Bottone per scaricare un report completo delle metriche FL.
+
+### Cosa fare
+1. **Bottone "Export"** nel pannello FL (icona download)
+2. **Formato JSON**: history completa (accuracy, loss, epsilon, local-vs-global, cross-eval per round)
+3. **Formato CSV opzionale**: tabella round × metrica per analisi in Excel/Pandas
+4. **Endpoint backend**: `GET /fl/export` che ritorna il JSON completo
+
+### File coinvolti
+- `backend/api/main.py` — endpoint export
+- `frontend/src/components/FLStatusPanel.tsx` — bottone download
+- Nessun file nuovo necessario (logica minima)
+
+---
+
+## FEATURE-9: Convergence detection e auto-stop
+
+**Stato**: DA FARE
+**Priorità**: BASSA
+**Complessità**: Bassa
+
+Rilevamento automatico della convergenza del modello FL e stop del training.
+
+### Cosa fare
+1. **Early stopping**: se accuracy non migliora per N round consecutivi (patience=3), fermare il training
+2. **Budget exhausted stop**: quando epsilon si esaurisce, fermare automaticamente il DP-SGD (già parziale: il training continua senza noise)
+3. **Notifica UI**: popup o badge nel pannello FL che indica "Converged" o "Budget Exhausted — training without DP"
+4. **Opzionale**: learning rate decay quando si avvicina alla convergenza
+
+### File coinvolti
+- `backend/fl/federated.py` — logica convergence detection in `aggregate_models()`
+- `frontend/src/components/FLStatusPanel.tsx` — badge/notifica convergenza
+
+---
+
 ## Riepilogo priorità
 
-| ID | Tipo | Descrizione | Complessità |
-|----|------|-------------|-------------|
-| LOW-1 | Refactor | ~~MercatorumLabScene → BaseLabScene~~ COMPLETATO | Media |
-| LOW-2 | Fix | ~~Test backend aggiornamento nomi/ruoli~~ COMPLETATO | Bassa |
-| LOW-3 | Fix | ~~generate_personas.py nomi vecchi~~ COMPLETATO | Bassa |
-| LOW-4 | Quality | ~~Ridurre `as any` (54→9)~~ COMPLETATO | Media |
-| LOW-5 | Verifica | ~~Build frontend pulita~~ COMPLETATO | Bassa |
-| FEATURE-1 | Feature | ~~Miglioramento prompt cognitivi~~ COMPLETATO | Alta |
-| FEATURE-2 | Feature | ~~FL dataset reale + visualizzazione~~ COMPLETATO | Alta |
-| FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ COMPLETATO | Media |
+| ID | Tipo | Descrizione | Complessità | Stato |
+|----|------|-------------|-------------|-------|
+| LOW-1 | Refactor | ~~MercatorumLabScene → BaseLabScene~~ | Media | COMPLETATO |
+| LOW-2 | Fix | ~~Test backend aggiornamento nomi/ruoli~~ | Bassa | COMPLETATO |
+| LOW-3 | Fix | ~~generate_personas.py nomi vecchi~~ | Bassa | COMPLETATO |
+| LOW-4 | Quality | ~~Ridurre `as any` (54→9)~~ | Media | COMPLETATO |
+| LOW-5 | Verifica | ~~Build frontend pulita~~ | Bassa | COMPLETATO |
+| FEATURE-1 | Feature | ~~Cognitive pipeline stub → LLM~~ | Alta | COMPLETATO |
+| FEATURE-2 | Feature | ~~FL dataset reale + DP-SGD + visualizzazione~~ | Alta | COMPLETATO |
+| FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ | Media | COMPLETATO |
+| **FEATURE-4** | Feature | Toggle FedAvg / FedProx da UI | Bassa | DA FARE |
+| **FEATURE-5** | Feature | Dialoghi LLM tra agenti sul FL | Alta | DA FARE |
+| **FEATURE-6** | Feature | Visualizzazione distribuzione Non-IID | Media | DA FARE |
+| **FEATURE-7** | Feature | Effetti visivi Phaser durante fasi FL | Media | DA FARE |
+| **FEATURE-8** | Feature | Export metriche FL (JSON/CSV) | Bassa | DA FARE |
+| **FEATURE-9** | Feature | Convergence detection e auto-stop | Bassa | DA FARE |
