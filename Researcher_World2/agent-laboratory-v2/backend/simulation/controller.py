@@ -664,6 +664,8 @@ class SimulationController:
                     "step_counter": self.fl_step_counter,
                     "steps_per_round": self.fl_steps_per_round,
                     "round": fl_state["round"],
+                    "algorithm": fl_state.get("algorithm", "fedavg"),
+                    "mu": self.fl_system.mu if self.fl_system else 0.01,
                     "metrics": fl_state["metrics"],
                     "dp": fl_state.get("dp"),
                     "conversations": self.fl_conversations,

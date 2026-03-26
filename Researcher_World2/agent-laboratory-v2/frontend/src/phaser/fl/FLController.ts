@@ -45,6 +45,8 @@ export interface FLStatusData {
     target: string; // ID del laboratorio
     active: boolean;
   }>;
+  algorithm?: string;   // "fedavg" | "fedprox"
+  mu?: number;          // FedProx proximal term (0..1)
   fromSimulation?: boolean; // Campo opzionale per indicare se i dati provengono dalla simulazione React
 }
 

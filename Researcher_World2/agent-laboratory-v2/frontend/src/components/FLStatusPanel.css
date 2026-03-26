@@ -405,6 +405,79 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
+  /* ---- Algorithm selector (FedAvg/FedProx) ---- */
+
+  .fl-algorithm-selector {
+    margin-bottom: 10px;
+    padding: 6px 8px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .fl-algo-select {
+    background: rgba(0, 0, 0, 0.3);
+    color: #eee;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-family: monospace;
+    font-size: 11px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .fl-algo-select:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .fl-algo-select option {
+    background: #1e1e28;
+    color: #eee;
+  }
+
+  .fl-mu-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .fl-mu-label {
+    font-family: monospace;
+    font-size: 10px;
+    color: #e67e22;
+    min-width: 36px;
+    font-weight: bold;
+  }
+
+  .fl-mu-label::before {
+    content: "\03BC=";
+    color: #888;
+  }
+
+  .fl-mu-slider {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .fl-mu-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e67e22;
+    cursor: pointer;
+  }
+
   /* ---- Privacy Budget (DP-SGD) ---- */
 
   .fl-privacy-budget {

@@ -112,6 +112,7 @@ const Sparkline: React.FC<SparklineProps> = ({
 interface FLStatusPanelProps {
   flStatus: FLStatusData | null;
   onToggleFL: (enabled: boolean) => void;
+  onAlgorithmChange?: (algorithm: string, mu: number) => void;
   totalAgentCount?: number;
   currentLabName?: string | null;
 }
@@ -123,7 +124,7 @@ interface FLStatusPanelProps {
  */
 const MILESTONE_THRESHOLD = 0.80;
 
-const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, totalAgentCount, currentLabName }) => {
+const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onAlgorithmChange, totalAgentCount, currentLabName }) => {
   const [visible, setVisible] = useState<boolean>(getFLPanelState());
   const [collapsed, setCollapsed] = useState<boolean>(true);
   const [milestoneData, setMilestoneData] = useState<{
@@ -173,7 +174,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
     emitFLPanelToggle(false);
   };
 
-  const { enabled, currentState, activeAgents, metrics, connections, dp } = flStatus || {};
+  const { enabled, currentState, activeAgents, metrics, connections, dp, algorithm, mu } = flStatus || {};
 
   const formatMetric = (value: number | undefined): string => {
     return value !== undefined ? value.toFixed(4) : 'N/A';
@@ -223,6 +224,40 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
 
       {!collapsed && flStatus && enabled && (
         <>
+          {/* Algorithm selector */}
+          <div className="fl-algorithm-selector">
+            <select
+              className="fl-algo-select"
+              value={algorithm || 'fedavg'}
+              onChange={(e) => {
+                const algo = e.target.value;
+                onAlgorithmChange?.(algo, algo === 'fedprox' ? (mu || 0.01) : 0);
+              }}
+            >
+              <option value="fedavg">FedAvg</option>
+              <option value="fedprox">FedProx</option>
+            </select>
+            {algorithm === 'fedprox' && (
+              <div className="fl-mu-control">
+                <label className="fl-mu-label" title="Proximal term coefficient">
+                  {(mu || 0.01).toFixed(3)}
+                </label>
+                <input
+                  type="range"
+                  className="fl-mu-slider"
+                  min="0.001"
+                  max="0.1"
+                  step="0.001"
+                  value={mu || 0.01}
+                  onChange={(e) => {
+                    const newMu = parseFloat(e.target.value);
+                    onAlgorithmChange?.('fedprox', newMu);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
           <div className="fl-current-state">
             <span className="fl-state-label">State:</span>
             <span className={`fl-state-value fl-state-${stateLabel.toLowerCase()}`}>

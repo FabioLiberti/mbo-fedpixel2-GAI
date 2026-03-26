@@ -232,6 +232,21 @@ async def get_fl_state():
     return fl_state
 
 
+@app.post("/fl/algorithm")
+async def set_fl_algorithm(algorithm: str = "fedavg", mu: float = 0.01):
+    """Switch FL algorithm (fedavg or fedprox) and set proximal term mu."""
+    if not controller.fl_system:
+        raise HTTPException(status_code=400, detail="FL system not initialized")
+    algo = algorithm.lower().strip()
+    if algo not in ("fedavg", "fedprox"):
+        raise HTTPException(status_code=400, detail=f"Unknown algorithm: {algorithm}. Use 'fedavg' or 'fedprox'")
+    mu = max(0.0, min(mu, 1.0))  # clamp mu to [0, 1]
+    controller.fl_system.algorithm = algo
+    controller.fl_system.mu = mu
+    logger.info(f"FL algorithm set to {algo} (mu={mu})")
+    return {"algorithm": algo, "mu": mu}
+
+
 # --- LLM Toggle Routes ---
 
 @app.post("/llm/toggle")

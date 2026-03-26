@@ -152,6 +152,8 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     const backendFlStatus: FLStatusData = {
       enabled: fl?.enabled ?? true,
       currentState: phase,
+      algorithm: fl?.algorithm ?? 'fedavg',
+      mu: fl?.mu ?? 0.01,
       fromSimulation: false, // Dati reali dal backend
       activeAgents: finalAgents,
       metrics: {
@@ -301,6 +303,8 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     const initialState: FLStatusData = {
       enabled: true,
       currentState: FLState.IDLE,
+      algorithm: 'fedavg',
+      mu: 0.01,
       fromSimulation: true,
       activeAgents: [
         // Mercatorum (3)
@@ -552,6 +556,23 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     }
   };
 
+  const handleAlgorithmChange = useCallback(async (algorithm: string, mu: number) => {
+    try {
+      await fetch('http://localhost:8091/fl/algorithm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ algorithm, mu }),
+      });
+      // Update local state immediately for responsive UI
+      setFLStatus(prev => prev ? { ...prev, algorithm, mu } : prev);
+      console.log(`FL algorithm: ${algorithm}, mu=${mu}`);
+    } catch (e) {
+      console.warn('Failed to set FL algorithm (backend offline?):', e);
+      // Still update locally for fallback simulation
+      setFLStatus(prev => prev ? { ...prev, algorithm, mu } : prev);
+    }
+  }, []);
+
   // Mappa sceneKey -> labType per filtrare agenti
   const sceneToLabType: Record<string, string> = {
     [SCENE_KEYS.MERCATORUM]: 'MERCATORUM',
@@ -592,6 +613,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         <FLStatusPanel
           flStatus={contextualFlStatus}
           onToggleFL={handleToggleFL}
+          onAlgorithmChange={handleAlgorithmChange}
           totalAgentCount={flStatus?.activeAgents?.length || 0}
           currentLabName={isWorldMap ? null : currentLabName}
         />
