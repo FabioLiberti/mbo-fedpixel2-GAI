@@ -1,7 +1,7 @@
 # TODO Roadmap — mbo-fedpixel2-GAI
 
-> Aggiornato: 2026-03-26 dopo v0.8.4
-> Completati: LOW-1→5, FEATURE-1→6, FEATURE-8→9 (tutto fino a v0.8.4)
+> Aggiornato: 2026-03-26 dopo v0.8.5
+> Completati: LOW-1→5, FEATURE-1→9 (tutte le feature completate)
 > Questo file traccia tutte le modifiche residue e il piano degli sviluppi futuri.
 
 ---
@@ -317,7 +317,7 @@ Mostrare nel pannello FL la composizione demografica di ogni lab per rendere vis
 
 ## FEATURE-7: Effetti visivi Phaser durante fasi FL
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.5)
 **Priorità**: BASSA
 **Complessità**: Media
 
@@ -393,6 +393,6 @@ Rilevamento automatico della convergenza del modello FL e stop del training.
 | FEATURE-4 | Feature | ~~Toggle FedAvg / FedProx da UI~~ | Bassa | COMPLETATO |
 | FEATURE-5 | Feature | ~~Dialoghi LLM tra agenti sul FL~~ | Alta | COMPLETATO |
 | FEATURE-6 | Feature | ~~Visualizzazione distribuzione Non-IID~~ | Media | COMPLETATO |
-| **FEATURE-7** | Feature | Effetti visivi Phaser durante fasi FL | Media | DA FARE |
+| FEATURE-7 | Feature | ~~Effetti visivi Phaser durante fasi FL~~ | Media | COMPLETATO |
 | FEATURE-8 | Feature | ~~Export metriche FL (JSON/CSV)~~ | Bassa | COMPLETATO |
 | FEATURE-9 | Feature | ~~Convergence detection e auto-stop~~ | Bassa | COMPLETATO |

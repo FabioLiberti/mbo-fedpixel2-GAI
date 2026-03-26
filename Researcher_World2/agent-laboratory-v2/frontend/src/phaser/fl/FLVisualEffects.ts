@@ -2,7 +2,6 @@
 
 import Phaser from 'phaser';
 import { Agent } from '../sprites/Agent';
-// Rimuoviamo l'import inutilizzato di LabType
 import { LAB_TYPES, LabTypeId } from '../types/LabTypeConstants';
 import { FLState } from './FLState';
 
@@ -42,7 +41,7 @@ interface FLConnectionConfig {
  */
 interface ParticleSystem {
   emitter: Phaser.GameObjects.Particles.ParticleEmitter;
-  manager: any; // Utilizziamo any per evitare errori di tipo
+  manager: any;
 }
 
 /**
@@ -53,22 +52,35 @@ interface ExtendedScene extends Phaser.Scene {
 }
 
 /**
- * Gestisce gli effetti visivi per il Federated Learning nel gioco
+ * Gestisce gli effetti visivi per il Federated Learning nel gioco.
+ * Include: indicatori stato agente, glow/pulse, connessioni animate, particelle.
  */
 export class FLVisualEffects {
   private scene: ExtendedScene;
   private indicatorConfig: FLIndicatorConfig;
   private connectionConfig: FLConnectionConfig;
-  private indicators: Map<Agent, Phaser.GameObjects.Container>;
+  private indicators: Map<Agent, {
+    container: Phaser.GameObjects.Container;
+    state: FLState;
+    pulseTween: Phaser.Tweens.Tween | null;
+  }>;
+  private agentGlows: Map<Agent, {
+    glow: Phaser.GameObjects.Ellipse;
+    tween: Phaser.Tweens.Tween | null;
+    state: FLState;
+  }>;
   private connections: Map<string, {
     line: Phaser.GameObjects.Graphics;
     particles: ParticleSystem | null;
     active: boolean;
   }>;
+  private dashOffset: number = 0;
+  private updateEvent: Phaser.Events.EventEmitter | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene as ExtendedScene;
     this.indicators = new Map();
+    this.agentGlows = new Map();
     this.connections = new Map();
 
     // Configurazione di default per gli indicatori
@@ -77,108 +89,204 @@ export class FLVisualEffects {
       alpha: 0.85,
       colors: {
         [FLState.IDLE]: 0xcccccc,
-        [FLState.TRAINING]: 0x3498db, // Blu
-        [FLState.SENDING]: 0xe67e22,  // Arancione
-        [FLState.AGGREGATING]: 0x9b59b6, // Viola
-        [FLState.RECEIVING]: 0x2ecc71  // Verde
+        [FLState.TRAINING]: 0x3498db,     // Blu
+        [FLState.SENDING]: 0xe67e22,      // Arancione
+        [FLState.AGGREGATING]: 0x9b59b6,  // Viola
+        [FLState.RECEIVING]: 0x2ecc71     // Verde
       }
     };
 
     // Configurazione di default per le connessioni
     this.connectionConfig = {
-      lineWidth: 1,
+      lineWidth: 1.5,
       alpha: 0.6,
-      dashLength: 5,
-      dashGap: 5,
+      dashLength: 6,
+      dashGap: 4,
       colors: {
-        idle: 0xcccccc,
+        idle: 0x555555,
         active: 0x3498db
       },
       particleConfig: {
         count: 3,
-        speed: 100,
+        speed: 80,
         size: 2,
         alpha: 0.6
       }
     };
+
+    // Hook nel scene update per aggiornare posizioni indicatori e dash animation
+    this.scene.events.on('update', this.onSceneUpdate, this);
   }
 
-  /**
-   * Crea o aggiorna l'indicatore di stato FL per un agente
-   * @param agent L'agente a cui associare l'indicatore
-   * @param state Lo stato FL dell'agente
-   */
+  // =========================================================================
+  // Scene update loop — indicator tracking + dash animation
+  // =========================================================================
+
+  private onSceneUpdate(): void {
+    // Aggiorna posizione indicatori e glow seguendo gli agenti
+    this.indicators.forEach((data, agent) => {
+      if (!agent.active) return;
+      this.positionIndicator(data.container, agent);
+    });
+    this.agentGlows.forEach((data, agent) => {
+      if (!agent.active) return;
+      data.glow.setPosition(agent.x, agent.y);
+    });
+
+    // Anima dash offset per connessioni attive
+    this.dashOffset = (this.dashOffset + 0.3) % (this.connectionConfig.dashLength + this.connectionConfig.dashGap);
+    let hasActiveConnection = false;
+    this.connections.forEach((conn) => {
+      if (conn.active) hasActiveConnection = true;
+    });
+    if (hasActiveConnection) {
+      this.redrawActiveConnections();
+    }
+  }
+
+  // =========================================================================
+  // Agent state indicators (colored dot above agent)
+  // =========================================================================
+
   updateAgentState(agent: Agent, state: FLState): void {
     if (!agent || !agent.active) return;
-    
+
     if (!this.indicators.has(agent)) {
       this.createIndicator(agent, state);
     } else {
       this.updateIndicator(agent, state);
     }
+
+    // Gestisci glow effect sullo sprite
+    this.updateAgentGlow(agent, state);
   }
 
-  /**
-   * Crea un nuovo indicatore per un agente
-   */
   private createIndicator(agent: Agent, state: FLState): void {
     const container = this.scene.add.container(0, 0);
-    
-    // Creiamo un cerchietto con il colore appropriato
+
+    const border = this.scene.add.circle(0, 0, 5, 0x000000, 0.3);
     const circle = this.scene.add.circle(0, 0, 4, this.indicatorConfig.colors[state]);
-    
-    // Aggiungiamo un bordo sottile
-    const border = this.scene.add.circle(0, 0, 4, 0xffffff);
-    border.setStrokeStyle(0.5, 0x000000, 0.5);
-    
+
     container.add([border, circle]);
     container.setScale(this.indicatorConfig.scale);
-    container.setAlpha(this.indicatorConfig.alpha);
-    
-    // Posiziona l'indicatore sopra l'agente
+    container.setAlpha(state === FLState.IDLE ? 0.3 : this.indicatorConfig.alpha);
+    container.setDepth(1000);
+
     this.positionIndicator(container, agent);
-    
-    this.indicators.set(agent, container);
-    
-    // Aggiorniamo la posizione dell'indicatore quando l'agente si muove
-    agent.on('move', () => {
-      this.positionIndicator(container, agent);
+
+    const pulseTween = this.createPulseTween(container, state);
+
+    this.indicators.set(agent, { container, state, pulseTween });
+  }
+
+  private updateIndicator(agent: Agent, state: FLState): void {
+    const data = this.indicators.get(agent);
+    if (!data) return;
+
+    // Nessun cambiamento di stato → skip
+    if (data.state === state) return;
+    data.state = state;
+
+    const circle = data.container.getAt(1) as Phaser.GameObjects.Arc;
+    circle.fillColor = this.indicatorConfig.colors[state];
+
+    data.container.setAlpha(state === FLState.IDLE ? 0.3 : this.indicatorConfig.alpha);
+
+    // Aggiorna pulse tween
+    if (data.pulseTween) {
+      data.pulseTween.stop();
+      data.pulseTween = null;
+    }
+    data.pulseTween = this.createPulseTween(data.container, state);
+  }
+
+  private createPulseTween(container: Phaser.GameObjects.Container, state: FLState): Phaser.Tweens.Tween | null {
+    if (state === FLState.IDLE) return null;
+
+    const configs: Partial<Record<FLState, { scaleMax: number; duration: number }>> = {
+      [FLState.TRAINING]:    { scaleMax: 0.7, duration: 800 },
+      [FLState.SENDING]:     { scaleMax: 0.65, duration: 500 },
+      [FLState.AGGREGATING]: { scaleMax: 0.75, duration: 600 },
+      [FLState.RECEIVING]:   { scaleMax: 0.65, duration: 500 },
+    };
+    const cfg = configs[state];
+    if (!cfg) return null;
+
+    return this.scene.tweens.add({
+      targets: container,
+      scaleX: cfg.scaleMax,
+      scaleY: cfg.scaleMax,
+      duration: cfg.duration,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
     });
   }
 
-  /**
-   * Aggiorna lo stato di un indicatore esistente
-   */
-  private updateIndicator(agent: Agent, state: FLState): void {
-    const container = this.indicators.get(agent);
-    if (!container) return;
-    
-    // Aggiorniamo solo il colore del cerchio interno
-    const circle = container.getAt(1) as Phaser.GameObjects.Arc;
-    circle.fillColor = this.indicatorConfig.colors[state];
-    
-    // Se l'agente è inattivo o nello stato IDLE, riduciamo l'opacità
-    container.setAlpha(state === FLState.IDLE ? 0.4 : this.indicatorConfig.alpha);
-  }
-
-  /**
-   * Posiziona l'indicatore sopra l'agente
-   */
   private positionIndicator(container: Phaser.GameObjects.Container, agent: Agent): void {
     container.setPosition(
       agent.x,
-      agent.y - agent.displayHeight / 2 - 10 // Sopra l'agente con piccolo offset
+      agent.y - agent.displayHeight / 2 - 10
     );
   }
 
-  /**
-   * Crea o aggiorna una connessione tra due laboratori
-   * @param sourceLabType Laboratorio di origine
-   * @param targetLabType Laboratorio di destinazione
-   * @param active Se la connessione è attualmente attiva (trasferimento in corso)
-   * @param sourcePoint Punto di origine (opzionale)
-   * @param targetPoint Punto di destinazione (opzionale)
-   */
+  // =========================================================================
+  // Agent glow effect (ellipse under sprite, colored by FL state)
+  // =========================================================================
+
+  private updateAgentGlow(agent: Agent, state: FLState): void {
+    if (state === FLState.IDLE) {
+      // Rimuovi glow per stato idle
+      this.removeAgentGlow(agent);
+      return;
+    }
+
+    const color = this.indicatorConfig.colors[state];
+
+    if (!this.agentGlows.has(agent)) {
+      // Crea nuovo glow
+      const glow = this.scene.add.ellipse(
+        agent.x, agent.y,
+        agent.displayWidth * 1.6,
+        agent.displayHeight * 0.5,
+        color, 0.25
+      );
+      glow.setDepth(agent.depth - 1);
+
+      const tween = this.scene.tweens.add({
+        targets: glow,
+        alpha: { from: 0.15, to: 0.35 },
+        scaleX: { from: 1.0, to: 1.15 },
+        scaleY: { from: 1.0, to: 1.1 },
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      this.agentGlows.set(agent, { glow, tween, state });
+    } else {
+      const data = this.agentGlows.get(agent)!;
+      if (data.state !== state) {
+        data.state = state;
+        data.glow.fillColor = color;
+      }
+    }
+  }
+
+  private removeAgentGlow(agent: Agent): void {
+    const data = this.agentGlows.get(agent);
+    if (data) {
+      if (data.tween) data.tween.stop();
+      data.glow.destroy();
+      this.agentGlows.delete(agent);
+    }
+  }
+
+  // =========================================================================
+  // Connection lines between labs
+  // =========================================================================
+
   updateConnection(
     sourceLabType: LabTypeId,
     targetLabType: LabTypeId,
@@ -187,22 +295,18 @@ export class FLVisualEffects {
     targetPoint?: Phaser.Math.Vector2
   ): void {
     const connectionId = `${sourceLabType}-${targetLabType}`;
-    
+
     if (!this.connections.has(connectionId)) {
       this.createConnection(sourceLabType, targetLabType, active, sourcePoint, targetPoint);
     } else {
-      const connection = this.connections.get(connectionId);
-      
-      if (connection && connection.active !== active) {
+      const connection = this.connections.get(connectionId)!;
+      if (connection.active !== active) {
         connection.active = active;
         this.updateConnectionVisuals(connectionId, connection, active);
       }
     }
   }
 
-  /**
-   * Crea una nuova connessione tra laboratori
-   */
   private createConnection(
     sourceLabType: LabTypeId,
     targetLabType: LabTypeId,
@@ -210,144 +314,142 @@ export class FLVisualEffects {
     sourcePoint?: Phaser.Math.Vector2,
     targetPoint?: Phaser.Math.Vector2
   ): void {
-    // Ottenere o calcolare i punti di inizio e fine
     const start = sourcePoint || this.getLabPosition(sourceLabType);
     const end = targetPoint || this.getLabPosition(targetLabType);
-    
     if (!start || !end) return;
-    
-    // Creare la linea
+
     const line = this.scene.add.graphics();
-    this.drawDashedLine(line, start, end, active);
-    
-    // In Phaser 3, utilizziamo un approccio alternativo più semplice per le particelle
-    let particles = null;
-    
-    // Verificare se il sistema di particelle è supportato prima di crearlo
-    try {
-      particles = this.createSimpleParticles(start, end, active);
-    } catch (error) {
-      console.warn('Particle system creation failed:', error);
-      // Fallback - non utilizziamo particelle
+    this.drawDashedLine(line, start, end, active, 0);
+
+    let particles: ParticleSystem | null = null;
+    if (active) {
+      try {
+        particles = this.createSimpleParticles(start, end, active);
+      } catch (error) {
+        console.warn('Particle system creation failed:', error);
+      }
     }
-    
+
     this.connections.set(`${sourceLabType}-${targetLabType}`, {
-      line,
-      particles,
-      active
+      line, particles, active
     });
   }
 
-  /**
-   * Aggiorna la visualizzazione di una connessione esistente
-   */
   private updateConnectionVisuals(
     connectionId: string,
-    connection: {
-      line: Phaser.GameObjects.Graphics;
-      particles: ParticleSystem | null;
-      active: boolean;
-    },
+    connection: { line: Phaser.GameObjects.Graphics; particles: ParticleSystem | null; active: boolean },
     active: boolean
   ): void {
     const parts = connectionId.split('-');
     if (parts.length !== 2) return;
-    
-    // Conversione sicura dei tipi
+
     const sourceLabType = parts[0] as LabTypeId;
     const targetLabType = parts[1] as LabTypeId;
-    
-    // Aggiornare la linea
-    connection.line.clear();
-    
+
     const start = this.getLabPosition(sourceLabType);
     const end = this.getLabPosition(targetLabType);
-    
     if (!start || !end) return;
-    
-    this.drawDashedLine(connection.line, start, end, active);
-    
-    // Aggiornare le particelle se esistenti
+
+    connection.line.clear();
+    this.drawDashedLine(connection.line, start, end, active, this.dashOffset);
+
+    // Gestisci particelle
+    if (active && !connection.particles) {
+      try {
+        connection.particles = this.createSimpleParticles(start, end, true);
+      } catch (e) { /* ignore */ }
+    }
     if (connection.particles) {
       try {
         if (active) {
-          // Utilizziamo sempre start() che è il metodo corretto
           connection.particles.emitter.start();
         } else {
-          // Utilizziamo sempre stop() che è il metodo corretto
           connection.particles.emitter.stop();
         }
-      } catch (error) {
-        console.warn('Could not update particle emitter:', error);
+      } catch (e) {
+        console.warn('Could not update particle emitter:', e);
       }
     }
   }
 
   /**
-   * Disegna una linea tratteggiata tra due punti
+   * Ridisegna le connessioni attive con dash offset animato
+   */
+  private redrawActiveConnections(): void {
+    this.connections.forEach((connection, connectionId) => {
+      if (!connection.active) return;
+      const parts = connectionId.split('-');
+      if (parts.length !== 2) return;
+
+      const start = this.getLabPosition(parts[0] as LabTypeId);
+      const end = this.getLabPosition(parts[1] as LabTypeId);
+      if (!start || !end) return;
+
+      connection.line.clear();
+      this.drawDashedLine(connection.line, start, end, true, this.dashOffset);
+    });
+  }
+
+  /**
+   * Disegna una linea tratteggiata tra due punti con offset per animazione
    */
   private drawDashedLine(
     graphics: Phaser.GameObjects.Graphics,
     start: Phaser.Math.Vector2,
     end: Phaser.Math.Vector2,
-    active: boolean
+    active: boolean,
+    offset: number
   ): void {
-    const color = active 
-      ? this.connectionConfig.colors.active 
+    const color = active
+      ? this.connectionConfig.colors.active
       : this.connectionConfig.colors.idle;
-    
-    graphics.clear();
-    graphics.lineStyle(
-      this.connectionConfig.lineWidth,
-      color,
-      this.connectionConfig.alpha
-    );
-    
+    const lineWidth = active ? this.connectionConfig.lineWidth * 1.5 : this.connectionConfig.lineWidth;
+    const alpha = active ? 0.8 : this.connectionConfig.alpha;
+
+    graphics.lineStyle(lineWidth, color, alpha);
+
     const { dashLength, dashGap } = this.connectionConfig;
-    
-    // Calcola la distanza e direzione
+
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance === 0) return;
     const normal = { x: dx / distance, y: dy / distance };
-    
-    // Disegna linea tratteggiata
-    let drawn = 0;
+
+    let drawn = -offset;  // negative offset creates animation illusion
     while (drawn < distance) {
-      const dashStart = {
-        x: start.x + normal.x * drawn,
-        y: start.y + normal.y * drawn
-      };
-      
-      const dashEnd = {
-        x: start.x + normal.x * Math.min(drawn + dashLength, distance),
-        y: start.y + normal.y * Math.min(drawn + dashLength, distance)
-      };
-      
-      graphics.beginPath();
-      graphics.moveTo(dashStart.x, dashStart.y);
-      graphics.lineTo(dashEnd.x, dashEnd.y);
-      graphics.strokePath();
-      
+      const segStart = Math.max(0, drawn);
+      const segEnd = Math.min(drawn + dashLength, distance);
+
+      if (segEnd > 0 && segStart < distance) {
+        graphics.beginPath();
+        graphics.moveTo(
+          start.x + normal.x * segStart,
+          start.y + normal.y * segStart
+        );
+        graphics.lineTo(
+          start.x + normal.x * segEnd,
+          start.y + normal.y * segEnd
+        );
+        graphics.strokePath();
+      }
+
       drawn += dashLength + dashGap;
     }
   }
 
-  /**
-   * Crea un sistema di particelle semplificato compatibile con Phaser 3
-   */
+  // =========================================================================
+  // Particle system for active connections
+  // =========================================================================
+
   private createSimpleParticles(
     start: Phaser.Math.Vector2,
     end: Phaser.Math.Vector2,
     active: boolean
   ): ParticleSystem | null {
-    // Fallback sicuro - creiamo un emettitore di particelle solo se la scena supporta particles
-    if (!this.scene.add.particles) {
-      return null;
-    }
-    
+    if (!this.scene.add.particles) return null;
+
     try {
-      // Creare una texture circolare per le particelle
       const particleTexture = 'fl-particle';
       if (!this.scene.textures.exists(particleTexture)) {
         const graphics = this.scene.make.graphics({ x: 0, y: 0, add: false });
@@ -356,34 +458,31 @@ export class FLVisualEffects {
         graphics.generateTexture(particleTexture, 8, 8);
         graphics.destroy();
       }
-      
-      // Calcola l'angolo e la distanza tra i punti
+
       const angle = Phaser.Math.Angle.Between(start.x, start.y, end.x, end.y);
-      
-      // Creiamo un manager di particelle
+      const distance = Phaser.Math.Distance.Between(start.x, start.y, end.x, end.y);
+
       const manager = this.scene.add.particles(particleTexture);
-      
-      // Creiamo l'emettitore
+
       const emitter = manager.createEmitter({
         x: start.x,
         y: start.y,
         speed: this.connectionConfig.particleConfig.speed,
-        angle: Phaser.Math.RadToDeg(angle),
-        scale: { start: this.connectionConfig.particleConfig.size / 8, end: this.connectionConfig.particleConfig.size * 0.5 / 8 },
+        angle: { min: Phaser.Math.RadToDeg(angle) - 5, max: Phaser.Math.RadToDeg(angle) + 5 },
+        scale: { start: this.connectionConfig.particleConfig.size / 8, end: 0.05 },
         alpha: { start: this.connectionConfig.particleConfig.alpha, end: 0 },
-        lifespan: 2000,
+        lifespan: (distance / this.connectionConfig.particleConfig.speed) * 1000,
         quantity: 1,
-        frequency: 500,
-        tint: this.connectionConfig.colors.active
+        frequency: 400,
+        tint: this.connectionConfig.colors.active,
       });
-      
-      // Avvia o ferma l'emettitore in base al flag active
+
       if (active) {
         emitter.start();
       } else {
         emitter.stop();
       }
-      
+
       return { emitter, manager };
     } catch (error) {
       console.warn('Failed to create particle system:', error);
@@ -391,115 +490,84 @@ export class FLVisualEffects {
     }
   }
 
-  /**
-   * Ottiene la posizione di un laboratorio
-   */
+  // =========================================================================
+  // Lab position helper
+  // =========================================================================
+
   private getLabPosition(labTypeId: LabTypeId): Phaser.Math.Vector2 | null {
-    // Implementazione di base - queste posizioni dovrebbero essere ottenute dinamicamente
-    // in base alla posizione effettiva dei laboratori nella scena
+    // Prima prova dalla scena (WorldMapScene ha getLabPosition)
+    if (this.scene.getLabPosition) {
+      try {
+        const pos = this.scene.getLabPosition(labTypeId);
+        if (pos) return pos;
+      } catch (error) {
+        // fallback sotto
+      }
+    }
+
+    // Posizioni di fallback
     const positions: Record<string, Phaser.Math.Vector2> = {
       [LAB_TYPES.MERCATORUM]: new Phaser.Math.Vector2(200, 200),
       [LAB_TYPES.BLEKINGE]: new Phaser.Math.Vector2(400, 200),
       [LAB_TYPES.OPBG]: new Phaser.Math.Vector2(300, 400)
     };
-    
-    // Prima prova con la mappa predefinita
-    if (positions[labTypeId]) {
-      return positions[labTypeId];
-    }
-    
-    // Se non funziona, prova a ottenere la posizione dalla scena WorldMapScene
-    if (this.scene.getLabPosition) {
-      try {
-        return this.scene.getLabPosition(labTypeId);
-      } catch (error) {
-        console.warn(`Could not get lab position for ${labTypeId} from scene:`, error);
-      }
-    }
-    
-    return null;
+
+    return positions[labTypeId] || null;
   }
 
-  /**
-   * Rimuove un indicatore di stato per un agente
-   */
+  // =========================================================================
+  // Cleanup
+  // =========================================================================
+
   removeAgentIndicator(agent: Agent): void {
-    const indicator = this.indicators.get(agent);
-    if (indicator) {
-      indicator.destroy();
+    const data = this.indicators.get(agent);
+    if (data) {
+      if (data.pulseTween) data.pulseTween.stop();
+      data.container.destroy();
       this.indicators.delete(agent);
     }
+    this.removeAgentGlow(agent);
   }
 
-  /**
-   * Rimuove una connessione tra laboratori
-   */
   removeConnection(sourceLabType: LabTypeId, targetLabType: LabTypeId): void {
     const connectionId = `${sourceLabType}-${targetLabType}`;
     const connection = this.connections.get(connectionId);
-    
+
     if (connection) {
-      // Rimuovi la linea
       connection.line.destroy();
-      
-      // Rimuovi le particelle in modo sicuro
       if (connection.particles) {
         try {
-          // Ferma l'emettitore
           connection.particles.emitter.stop();
-          
-          // Distruggi il manager delle particelle
           connection.particles.manager.destroy();
         } catch (error) {
           console.warn('Error cleaning up particle emitter:', error);
         }
       }
-      
       this.connections.delete(connectionId);
     }
   }
 
-  /**
-   * Aggiorna le posizioni delle connessioni quando le posizioni dei laboratori cambiano
-   */
   updateConnectionPositions(): void {
     this.connections.forEach((connection, connectionId) => {
       const parts = connectionId.split('-');
       if (parts.length !== 2) return;
-      
-      // Conversione sicura dei tipi
-      const sourceLabType = parts[0] as LabTypeId;
-      const targetLabType = parts[1] as LabTypeId;
-      
-      const start = this.getLabPosition(sourceLabType);
-      const end = this.getLabPosition(targetLabType);
-      
+
+      const start = this.getLabPosition(parts[0] as LabTypeId);
+      const end = this.getLabPosition(parts[1] as LabTypeId);
+
       if (start && end) {
-        // Aggiorna la linea
         connection.line.clear();
-        this.drawDashedLine(connection.line, start, end, connection.active);
-        
-        // Aggiorna l'emettitore di particelle se esiste
+        this.drawDashedLine(connection.line, start, end, connection.active, this.dashOffset);
+
         if (connection.particles) {
           try {
-            // Recupera l'emettitore
             const emitter = connection.particles.emitter;
-            
-            // Ferma temporaneamente l'emettitore
             const wasActive = connection.active;
             emitter.stop();
-            
-            // Aggiorna la posizione dell'emettitore
             emitter.setPosition(start.x, start.y);
-            
-            // Aggiorna l'angolo
             const angle = Phaser.Math.Angle.Between(start.x, start.y, end.x, end.y);
             emitter.setAngle(Phaser.Math.RadToDeg(angle));
-            
-            // Riattiva l'emettitore se era attivo prima
-            if (wasActive) {
-              emitter.start();
-            }
+            if (wasActive) emitter.start();
           } catch (error) {
             console.warn('Error updating particle emitter position:', error);
           }
@@ -508,33 +576,36 @@ export class FLVisualEffects {
     });
   }
 
-  /**
-   * Pulisce tutti gli indicatori e le connessioni
-   */
   clear(): void {
-    // Rimuove tutti gli indicatori
-    this.indicators.forEach(indicator => indicator.destroy());
+    // Rimuovi scene update listener
+    this.scene.events.off('update', this.onSceneUpdate, this);
+
+    // Rimuovi indicatori
+    this.indicators.forEach(data => {
+      if (data.pulseTween) data.pulseTween.stop();
+      data.container.destroy();
+    });
     this.indicators.clear();
-    
-    // Rimuove tutte le connessioni
+
+    // Rimuovi glow
+    this.agentGlows.forEach(data => {
+      if (data.tween) data.tween.stop();
+      data.glow.destroy();
+    });
+    this.agentGlows.clear();
+
+    // Rimuovi connessioni
     this.connections.forEach(connection => {
-      // Rimuovi la linea
       connection.line.destroy();
-      
-      // Rimuovi le particelle in modo sicuro
       if (connection.particles) {
         try {
-          // Ferma l'emettitore
           connection.particles.emitter.stop();
-          
-          // Distruggi il manager delle particelle
           connection.particles.manager.destroy();
         } catch (error) {
           console.warn('Error cleaning up particle emitter during clear:', error);
         }
       }
     });
-    
     this.connections.clear();
   }
 }
