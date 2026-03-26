@@ -2,6 +2,7 @@
 
 import { DialogController } from '../../controllers/DialogController';
 import { SimpleLLMPanelController } from './SimpleLLMPanelController';
+import type { IAgentScene } from '../../types/IAgentScene';
 export {};
 
 /**
@@ -38,6 +39,7 @@ export class LLMDialogIntegrator {
   private isAutoGenerateEnabled: boolean = false;
   private nextAutoGenerateTime: number = 0;
   private timerId: number | null = null;
+  private _wasEnabled: boolean = false;
   
   /**
    * Costruttore
@@ -101,7 +103,7 @@ export class LLMDialogIntegrator {
     if (this.isAutoGenerateEnabled) {
       this.disableAutoGenerate();
       // Memorizza che era attiva
-      (this as any)._wasEnabled = true;
+      this._wasEnabled = true;
     }
   }
   
@@ -110,9 +112,9 @@ export class LLMDialogIntegrator {
    */
   private handleSceneWake(): void {
     // Riattiva la generazione automatica se era attiva
-    if ((this as any)._wasEnabled) {
+    if (this._wasEnabled) {
       this.enableAutoGenerate();
-      delete (this as any)._wasEnabled;
+      this._wasEnabled = false;
     }
   }
   
@@ -218,12 +220,9 @@ export class LLMDialogIntegrator {
     // Implementazione semplificata, potrebbe essere necessario modificarla
     // in base a come sono gestiti gli agenti
     try {
-      if ((this.scene as any).agents) {
-        return (this.scene as any).agents;
-      }
-      
-      if ((this.scene as any).agentController && (this.scene as any).agentController.agents) {
-        return (this.scene as any).agentController.agents;
+      const agentScene = this.scene as unknown as IAgentScene;
+      if (agentScene.agents && agentScene.agents.length > 0) {
+        return agentScene.agents;
       }
       
       // Cerca tra i figli della scena

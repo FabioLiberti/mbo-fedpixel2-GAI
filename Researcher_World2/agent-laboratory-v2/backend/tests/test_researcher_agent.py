@@ -37,7 +37,7 @@ class MockModel:
         return list(self._agents.values())
 
 
-def create_test_agent(persona_name="Marco_Rossi", lab_id="mercatorum", role="phd_student"):
+def create_test_agent(persona_name="Marco_Rossi", lab_id="mercatorum", role="student"):
     """Helper to create a test agent with real bootstrap data."""
     model = MockModel()
     agent = ResearcherAgent(
@@ -85,7 +85,7 @@ def test_fl_role_mapping():
     agent2, _ = create_test_agent("Elena_Conti", "mercatorum", "researcher")
     assert agent2.fl_role == FLRole.MODEL_AGGREGATOR  # "aggregator" -> MODEL_AGGREGATOR
 
-    agent3, _ = create_test_agent("Anna_Lindberg", "blekinge", "professor")
+    agent3, _ = create_test_agent("Lars_Lindberg", "blekinge", "professor_senior")
     assert agent3.fl_role == FLRole.MODEL_AGGREGATOR  # "coordinator" -> MODEL_AGGREGATOR
     print("PASS: test_fl_role_mapping")
 
@@ -213,7 +213,7 @@ def test_get_state_data():
 
     assert data["id"] == 1
     assert data["name"] == "Marco Rossi"
-    assert data["role"] == "phd_student"
+    assert data["role"] == "student"
     assert data["lab_id"] == "mercatorum"
     assert data["fl_role"] == "model_trainer"
     assert "dialog" in data
@@ -223,18 +223,21 @@ def test_get_state_data():
     print("PASS: test_get_state_data")
 
 
-def test_all_nine_agents():
-    """Test that all 9 bootstrap personas can be loaded."""
+def test_all_twelve_agents():
+    """Test that all 12 bootstrap personas can be loaded."""
     agents_config = [
-        ("mercatorum", "Marco_Rossi", "phd_student"),
-        ("mercatorum", "Elena_Conti", "researcher"),
-        ("mercatorum", "Luca_Bianchi", "phd_student"),
-        ("blekinge", "Anna_Lindberg", "professor"),
-        ("blekinge", "Erik_Johansson", "researcher"),
-        ("blekinge", "Sara_Nilsson", "phd_student"),
-        ("opbg", "Giulia_Romano", "researcher"),
-        ("opbg", "Matteo_Ferri", "researcher"),
-        ("opbg", "Chiara_Mancini", "phd_student"),
+        ("mercatorum", "Elena_Conti",     "professor"),
+        ("mercatorum", "Luca_Bianchi",    "privacy_specialist"),
+        ("mercatorum", "Marco_Rossi",     "student"),
+        ("mercatorum", "Sofia_Greco",     "researcher"),
+        ("blekinge",   "Lars_Lindberg",   "professor_senior"),
+        ("blekinge",   "Erik_Johansson",  "student"),
+        ("blekinge",   "Sara_Nilsson",    "sw_engineer"),
+        ("blekinge",   "Nils_Eriksson",   "engineer"),
+        ("opbg",       "Matteo_Ferri",    "doctor"),
+        ("opbg",       "Marco_Romano",    "student_postdoc"),
+        ("opbg",       "Lorenzo_Mancini", "engineer"),
+        ("opbg",       "Giulia_Conti",    "researcher"),
     ]
 
     for i, (lab, persona, role) in enumerate(agents_config):
@@ -250,7 +253,7 @@ def test_all_nine_agents():
         assert agent.name == persona.replace("_", " ")
         assert agent.scratch.lab_id == lab
 
-    print("PASS: test_all_nine_agents")
+    print("PASS: test_all_twelve_agents")
 
 
 if __name__ == "__main__":
@@ -266,7 +269,7 @@ if __name__ == "__main__":
         test_set_curr_time,
         test_sync_state_from_scratch,
         test_get_state_data,
-        test_all_nine_agents,
+        test_all_twelve_agents,
     ]
 
     passed = 0

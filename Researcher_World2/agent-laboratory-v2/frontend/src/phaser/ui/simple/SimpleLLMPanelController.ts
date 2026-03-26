@@ -3,6 +3,7 @@
 import { SimpleLLMPanelModel, SimpleLLMLogEntry, SimpleLLMModelEventListener } from './SimpleLLMPanelModel';
 import { SimpleLLMPanelView } from './SimpleLLMPanelView';
 import { DialogController } from '../../controllers/DialogController';
+import type { IAgentScene } from '../../types/IAgentScene';
 
 /**
  * Interfaccia per la risposta dell'API di stato LLM
@@ -543,13 +544,10 @@ export class SimpleLLMPanelController {
     let agents: any[] = [];
     
     try {
-      // Prova prima a usare il controller degli agenti
-      if ((this.scene as any).agentController && (this.scene as any).agentController.agents) {
-        agents = (this.scene as any).agentController.agents;
-      }
-      // Se non presente, cerca direttamente nella scena
-      else if ((this.scene as any).agents) {
-        agents = (this.scene as any).agents;
+      // Accedi agli agenti dalla scena (IAgentScene)
+      const agentScene = this.scene as unknown as IAgentScene;
+      if (agentScene.agents && agentScene.agents.length > 0) {
+        agents = agentScene.agents;
       }
       // Se ancora niente, cerca nei children della scena
       else {

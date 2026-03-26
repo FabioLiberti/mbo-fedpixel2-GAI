@@ -9,6 +9,10 @@ import { LLMControlPanel } from './LLMControlPanel';
 import { DialogController } from '../controllers/DialogController';
 import { Agent } from '../sprites/Agent';
 import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
+import type { IAgentScene as ILabControlScene } from '../types/IAgentScene';
+
+// Re-export for consumers that import ILabControlScene from here
+export type { IAgentScene as ILabControlScene } from '../types/IAgentScene';
 
 // ── Configuration ────────────────────────────────────────────────────
 
@@ -23,17 +27,6 @@ export interface LabControlConfig {
   };
   /** Navigation links to other scenes */
   navigation: Array<{ label: string; sceneKey: string }>;
-}
-
-/** Minimal scene interface — every lab scene already satisfies this. */
-export interface ILabControlScene extends Phaser.Scene {
-  agents: Agent[];
-  agentController: any;          // GlobalAgentController | null
-  agentsLegend: any;             // AgentsLegend | null
-  debugGraphics: Phaser.GameObjects.Graphics | null;
-  debugText: Phaser.GameObjects.Text | null;
-  theme: { name: string; colorPalette: Record<string, number> };
-  updateDebugInfo(text: string): void;
 }
 
 // ── LabControlsMenu ──────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { DialogController } from '../controllers/DialogController';
 import { LLMPanelState, LLMLogEntry } from './LLMPanelState';
 import { LLMPanelRenderer } from './LLMPanelRenderer';
 import { LLMMessagingService } from './LLMMessagingService';
+import type { IAgentScene } from '../types/IAgentScene';
 
 /**
  * Pannello di controllo per la gestione degli LLM nel sistema
@@ -441,14 +442,10 @@ export class LLMControlPanel {
     let foundAgents: any[] = [];
     
     try {
-      // Prova ad accedere agli agenti in diversi modi possibili
-      // Prova prima il controller degli agenti
-      if ((this.scene as any).agentController && (this.scene as any).agentController.agents) {
-        foundAgents = (this.scene as any).agentController.agents;
-      }
-      // Se non trovati, prova direttamente nella scena
-      else if ((this.scene as any).agents) {
-        foundAgents = (this.scene as any).agents;
+      // Prova ad accedere agli agenti dalla scena (IAgentScene)
+      const agentScene = this.scene as unknown as IAgentScene;
+      if (agentScene.agents && agentScene.agents.length > 0) {
+        foundAgents = agentScene.agents;
       }
       // Se ancora non trovati, cerca nei children della scena
       else {
@@ -515,9 +512,9 @@ export class LLMControlPanel {
   private syncCountersWithController(): void {
     try {
       // Ottieni i contatori dal tracker di dialoghi della scena
-      const scene = this.scene as any;
-      if (scene.dialogEventTracker) {
-        const stats = scene.dialogEventTracker.getCounters();
+      const agentScene = this.scene as unknown as IAgentScene;
+      if (agentScene.dialogEventTracker) {
+        const stats = agentScene.dialogEventTracker.getCounters();
         const currentCounts = this.state.getDialogCounts();
         
         // Prendi il valore massimo tra i contatori attuali e quelli del tracker

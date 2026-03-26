@@ -1,136 +1,111 @@
 // src/phaser/scenes/Mercatorum/MercatorumLabScene.ts
+//
+// Scene del laboratorio Mercatorum — estende BaseLabScene con tema italiano classico.
 
-import { BaseScene } from '../BaseScene';
-import { Agent, AgentState } from '../../sprites/Agent';
-import { LAB_TYPES } from '../../types/LabTypeConstants';
-import { GlobalAgentController } from '../../controllers/GlobalAgentController';
-import { MERCATORUM_THEME, IMercatorumLabScene, MercatorumSceneRefs } from './types';
-import { LLMControlPanel } from '../../ui/LLMControlPanel';
-import { SimpleLLMPanel } from '../../ui/simple/SimpleLLMPanel';
-import { DialogEventTracker } from '../../controllers/DialogEventTracker';
+import Phaser from 'phaser';
+import { BaseLabScene, LabTheme, AgentConfigEntry } from '../BaseLabScene';
+import { Agent } from '../../sprites/Agent';
 import { LabControlsMenu, type LabControlConfig } from '../../ui/LabControlsMenu';
+import { GlobalAgentController } from '../../controllers/GlobalAgentController';
+import { DialogEventTracker } from '../../controllers/DialogEventTracker';
+import { LAB_TYPES } from '../../types/LabTypeConstants';
 
-// Importa i moduli
-import * as UI from './UI';
-import * as Agents from './Agents';
-import * as Environment from './Environment';
-import * as Textures from './Textures';
+// ---------------------------------------------------------------------------
+// Agent config — aligned with backend PERSONA_REGISTRY["mercatorum"]
+// ---------------------------------------------------------------------------
+const MERCATORUM_AGENTS: AgentConfigEntry[] = [
+  { type: 'professor',          name: 'Elena Conti',   position: { x: 150, y: 200 }, specialization: 'privacy_economics' },
+  { type: 'privacy_specialist', name: 'Luca Bianchi',  position: { x: 300, y: 250 }, specialization: 'compliance_verification' },
+  { type: 'student',            name: 'Marco Rossi',   position: { x: 200, y: 150 }, specialization: 'data_science' },
+  { type: 'researcher',         name: 'Sofia Greco',   position: { x: 350, y: 180 }, specialization: 'privacy_engineering' },
+];
 
+// Only spritesheet types get placeholder/animations; portrait types are static images
+const SPRITESHEET_TYPES = ['student', 'researcher'];
+const PORTRAIT_TYPES = ['professor', 'privacy_specialist'];
 
-export class MercatorumLabScene extends BaseScene implements IMercatorumLabScene {
-  // Agenti e interazioni
-  public agents: Agent[] = [];
-  public interactionZones: Phaser.GameObjects.Zone[] = [];
+const TYPE_COLORS: Record<string, { main: string; accent: string }> = {
+  student:    { main: '#FB8C00', accent: '#E65100' },
+  researcher: { main: '#43A047', accent: '#2E7D32' },
+};
 
-  // Grid per il pathfinding
-  public grid: number[][] = [];
+// ---------------------------------------------------------------------------
+// Scene
+// ---------------------------------------------------------------------------
+export class MercatorumLabScene extends BaseLabScene {
 
-  // Elementi di debug
-  public debugGraphics: Phaser.GameObjects.Graphics | null = null;
-  public debugText: Phaser.GameObjects.Text | null = null;
-  public assetsLoaded: boolean = false;
-  public textureTestContainers: Phaser.GameObjects.Container[] = [];
-  public rawSprites: Phaser.GameObjects.Sprite[] = [];
-
-  // Legenda
-  public agentsLegend: any = null;
-
-  // Controller
-  public agentController: GlobalAgentController | null = null;
-
-  // Pannello di controllo condiviso
-  private labControls: LabControlsMenu | null = null;
-
-  // Legacy properties kept for IMercatorumLabScene compatibility
-  public controlPanel: Phaser.GameObjects.Container | null = null;
-  public controlPanelToggle: Phaser.GameObjects.Container | null = null;
-  public isPanelOpen: boolean = false;
-  public llmPanel: LLMControlPanel | null = null;
-  public simpleLLMPanel: SimpleLLMPanel | null = null;
-
-  // Tracker dialoghi
-  public dialogEventTracker: DialogEventTracker | null = null;
-
-  // Tema
-  public theme = MERCATORUM_THEME;
+  public theme: LabTheme = {
+    name: 'Università Mercatorum Lab',
+    backgroundColor: 0xd2691e,
+    tilesetKey: 'tiles_mercatorum',
+    colorPalette: { primary: 0xd2691e, secondary: 0x1a365d, accent: 0xf5f5dc, background: 0xd2691e },
+  };
 
   constructor() {
     super('MercatorumLabScene');
-    console.log('MercatorumLabScene constructor called');
   }
 
-  init(): void {
-    console.log('MercatorumLabScene init START');
-    try {
-      super.init();
-      this.grid = [];
-      this.agents = [];
-      this.interactionZones = [];
-      this.assetsLoaded = false;
-      this.textureTestContainers = [];
-      this.rawSprites = [];
-      this.isPanelOpen = false;
-      console.log('MercatorumLabScene init COMPLETE');
-    } catch (error) {
-      console.error('Error in MercatorumLabScene init:', error);
-    }
+  // ---- preload ----------------------------------------------------------
+
+  preload(): void {
+    super.preload();
+    this.setLoadingListeners();
+
+    // Mercatorum: professor e privacy_specialist usano ritratti come immagini statiche
+    this.load.image('professor', 'assets/sprites/1024x1536/_Professor3.png');
+    this.load.image('privacy_specialist', 'assets/sprites/1024x1536/_Manager.png');
+
+    // student e researcher usano spritesheets pixel-art standard
+    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+
+    // Assets lab-specific
+    this.load.image('mercatorum_background', 'assets/labs/mercatorum/background.png');
+    this.load.image('mercatorum_furniture', 'assets/labs/mercatorum/furniture.png');
+    this.load.image('mercatorum-logo', 'assets/ui/mercatorum-logo.png');
+    this.load.json('labAgentTypesConfig', 'assets/config/labAgentTypes.json');
   }
 
-  preload() {
-    console.log('MercatorumLabScene preload START');
-    try {
-      // Chiama il preload del padre per caricare gli asset comuni
-      super.preload();
-      
-      // Gestione del caricamento delle risorse
-      this.setLoadingListeners();
-      
-      // Carica le risorse attraverso il modulo Textures
-      Textures.preloadAssets(this);
-      
-      console.log('MercatorumLabScene preload COMPLETE');
-    } catch (error) {
-      console.error('Error in MercatorumLabScene preload:', error);
-      this.updateDebugInfo(`Preload error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+  // ---- create -----------------------------------------------------------
 
-  create() {
+  create(): void {
     console.log('MercatorumLabScene create START');
-
     try {
-      // Inizializza gli elementi di debug
+      // Debug (hidden)
       this.createDebugElements();
       if (this.debugGraphics) this.debugGraphics.setVisible(false);
       if (this.debugText) this.debugText.setVisible(false);
 
-      // Colore debug temporaneo
+      // Brief magenta flash for debug, then real background
       this.cameras.main.setBackgroundColor(0xFF00FF);
+      setTimeout(() => this.cameras.main.setBackgroundColor(this.theme.backgroundColor), 1000);
 
-      // Fase 1: Gestione texture e animazioni
-      Textures.setupTextures(this);
+      // Textures & animations (only spritesheet types)
+      this.createImprovedPlaceholders(SPRITESHEET_TYPES, TYPE_COLORS);
+      this.runTextureDebug();
       this.displayLoadedAssets();
+      this.createMissingTextures(SPRITESHEET_TYPES);
+      this.createAllCharacterAnimations(SPRITESHEET_TYPES);
 
-      setTimeout(() => {
-        this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
-      }, 1000);
+      // Scene layout
+      this.createItalianClassicBackground();
+      this.createTemporaryMap('mercatorum_furniture');
+      this.initializeGrid();
+      this.createInteractionZones();
 
-      // Fase 2: Crea l'ambiente
-      Environment.createEnvironment(this);
+      // Agents (portrait types get 0.15 scale, spritesheets get 5.0)
+      this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
 
-      // Fase 3: Inizializza tracker e crea agenti
+      // Camera
+      this.setupCamera();
+
+      // Controllers
       this.dialogEventTracker = new DialogEventTracker(this);
-      Agents.createAgents(this);
-
-      // Fase 4: Configura la UI (titolo)
-      UI.setupUI(this);
-
-      // Fase 5: Inizializza controller dialoghi
       this.agentController = new GlobalAgentController(this, LAB_TYPES.MERCATORUM);
       this.agentController.setSimulationAgents(this.agents);
       this.agentController.initDebugger();
 
-      // Fase 6: Pannello "Controlli Lab" condiviso
+      // Lab controls panel
       const controlConfig: LabControlConfig = {
         labId: 'mercatorum',
         labName: 'Università Mercatorum Lab',
@@ -142,212 +117,180 @@ export class MercatorumLabScene extends BaseScene implements IMercatorumLabScene
           '• Privacy-preserving analytics per dati aziendali sensibili\n' +
           '• Compliance GDPR e framework regolatori\n' +
           '• Ottimizzazione di modelli federati per previsioni di mercato',
-        theme: {
-          primary: this.theme.colorPalette.primary,    // 0xd2691e terracotta
-          secondary: this.theme.colorPalette.secondary, // 0x1a365d navy
-          accent: this.theme.colorPalette.accent,       // 0xf5f5dc cream
-        },
+        theme: { primary: this.theme.colorPalette.primary, secondary: 0x1a1a2e, accent: 0xf5f5dc },
         navigation: [
           { label: '→ Vai a Blekinge Lab', sceneKey: 'BlekingeLabScene' },
           { label: '→ Vai a OPBG Lab', sceneKey: 'OPBGLabScene' },
         ],
       };
-      this.labControls = new LabControlsMenu(this as any, controlConfig);
+      this.labControlsMenu = new LabControlsMenu(this, controlConfig);
       const dc = this.agentController.getDialogController();
-      if (dc) this.labControls.setDialogController(dc);
+      if (dc) this.labControlsMenu.setDialogController(dc);
+
+      // Title
+      this.createMercatorumTitle();
 
       console.log('MercatorumLabScene create COMPLETE');
-
-      if (!this.scene.isActive()) {
-        this.scene.setActive(true);
-        this.scene.setVisible(true);
-      }
     } catch (error) {
       console.error('Error in MercatorumLabScene create:', error);
-      this.updateDebugInfo(`Create error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  public trackDialog(type: 'llm' | 'simulated' | 'standard', agentId?: string): void {
-    if (this.dialogEventTracker) {
-      this.dialogEventTracker.trackDialog(type, agentId);
-    }
-  }
+  // ---- update -----------------------------------------------------------
 
-  update(time: number, delta: number) {
+  update(time: number, delta: number): void {
     try {
-      // Aggiorna tutti gli agenti
-      Agents.updateAgents(this, time, delta);
-      
-      // Stimola occasionalmente i movimenti degli agenti per evitare che restino fermi
-      if (Math.random() < 0.005) { // 0.5% di possibilità per frame
-        Agents.stimulateRandomAgentMovement(this);
-      }
-      
-      // Controlla le interazioni
-      Agents.checkInteractions(this);
+      this.updateAgents(time, delta);
+      this.checkInteractions();
     } catch (error) {
       console.error('Error in MercatorumLabScene update:', error);
     }
   }
 
-  // Gestori eventi di caricamento
-  private setLoadingListeners(): void {
-    this.load.on('progress', (value: number) => {
-      console.log(`Load progress: ${Math.round(value * 100)}%`);
-      this.updateDebugInfo(`Loading: ${Math.round(value * 100)}%`);
-    });
-    
-    this.load.on('complete', () => {
-      console.log('All assets loaded successfully');
-      this.assetsLoaded = true;
-      this.updateDebugInfo('Assets loaded - creating scene elements');
-    });
-    
-    this.load.on('loaderror', (file: any) => {
-      console.error(`Error loading file: ${file.key} from ${file.url}`);
-      this.updateDebugInfo(`Error loading: ${file.key}`);
-    });
-  }
+  // ---- Scene-specific: Italian classic background -----------------------
 
-  // Crea elementi per il debug visivo
-  private createDebugElements(): void {
+  private createItalianClassicBackground(): void {
     try {
-      // Crea un pannello di debug per mostrare informazioni sugli asset
-      this.debugGraphics = this.add.graphics();
-      
-      if (this.debugGraphics) {
-        this.debugGraphics.fillStyle(0x000000, 0.7);
-        this.debugGraphics.fillRect(10, 10, 400, 200);
-        this.debugGraphics.setDepth(1000);
-        this.debugGraphics.setScrollFactor(0);
-        // Nascosto all'avvio
-        this.debugGraphics.setVisible(false);
+      if (this.textures.exists('mercatorum_background')) {
+        const bg = this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'mercatorum_background');
+        bg.setDepth(-10);
+        const scaleX = this.cameras.main.width / bg.width;
+        const scaleY = this.cameras.main.height / bg.height;
+        bg.setScale(Math.max(scaleX, scaleY));
+        return;
       }
-      
-      // Testo di debug
-      this.debugText = this.add.text(
-        20, 
-        20, 
-        'Debug info loading...', 
-        { 
-          fontSize: '14px',
-          color: '#FFFFFF',
-          fontFamily: 'monospace',
-          wordWrap: { width: 380 }
+
+      // Fallback: Italian classic geometric pattern
+      const g = this.add.graphics();
+      g.fillStyle(this.theme.backgroundColor, 1);
+      g.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+
+      // Roman arch pattern
+      g.lineStyle(2, 0xf5f5dc, 0.3);
+      const archW = 80, archH = 40;
+      for (let x = -archW / 2; x < this.cameras.main.width + archW / 2; x += archW) {
+        for (let y = 0; y < this.cameras.main.height; y += archH * 2) {
+          g.beginPath();
+          g.moveTo(x, y + archH);
+          g.arc(x + archW / 2, y + archH, archW / 2, Math.PI, 0);
+          g.stroke();
         }
-      );
-      
-      if (this.debugText) {
-        this.debugText.setDepth(1001);
-        this.debugText.setScrollFactor(0);
-        // Nascosto all'avvio
-        this.debugText.setVisible(false);
       }
-    } catch (error) {
-      console.error('Error creating debug elements:', error);
-    }
-  }
-  
-  // Aggiorna le informazioni di debug
-  public updateDebugInfo(text: string): void {
-    if (this.debugText && this.debugText.scene) {
-      try {
-        this.debugText.setText(text);
-      } catch (error) {
-        console.error('Error in updateDebugInfo:', error);
+
+      // Laurel leaf pattern
+      g.fillStyle(this.theme.colorPalette.accent, 0.2);
+      for (let x = 40; x < this.cameras.main.width; x += 120) {
+        for (let y = 60; y < this.cameras.main.height; y += 120) {
+          g.fillCircle(x, y, 15);
+          g.fillCircle(x + 10, y - 5, 10);
+          g.fillCircle(x - 10, y - 5, 10);
+        }
       }
-    } else {
-      console.log('Debug info update (skipped - no valid debug text):', text);
-    }
-  }
-  
-  // Visualizza informazioni sugli asset caricati
-  private displayLoadedAssets(): void {
-    try {
-      const textureKeys = this.textures.getTextureKeys();
-      const infoText = `
-        Scene: ${this.scene.key}
-        Loaded textures: ${textureKeys.length}
-        Keys: ${textureKeys.slice(0, 5).join(', ')}${textureKeys.length > 5 ? '...' : ''}
-        Animation count: ${this.anims.getAll().length}
-      `;
-      
-      this.updateDebugInfo(infoText);
-      console.log(infoText);
+      g.strokePath();
+      g.setDepth(-10);
     } catch (error) {
-      console.error('Error displaying loaded assets:', error);
+      console.error('Error in createItalianClassicBackground:', error);
     }
   }
 
-  // Metodo chiamato quando la scena viene distrutta
-  destroy(): void {
+  // ---- Scene-specific: Interaction zones --------------------------------
+
+  protected createInteractionZones(): void {
     try {
-      // Assicurati che tutti gli elementi siano distrutti
-      if (this.agentsLegend) {
-        this.agentsLegend = null;
-      }
-      
-      // Pulisci tutti gli agenti
-      this.agents.forEach(agent => {
-        if (agent) agent.destroy();
-      });
-      this.agents = [];
-      
-      // Pulisci le zone di interazione
-      this.interactionZones.forEach(zone => {
-        if (zone) zone.destroy();
-      });
-      this.interactionZones = [];
-      
-      // Pulisci gli elementi di debug
-      if (this.debugText) {
-        this.debugText.destroy();
-        this.debugText = null;
-      }
-      
-      if (this.debugGraphics) {
-        this.debugGraphics.destroy();
-        this.debugGraphics = null;
-      }
-      
-      // Pulisci i contenitori di test
-      if (this.textureTestContainers) {
-        this.textureTestContainers.forEach(container => {
-          if (container) container.destroy();
+      const gs = 32;
+      const zoneGraphics = this.add.graphics();
+      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+
+      const addZone = (x: number, y: number, w: number, h: number, name: string) => {
+        const z = this.add.zone(x, y, w, h);
+        z.setName(name); z.setInteractive();
+        zoneGraphics.strokeRect(x - w / 2, y - h / 2, w, h);
+        this.interactionZones.push(z);
+      };
+
+      addZone(this.cameras.main.width / 2, this.cameras.main.height / 2, gs * 4, gs * 3, 'meeting_table');
+      addZone(this.cameras.main.width / 2, gs, this.cameras.main.width - 100, gs * 2, 'library');
+      addZone(100, 300, gs * 4, gs * 4, 'financial_data');
+    } catch (error) {
+      console.error('Error in createInteractionZones:', error);
+    }
+  }
+
+  // ---- Scene-specific: Zone interaction icons ---------------------------
+
+  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
+    try {
+      let icon = '💭';
+      if (zone.name === 'meeting_table') icon = '👥';
+      else if (zone.name === 'library') icon = '📚';
+      else if (zone.name === 'financial_data') icon = '📊';
+
+      const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '24px' });
+      t.setOrigin(0.5); t.setDepth(100);
+      this.time.delayedCall(1500, () => t.destroy());
+    } catch (error) {
+      console.error('Error in handleZoneInteraction:', error);
+    }
+  }
+
+  // ---- Scene-specific: Italian styled title -----------------------------
+
+  private createMercatorumTitle(): void {
+    try {
+      const titleContainer = this.add.container(this.cameras.main.centerX, 25);
+      titleContainer.setDepth(10);
+
+      const tempText = this.add.text(0, 0, 'Università Mercatorum Lab', { fontSize: '40px', fontFamily: 'serif', fontStyle: 'bold' });
+      const textWidth = tempText.width + 60;
+      const textHeight = tempText.height + 20;
+      tempText.destroy();
+
+      // Terracotta background with cream border
+      const bg = this.add.graphics();
+      bg.fillStyle(0x7b5c3e, 0.9);
+      bg.fillRoundedRect(-textWidth / 2 - 5, -textHeight / 2 - 5, textWidth + 10, textHeight + 10, 8);
+      bg.fillStyle(0xd2691e, 0.95);
+      bg.fillRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
+      bg.lineStyle(3, 0xf5f5dc, 1);
+      bg.strokeRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
+      bg.setDepth(5);
+      titleContainer.add(bg);
+
+      // Shadow layers
+      const shadows = [
+        { offset: 6, color: '#3a2915', alpha: 0.3, depth: 6 },
+        { offset: 4, color: '#4f3a20', alpha: 0.5, depth: 7 },
+        { offset: 3, color: '#644b2b', alpha: 0.6, depth: 8 },
+        { offset: 2, color: '#7a5e36', alpha: 0.7, depth: 9 },
+      ];
+      for (const s of shadows) {
+        const t = this.add.text(s.offset, s.offset, 'Università Mercatorum Lab', {
+          fontSize: '40px', color: s.color, align: 'center', fontFamily: 'serif', fontStyle: 'bold'
         });
-        this.textureTestContainers = [];
-      }
-      
-      // Pulisci gli sprite di test
-      if (this.rawSprites) {
-        this.rawSprites.forEach(sprite => {
-          if (sprite) sprite.destroy();
-        });
-        this.rawSprites = [];
+        t.setOrigin(0.5); t.setDepth(s.depth); t.setAlpha(s.alpha); titleContainer.add(t);
       }
 
-      // Distruggi il controller degli agenti
-      if (this.agentController) {
-        this.agentController.destroy();
-        this.agentController = null;
-      }
-      
-      // Distruggi il pannello condiviso
-      if (this.labControls) {
-        this.labControls.destroy();
-        this.labControls = null;
-      }
-      
-      // NUOVO: Distruggi il tracker di dialoghi
-      if (this.dialogEventTracker) {
-        this.dialogEventTracker.destroy();
-        this.dialogEventTracker = null;
-      }
-      
-      console.log(`Scene ${this.scene.key} resources cleaned up`);
+      // Main text in cream
+      const mainText = this.add.text(0, 0, 'Università Mercatorum Lab', {
+        fontSize: '40px', color: '#f5f5dc', align: 'center', fontFamily: 'serif', fontStyle: 'bold'
+      });
+      mainText.setOrigin(0.5); mainText.setDepth(10); titleContainer.add(mainText);
+
+      // Italian classic corner decorations
+      const dec = this.add.graphics();
+      dec.fillStyle(0xf5f5dc, 1);
+      dec.fillRect(-textWidth / 2 + 4, -textHeight / 2 + 4, 8, 2);
+      dec.fillRect(-textWidth / 2 + 4, -textHeight / 2 + 4, 2, 8);
+      dec.fillRect(textWidth / 2 - 12, -textHeight / 2 + 4, 8, 2);
+      dec.fillRect(textWidth / 2 - 6, -textHeight / 2 + 4, 2, 8);
+      dec.fillRect(-textWidth / 2 + 4, textHeight / 2 - 6, 8, 2);
+      dec.fillRect(-textWidth / 2 + 4, textHeight / 2 - 12, 2, 8);
+      dec.fillRect(textWidth / 2 - 12, textHeight / 2 - 6, 8, 2);
+      dec.fillRect(textWidth / 2 - 6, textHeight / 2 - 12, 2, 8);
+      dec.setDepth(12);
+      titleContainer.add(dec);
     } catch (error) {
-      console.error(`Error cleaning up scene ${this.scene.key}:`, error);
+      console.error('Error creating Mercatorum title:', error);
     }
   }
 }
