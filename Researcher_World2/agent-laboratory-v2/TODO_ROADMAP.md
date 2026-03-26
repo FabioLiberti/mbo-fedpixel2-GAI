@@ -8,7 +8,7 @@
 
 ## LOW-1: Refactor MercatorumLabScene → BaseLabScene
 
-**Stato**: da fare
+**Stato**: COMPLETATO (v0.6.9)
 **Priorità**: LOW
 **Stima impatto**: ~400 righe eliminabili
 
@@ -245,7 +245,7 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 | ID | Tipo | Descrizione | Complessità |
 |----|------|-------------|-------------|
-| LOW-1 | Refactor | MercatorumLabScene → BaseLabScene | Media |
+| LOW-1 | Refactor | ~~MercatorumLabScene → BaseLabScene~~ COMPLETATO | Media |
 | LOW-2 | Fix | ~~Test backend aggiornamento nomi/ruoli~~ COMPLETATO | Bassa |
 | LOW-3 | Fix | ~~generate_personas.py nomi vecchi~~ COMPLETATO | Bassa |
 | LOW-4 | Quality | ~~Ridurre `as any` (54→9)~~ COMPLETATO | Media |

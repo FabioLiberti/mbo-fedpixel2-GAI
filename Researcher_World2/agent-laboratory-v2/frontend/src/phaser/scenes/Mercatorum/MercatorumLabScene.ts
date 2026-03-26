@@ -158,7 +158,7 @@ export class MercatorumLabScene extends BaseLabScene {
       if (dc) this.labControlsMenu.setDialogController(dc);
 
       // Title
-      this.createMercatorumTitle();
+      this.create3DTitle('Università Mercatorum Lab', '#f5f5dc', 'serif');
 
       console.log('MercatorumLabScene create COMPLETE');
     } catch (error) {
@@ -263,64 +263,4 @@ export class MercatorumLabScene extends BaseLabScene {
     }
   }
 
-  // ---- Scene-specific: Italian styled title -----------------------------
-
-  private createMercatorumTitle(): void {
-    try {
-      const titleContainer = this.add.container(this.cameras.main.centerX, 25);
-      titleContainer.setDepth(10);
-
-      const tempText = this.add.text(0, 0, 'Università Mercatorum Lab', { fontSize: '40px', fontFamily: 'serif', fontStyle: 'bold' });
-      const textWidth = tempText.width + 60;
-      const textHeight = tempText.height + 20;
-      tempText.destroy();
-
-      // Terracotta background with cream border
-      const bg = this.add.graphics();
-      bg.fillStyle(0x7b5c3e, 0.9);
-      bg.fillRoundedRect(-textWidth / 2 - 5, -textHeight / 2 - 5, textWidth + 10, textHeight + 10, 8);
-      bg.fillStyle(0xd2691e, 0.95);
-      bg.fillRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
-      bg.lineStyle(3, 0xf5f5dc, 1);
-      bg.strokeRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
-      bg.setDepth(5);
-      titleContainer.add(bg);
-
-      // Shadow layers
-      const shadows = [
-        { offset: 6, color: '#3a2915', alpha: 0.3, depth: 6 },
-        { offset: 4, color: '#4f3a20', alpha: 0.5, depth: 7 },
-        { offset: 3, color: '#644b2b', alpha: 0.6, depth: 8 },
-        { offset: 2, color: '#7a5e36', alpha: 0.7, depth: 9 },
-      ];
-      for (const s of shadows) {
-        const t = this.add.text(s.offset, s.offset, 'Università Mercatorum Lab', {
-          fontSize: '40px', color: s.color, align: 'center', fontFamily: 'serif', fontStyle: 'bold'
-        });
-        t.setOrigin(0.5); t.setDepth(s.depth); t.setAlpha(s.alpha); titleContainer.add(t);
-      }
-
-      // Main text in cream
-      const mainText = this.add.text(0, 0, 'Università Mercatorum Lab', {
-        fontSize: '40px', color: '#f5f5dc', align: 'center', fontFamily: 'serif', fontStyle: 'bold'
-      });
-      mainText.setOrigin(0.5); mainText.setDepth(10); titleContainer.add(mainText);
-
-      // Italian classic corner decorations
-      const dec = this.add.graphics();
-      dec.fillStyle(0xf5f5dc, 1);
-      dec.fillRect(-textWidth / 2 + 4, -textHeight / 2 + 4, 8, 2);
-      dec.fillRect(-textWidth / 2 + 4, -textHeight / 2 + 4, 2, 8);
-      dec.fillRect(textWidth / 2 - 12, -textHeight / 2 + 4, 8, 2);
-      dec.fillRect(textWidth / 2 - 6, -textHeight / 2 + 4, 2, 8);
-      dec.fillRect(-textWidth / 2 + 4, textHeight / 2 - 6, 8, 2);
-      dec.fillRect(-textWidth / 2 + 4, textHeight / 2 - 12, 2, 8);
-      dec.fillRect(textWidth / 2 - 12, textHeight / 2 - 6, 8, 2);
-      dec.fillRect(textWidth / 2 - 6, textHeight / 2 - 12, 2, 8);
-      dec.setDepth(12);
-      titleContainer.add(dec);
-    } catch (error) {
-      console.error('Error creating Mercatorum title:', error);
-    }
-  }
 }
