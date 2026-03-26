@@ -234,3 +234,164 @@ def agent_chat_v2(maze, init_persona, target_persona):
             break
 
     return curr_chat
+
+
+# ==========================================================================
+# FL-specific conversation generation (post-round)
+# ==========================================================================
+
+_FL_CONVO_SYSTEM = (
+    "Sei un simulatore di dialoghi tra ricercatori in un progetto di Federated Learning. "
+    "Genera un dialogo realistico in italiano tra i due ricercatori sul round appena completato. "
+    "Ogni battuta deve essere breve (1-2 frasi). Il dialogo deve essere naturale e coerente "
+    "con i ruoli e i dati forniti. Rispondi SOLO con il dialogo, una battuta per riga nel formato:\n"
+    "NomeAgente: battuta\n"
+    "Genera esattamente 4 battute alternate."
+)
+
+_FL_CONVO_STUBS = {
+    "professor": [
+        "I risultati di questo round mostrano come la diversità dei dati influenzi la convergenza.",
+        "La federazione ci permette di generalizzare su fasce demografiche che non osserviamo localmente.",
+        "Dobbiamo monitorare attentamente il trade-off tra privacy e utilità del modello.",
+    ],
+    "privacy_specialist": [
+        "Il rumore differenziale sta proteggendo i gradienti senza compromettere troppo l'accuracy.",
+        "Il budget di privacy si sta consumando come previsto, dobbiamo gestirlo con attenzione.",
+        "Nessun dato grezzo è stato condiviso tra i laboratori — solo parametri del modello.",
+    ],
+    "researcher": [
+        "L'accuracy globale sta migliorando grazie alla collaborazione tra i tre laboratori.",
+        "Il modello federato riesce a generalizzare meglio del modello locale su dati non visti.",
+        "Dovremmo analizzare il delta tra accuracy locale e globale per capire il contributo di ogni lab.",
+    ],
+    "student": [
+        "È interessante vedere come il modello migliora usando dati che non abbiamo mai visto.",
+        "Ho notato che il nostro dataset locale ha un bias per la fascia di età dei nostri pazienti.",
+        "Il federated learning sembra davvero utile per la ricerca medica collaborativa.",
+    ],
+    "doctor": [
+        "Dal punto di vista clinico, la diversità dei dati è fondamentale per un modello affidabile.",
+        "Ogni ospedale ha pazienti con caratteristiche diverse — la federazione colma queste lacune.",
+        "È rassicurante sapere che i dati dei pazienti non lasciano mai il nostro laboratorio.",
+    ],
+}
+
+
+def generate_fl_conversation(
+    agent_a,
+    agent_b,
+    fl_context: dict,
+    use_llm: bool = False,
+) -> list:
+    """Generate a short FL-specific conversation between two agents.
+
+    Args:
+        agent_a, agent_b: agent objects with .name, .role, .lab_id, .scratch attributes
+        fl_context: dict with keys like round, accuracy, gain, dp_budget, lab_id, demo
+        use_llm: if True, call LLM; otherwise use role-based stubs
+
+    Returns:
+        List of [agent_name, utterance] pairs (4 turns)
+    """
+    name_a = agent_a.name
+    name_b = agent_b.name
+    role_a = getattr(agent_a, 'role', 'researcher')
+    role_b = getattr(agent_b, 'role', 'researcher')
+
+    if use_llm:
+        return _generate_fl_convo_llm(name_a, name_b, role_a, role_b, fl_context)
+    else:
+        return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, fl_context)
+
+
+def _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx):
+    """Generate a stub FL conversation using role-based templates."""
+    import random
+
+    rnd = ctx.get("round", 0)
+    acc = ctx.get("accuracy", 0)
+    gain = ctx.get("gain", 0)
+    dp_budget = ctx.get("dp_budget", 1.0)
+    lab = ctx.get("lab_id", "")
+
+    lines_a = _FL_CONVO_STUBS.get(role_a, _FL_CONVO_STUBS["researcher"])
+    lines_b = _FL_CONVO_STUBS.get(role_b, _FL_CONVO_STUBS["researcher"])
+
+    # Pick a line for each and add context
+    rng = random.Random(rnd * 7 + hash(name_a) % 100)
+    utt_a1 = rng.choice(lines_a)
+    utt_b1 = rng.choice(lines_b)
+
+    # Add round-specific details
+    utt_a2 = f"Al round {rnd}, l'accuracy globale è {acc:.0%} con un gain di {gain:+.1%} per {lab}."
+    utt_b2 = f"Il budget privacy è al {dp_budget:.0%}. {'Dobbiamo fare attenzione.' if dp_budget < 0.3 else 'Procediamo bene.'}"
+
+    return [
+        [name_a, utt_a1],
+        [name_b, utt_b1],
+        [name_a, utt_a2],
+        [name_b, utt_b2],
+    ]
+
+
+def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx):
+    """Generate an FL conversation via LLM call."""
+    from .prompts.gpt_structure import ChatGPT_single_request
+
+    rnd = ctx.get("round", 0)
+    acc = ctx.get("accuracy", 0)
+    gain = ctx.get("gain", 0)
+    dp_budget = ctx.get("dp_budget", 1.0)
+    lab = ctx.get("lab_id", "")
+    demo = ctx.get("demo", "pazienti")
+
+    prompt = (
+        f"{_FL_CONVO_SYSTEM}\n\n"
+        f"Contesto:\n"
+        f"- Laboratorio: {lab} ({demo})\n"
+        f"- Round FL completato: {rnd}\n"
+        f"- Accuracy globale: {acc:.1%}\n"
+        f"- Gain federazione vs locale: {gain:+.1%}\n"
+        f"- Budget privacy residuo: {dp_budget:.0%}\n\n"
+        f"Personaggi:\n"
+        f"- {name_a}: {role_a}\n"
+        f"- {name_b}: {role_b}\n\n"
+        f"Genera 4 battute alternate ({name_a}, {name_b}, {name_a}, {name_b}):"
+    )
+
+    try:
+        response = ChatGPT_single_request(prompt)
+        return _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx)
+    except Exception as e:
+        logger.warning(f"FL convo LLM failed: {e}, falling back to stubs")
+        return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx)
+
+
+def _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx):
+    """Parse LLM response into conversation list. Falls back to stubs on failure."""
+    lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
+    convo = []
+
+    for line in lines:
+        # Try to parse "Name: utterance" format
+        if ":" in line:
+            parts = line.split(":", 1)
+            speaker = parts[0].strip()
+            utterance = parts[1].strip()
+            if utterance:
+                # Map speaker to actual agent name
+                if name_a.lower() in speaker.lower() or role_a.lower() in speaker.lower():
+                    convo.append([name_a, utterance])
+                elif name_b.lower() in speaker.lower() or role_b.lower() in speaker.lower():
+                    convo.append([name_b, utterance])
+                else:
+                    # Alternate assignment
+                    expected = name_a if len(convo) % 2 == 0 else name_b
+                    convo.append([expected, utterance])
+
+    if len(convo) >= 2:
+        return convo[:6]  # Cap at 6 turns
+
+    # Fallback to stubs
+    return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx)

@@ -16,6 +16,7 @@ import time
 from models.environment import LabEnvironment
 from fl.federated import FederatedLearningSystem
 from cognitive.prompts.gpt_structure import get_embedding
+from cognitive.converse import generate_fl_conversation
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class SimulationController:
         self.fl_step_counter = 0
         self.fl_steps_per_round = 50
         self.fl_current_phase = None
+        self.fl_conversations: List[Dict[str, Any]] = []  # post-round FL dialogs
 
         # Thread control
         self.simulation_thread = None
@@ -276,6 +278,91 @@ class SimulationController:
 
         logger.info(f"Injected FL bias-awareness events for round {fl_round}")
 
+    def _trigger_fl_conversations(self):
+        """Generate post-round FL conversations between agent pairs in each lab.
+
+        Selects one pair per lab (two agents with different roles) and generates
+        a short FL-focused dialog. The conversations are stored in
+        self.fl_conversations for broadcast to the frontend.
+        """
+        if not self.model or not self.fl_system:
+            return
+
+        from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+
+        fl_state = self.fl_system.get_state()
+        fl_round = fl_state["round"]
+        metrics = fl_state["metrics"]
+        dp = fl_state.get("dp", {})
+
+        lvg_list = metrics.get("local_vs_global", [])
+        lvg = lvg_list[-1] if lvg_list else {}
+
+        new_convos = []
+
+        for lab_id in self.model.get_lab_ids():
+            agents = self.model.get_lab_agents(lab_id)
+            if len(agents) < 2:
+                continue
+
+            # Select two agents with different roles
+            roles_seen = set()
+            pair = []
+            for agent in agents:
+                role = getattr(agent, 'role', 'researcher')
+                if role not in roles_seen and len(pair) < 2:
+                    roles_seen.add(role)
+                    pair.append(agent)
+            if len(pair) < 2:
+                pair = [agents[0], agents[1]]
+
+            # Build FL context
+            lab_lvg = lvg.get(lab_id, {})
+            fl_context = {
+                "round": fl_round,
+                "accuracy": lab_lvg.get("global_acc", metrics.get("accuracy", [0])[-1] if metrics.get("accuracy") else 0),
+                "gain": lab_lvg.get("gain", 0),
+                "dp_budget": dp.get("budget_fraction", 1.0),
+                "lab_id": lab_id,
+                "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
+            }
+
+            convo = generate_fl_conversation(
+                pair[0], pair[1], fl_context, use_llm=is_llm_enabled()
+            )
+
+            if convo:
+                # Update agent dialog state for WebSocket broadcast
+                for name, utterance in convo[-2:]:  # Last 2 turns as visible dialog
+                    for agent in pair:
+                        if agent.name == name:
+                            agent.last_dialog = utterance
+                            agent.dialog_is_llm = is_llm_enabled()
+                # Set chatting_with on both agents
+                pair[0].scratch.chatting_with = pair[1].name
+                pair[1].scratch.chatting_with = pair[0].name
+
+                new_convos.append({
+                    "lab_id": lab_id,
+                    "round": fl_round,
+                    "agents": [pair[0].name, pair[1].name],
+                    "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
+                    "dialog": convo,
+                })
+
+                # Also inject conversation as memory events
+                full_text = " | ".join([f"{n}: {u}" for n, u in convo])
+                for agent in pair:
+                    self._inject_fl_event(
+                        agent,
+                        f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
+                        poignancy=7,
+                    )
+
+        # Store for broadcast (keep last 3 rounds)
+        self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
+        logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
+
     # =========================================================================
     # Simulation Lifecycle
     # =========================================================================
@@ -445,6 +532,12 @@ class SimulationController:
             # Inject bias-aware insights per lab (uses local_vs_global + cross_eval)
             self._inject_fl_awareness_events()
 
+            # Generate FL conversations between agent pairs
+            try:
+                self._trigger_fl_conversations()
+            except Exception as e:
+                logger.warning(f"FL conversations failed: {e}")
+
             logger.info("FL round completed")
 
     def _collect_client_updates(self) -> Dict[str, Any]:
@@ -552,7 +645,9 @@ class SimulationController:
                     "step_counter": self.fl_step_counter,
                     "steps_per_round": self.fl_steps_per_round,
                     "round": fl_state["round"],
-                    "metrics": fl_state["metrics"]
+                    "metrics": fl_state["metrics"],
+                    "dp": fl_state.get("dp"),
+                    "conversations": self.fl_conversations,
                 }
 
         return base_data
