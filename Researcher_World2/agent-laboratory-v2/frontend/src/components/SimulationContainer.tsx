@@ -61,6 +61,16 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const localSimulationActiveRef = useRef<boolean>(false);
   // Flag per gestire l'avvio iniziale
   const hasInitializedSimRef = useRef<boolean>(false);
+  // Data distribution (static, fetched once from backend)
+  const dataDistributionRef = useRef<FLStatusData['dataDistribution']>(undefined);
+
+  // Fetch data distribution once (static dataset info)
+  useEffect(() => {
+    fetch('http://localhost:8091/fl/data-distribution')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) dataDistributionRef.current = data; })
+      .catch(() => {});
+  }, []);
 
   // Toggle LLM Dialog Panel via custom event
   useEffect(() => {
@@ -183,6 +193,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         { source: 'BLEKINGE', target: 'OPBG', active: isActive },
         { source: 'OPBG', target: 'MERCATORUM', active: isActive },
       ],
+      dataDistribution: dataDistributionRef.current,
     };
 
     setFLStatus(backendFlStatus);

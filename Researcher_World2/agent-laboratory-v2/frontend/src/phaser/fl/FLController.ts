@@ -47,6 +47,13 @@ export interface FLStatusData {
   }>;
   algorithm?: string;   // "fedavg" | "fedprox"
   mu?: number;          // FedProx proximal term (0..1)
+  dataDistribution?: Record<string, {
+    n_samples: number;
+    age_mean: number;
+    age_std: number;
+    positive_ratio: number;
+    age_histogram: { bins: string[]; counts: number[] };
+  }>;
   fromSimulation?: boolean; // Campo opzionale per indicare se i dati provengono dalla simulazione React
 }
 

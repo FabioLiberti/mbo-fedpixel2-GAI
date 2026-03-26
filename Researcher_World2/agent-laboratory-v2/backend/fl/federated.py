@@ -726,7 +726,34 @@ class FederatedLearningSystem:
                 "exhausted": self.dp_epsilon_spent >= self.dp_epsilon_total,
             },
         }
-    
+
+    def get_data_distribution(self) -> Dict[str, Any]:
+        """Return per-lab data distribution info (samples, age stats, positive ratio, age histogram)."""
+        data = _load_heart_dataset()
+        result: Dict[str, Any] = {}
+        bins = [0, 35, 45, 55, 65, 80]  # age histogram bin edges
+        for lab_id, (lo, hi) in _LAB_AGE_RANGES.items():
+            mask = (data["ages"] >= lo) & (data["ages"] < hi)
+            ages = data["ages"][mask]
+            y = data["y"][mask].flatten()
+            n = int(len(ages))
+            if n == 0:
+                result[lab_id] = {"n_samples": 0, "age_mean": 0, "age_std": 0,
+                                  "positive_ratio": 0, "age_histogram": []}
+                continue
+            hist_counts, _ = np.histogram(ages, bins=bins)
+            result[lab_id] = {
+                "n_samples": n,
+                "age_mean": round(float(np.mean(ages)), 1),
+                "age_std": round(float(np.std(ages)), 1),
+                "positive_ratio": round(float(np.mean(y)), 3),
+                "age_histogram": {
+                    "bins": [f"{bins[i]}-{bins[i+1]}" for i in range(len(bins)-1)],
+                    "counts": [int(c) for c in hist_counts],
+                },
+            }
+        return result
+
     def update_client_models(self):
         """Aggiorna i modelli di tutti i client con i pesi del modello globale"""
         if HAS_TF:

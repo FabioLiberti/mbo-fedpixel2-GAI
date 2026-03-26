@@ -1,7 +1,7 @@
 # TODO Roadmap — mbo-fedpixel2-GAI
 
-> Aggiornato: 2026-03-26 dopo v0.7.5
-> Completati: LOW-1→5, FEATURE-1→3 (tutto fino a v0.7.5)
+> Aggiornato: 2026-03-26 dopo v0.8.3
+> Completati: LOW-1→5, FEATURE-1→6 (tutto fino a v0.8.3)
 > Questo file traccia tutte le modifiche residue e il piano degli sviluppi futuri.
 
 ---
@@ -250,7 +250,7 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 ## FEATURE-4: Toggle FedAvg / FedProx da UI
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.2)
 **Priorità**: MEDIA
 **Complessità**: Bassa
 
@@ -272,7 +272,7 @@ Il backend supporta già FedAvg e FedProx (parametro `algorithm` + termine pross
 
 ## FEATURE-5: Dialoghi LLM tra agenti sul FL
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.0 + v0.8.1)
 **Priorità**: ALTA
 **Complessità**: Alta
 
@@ -295,7 +295,7 @@ Gli agenti hanno template di awareness iniettati in memoria (v0.7.3), ma non gen
 
 ## FEATURE-6: Visualizzazione distribuzione Non-IID
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.3)
 **Priorità**: MEDIA
 **Complessità**: Media
 
@@ -390,9 +390,9 @@ Rilevamento automatico della convergenza del modello FL e stop del training.
 | FEATURE-1 | Feature | ~~Cognitive pipeline stub → LLM~~ | Alta | COMPLETATO |
 | FEATURE-2 | Feature | ~~FL dataset reale + DP-SGD + visualizzazione~~ | Alta | COMPLETATO |
 | FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ | Media | COMPLETATO |
-| **FEATURE-4** | Feature | Toggle FedAvg / FedProx da UI | Bassa | DA FARE |
-| **FEATURE-5** | Feature | Dialoghi LLM tra agenti sul FL | Alta | DA FARE |
-| **FEATURE-6** | Feature | Visualizzazione distribuzione Non-IID | Media | DA FARE |
+| FEATURE-4 | Feature | ~~Toggle FedAvg / FedProx da UI~~ | Bassa | COMPLETATO |
+| FEATURE-5 | Feature | ~~Dialoghi LLM tra agenti sul FL~~ | Alta | COMPLETATO |
+| FEATURE-6 | Feature | ~~Visualizzazione distribuzione Non-IID~~ | Media | COMPLETATO |
 | **FEATURE-7** | Feature | Effetti visivi Phaser durante fasi FL | Media | DA FARE |
 | **FEATURE-8** | Feature | Export metriche FL (JSON/CSV) | Bassa | DA FARE |
 | **FEATURE-9** | Feature | Convergence detection e auto-stop | Bassa | DA FARE |

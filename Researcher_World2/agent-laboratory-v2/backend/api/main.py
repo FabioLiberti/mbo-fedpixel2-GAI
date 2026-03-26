@@ -247,6 +247,14 @@ async def set_fl_algorithm(algorithm: str = "fedavg", mu: float = 0.01):
     return {"algorithm": algo, "mu": mu}
 
 
+@app.get("/fl/data-distribution")
+async def get_fl_data_distribution():
+    """Return per-lab data distribution (samples, age stats, positive ratio, histogram)."""
+    if not controller.fl_system:
+        raise HTTPException(status_code=400, detail="FL system not initialized")
+    return controller.fl_system.get_data_distribution()
+
+
 # --- LLM Toggle Routes ---
 
 @app.post("/llm/toggle")

@@ -174,7 +174,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
     emitFLPanelToggle(false);
   };
 
-  const { enabled, currentState, activeAgents, metrics, connections, dp, algorithm, mu } = flStatus || {};
+  const { enabled, currentState, activeAgents, metrics, connections, dp, algorithm, mu, dataDistribution } = flStatus || {};
 
   const formatMetric = (value: number | undefined): string => {
     return value !== undefined ? value.toFixed(4) : 'N/A';
@@ -373,6 +373,41 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
                   <span className="fl-cross-eval-n">{v.samples}n</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Data Distribution — non-IID partition visualization */}
+          {dataDistribution && Object.keys(dataDistribution).length > 0 && (
+            <div className="fl-data-dist">
+              <h4>Data Distribution</h4>
+              {Object.entries(dataDistribution).map(([lab, info]) => {
+                const maxCount = Math.max(...(info.age_histogram?.counts || [1]));
+                return (
+                  <div key={lab} className="fl-data-dist-lab">
+                    <div className="fl-data-dist-header">
+                      <span className="fl-data-dist-name">{lab}</span>
+                      <span className="fl-data-dist-n">{info.n_samples}n</span>
+                      <span className="fl-data-dist-pos">{(info.positive_ratio * 100).toFixed(0)}% +</span>
+                    </div>
+                    <div className="fl-data-dist-age">
+                      age {info.age_mean} &plusmn; {info.age_std}
+                    </div>
+                    {info.age_histogram && (
+                      <div className="fl-data-dist-bars">
+                        {info.age_histogram.counts.map((count, i) => (
+                          <div key={i} className="fl-data-dist-bar-col" title={`${info.age_histogram.bins[i]}: ${count}`}>
+                            <div
+                              className="fl-data-dist-bar"
+                              style={{ height: `${Math.max(2, (count / maxCount) * 20)}px` }}
+                            />
+                            <span className="fl-data-dist-bin">{info.age_histogram.bins[i]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
