@@ -132,6 +132,23 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     const latestLvg = lvgArr.length > 0 ? lvgArr[lvgArr.length - 1] : undefined;
     const latestCross = crossArr.length > 0 ? crossArr[crossArr.length - 1] : undefined;
 
+    // DP-SGD data from backend
+    const dpData = fl?.dp ?? undefined;
+
+    // Per-client sigma from per_client metrics (latest round)
+    const perClientSigma: Record<string, number> = {};
+    if (perClientArr.length > 0) {
+      const lastPC = perClientArr[perClientArr.length - 1];
+      if (lastPC && typeof lastPC === 'object') {
+        for (const [lab, m] of Object.entries(lastPC)) {
+          const metrics = m as any;
+          if (metrics?.noise_sigma !== undefined) {
+            perClientSigma[lab] = metrics.noise_sigma;
+          }
+        }
+      }
+    }
+
     const backendFlStatus: FLStatusData = {
       enabled: fl?.enabled ?? true,
       currentState: phase,
@@ -148,6 +165,17 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         localVsGlobal: latestLvg,
         crossEval: latestCross,
       },
+      dp: dpData ? {
+        enabled: dpData.enabled ?? false,
+        epsilon_total: dpData.epsilon_total ?? 20,
+        epsilon_spent: dpData.epsilon_spent ?? 0,
+        epsilon_remaining: dpData.epsilon_remaining ?? 20,
+        budget_fraction: dpData.budget_fraction ?? 1,
+        noise_multiplier: dpData.noise_multiplier ?? 2.0,
+        max_grad_norm: dpData.max_grad_norm ?? 1.0,
+        exhausted: dpData.exhausted ?? false,
+        per_client_sigma: Object.keys(perClientSigma).length > 0 ? perClientSigma : undefined,
+      } : undefined,
       connections: [
         { source: 'MERCATORUM', target: 'BLEKINGE', active: isActive },
         { source: 'BLEKINGE', target: 'OPBG', active: isActive },
@@ -294,15 +322,25 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         round: 0,
         clientFraction: 0.8
       },
+      dp: {
+        enabled: true,
+        epsilon_total: 20,
+        epsilon_spent: 0,
+        epsilon_remaining: 20,
+        budget_fraction: 1.0,
+        noise_multiplier: 2.0,
+        max_grad_norm: 1.0,
+        exhausted: false,
+      },
       connections: [
         { source: 'MERCATORUM', target: 'BLEKINGE', active: false },
         { source: 'BLEKINGE', target: 'OPBG', active: false },
         { source: 'OPBG', target: 'MERCATORUM', active: false }
       ]
     };
-    
+
     setFLStatus(initialState);
-    
+
     // Simulazione del ciclo FL con transizioni di stato
     const states = [FLState.TRAINING, FLState.SENDING, FLState.AGGREGATING, FLState.RECEIVING, FLState.IDLE];
     let currentStateIndex = 0;
@@ -343,10 +381,23 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           lossHist.push(newLoss);
         }
 
+        // Simulate DP epsilon consumption per round
+        const prevDp = prevState.dp;
+        const dpSpent = prevDp ? Math.min(prevDp.epsilon_total, prevDp.epsilon_spent + (newState === FLState.IDLE && currentStateIndex === 0 ? 0.8 : 0)) : 0;
+        const dpTotal = prevDp?.epsilon_total ?? 10;
+        const updatedDp = prevDp ? {
+          ...prevDp,
+          epsilon_spent: Math.round(dpSpent * 1000) / 1000,
+          epsilon_remaining: Math.round(Math.max(0, dpTotal - dpSpent) * 1000) / 1000,
+          budget_fraction: Math.round(Math.max(0, 1 - dpSpent / dpTotal) * 10000) / 10000,
+          exhausted: dpSpent >= dpTotal,
+        } : undefined;
+
         const updatedState = {
           ...prevState,
           currentState: newState,
           fromSimulation: true,
+          dp: updatedDp,
           metrics: {
             ...prevState.metrics,
             accuracy: newAcc,

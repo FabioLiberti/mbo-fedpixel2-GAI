@@ -29,6 +29,17 @@ export interface FLStatusData {
     localVsGlobal?: Record<string, { local_acc: number; global_acc: number; gain: number }>;
     crossEval?: Record<string, { accuracy: number; loss: number; samples: number }>;
   };
+  dp?: {
+    enabled: boolean;
+    epsilon_total: number;
+    epsilon_spent: number;
+    epsilon_remaining: number;
+    budget_fraction: number;
+    noise_multiplier: number;
+    max_grad_norm: number;
+    exhausted: boolean;
+    per_client_sigma?: Record<string, number>;
+  };
   connections: Array<{
     source: string; // ID del laboratorio
     target: string; // ID del laboratorio

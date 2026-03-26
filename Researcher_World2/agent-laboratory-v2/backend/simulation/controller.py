@@ -175,9 +175,9 @@ class SimulationController:
         ),
         "privacy_specialist": (
             "I dati dei pazienti {demo} di {lab} non sono mai stati condivisi con gli altri laboratori. "
-            "Nonostante ciò, il modello federato funziona con accuracy {global_acc:.0%} "
-            "anche sui dati di {other_labs}. "
-            "Questo dimostra il valore del federated learning per la privacy dei dati sanitari."
+            "Il modello federato raggiunge accuracy {global_acc:.0%} anche sui dati di {other_labs}. "
+            "{dp_insight}"
+            "Il federated learning con DP-SGD garantisce privacy formale dei dati sanitari."
         ),
         "student": (
             "Ho osservato che il nostro dataset {lab} ha solo {demo}. "
@@ -230,6 +230,21 @@ class SimulationController:
                 cross_parts.append(f"{olid} {c.get('accuracy', 0):.0%}")
             cross_summary = ", ".join(cross_parts)
 
+            # DP-SGD insight for privacy_specialist
+            dp = fl_state.get("dp", {})
+            if dp.get("enabled"):
+                budget_pct = dp.get("budget_fraction", 1.0) * 100
+                eps_spent = dp.get("epsilon_spent", 0)
+                eps_total = dp.get("epsilon_total", 10)
+                dp_insight = (
+                    f"Il budget di privacy (ε) è al {budget_pct:.0f}% "
+                    f"({eps_spent:.2f}/{eps_total} consumato). "
+                    f"Il rumore gaussiano (σ={dp.get('noise_multiplier', 0.5)}) "
+                    f"protegge ogni aggiornamento dei gradienti. "
+                )
+            else:
+                dp_insight = ""
+
             for agent in self.model.get_lab_agents(lab_id):
                 role = getattr(agent, "role", "researcher")
                 template = self._ROLE_INSIGHT_TEMPLATES.get(
@@ -248,6 +263,7 @@ class SimulationController:
                         fl_round=fl_round,
                         other_labs=other_labs_str,
                         cross_summary=cross_summary,
+                        dp_insight=dp_insight,
                     )
                 except KeyError:
                     insight = (

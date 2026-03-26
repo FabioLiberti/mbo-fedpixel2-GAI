@@ -173,7 +173,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
     emitFLPanelToggle(false);
   };
 
-  const { enabled, currentState, activeAgents, metrics, connections } = flStatus || {};
+  const { enabled, currentState, activeAgents, metrics, connections, dp } = flStatus || {};
 
   const formatMetric = (value: number | undefined): string => {
     return value !== undefined ? value.toFixed(4) : 'N/A';
@@ -254,6 +254,35 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
             </div>
           </div>
 
+          {/* Privacy Budget (DP-SGD) */}
+          {dp?.enabled && (
+            <div className="fl-privacy-budget">
+              <div className="fl-privacy-header">
+                <span className="fl-privacy-label">Privacy Budget</span>
+                <span className="fl-privacy-value">
+                  {dp.exhausted ? (
+                    <span className="fl-privacy-exhausted">EXHAUSTED</span>
+                  ) : (
+                    <>
+                      {`${(dp.budget_fraction * 100).toFixed(0)}%`}
+                      <span className="fl-privacy-eps"> ({dp.epsilon_spent.toFixed(2)}/{dp.epsilon_total})</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className="fl-privacy-bar-bg">
+                <div
+                  className={`fl-privacy-bar-fill ${dp.budget_fraction < 0.2 ? 'fl-privacy-low' : ''}`}
+                  style={{ width: `${Math.max(0, dp.budget_fraction * 100)}%` }}
+                />
+              </div>
+              <div className="fl-privacy-details">
+                <span>noise {dp.noise_multiplier}</span>
+                <span>clip {dp.max_grad_norm}</span>
+              </div>
+            </div>
+          )}
+
           {/* Sparkline charts — accuracy & loss history */}
           {(metrics?.accuracyHistory?.length ?? 0) >= 2 && (
             <div className="fl-sparklines">
@@ -277,6 +306,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
               {Object.entries(metrics.localVsGlobal).map(([lab, v]) => {
                 const gain = v.gain;
                 const gainClass = gain >= 0 ? 'fl-gain-positive' : 'fl-gain-negative';
+                const labSigma = dp?.per_client_sigma?.[lab];
                 return (
                   <div key={lab} className="fl-lab-perf-row">
                     <span className="fl-lab-perf-name">{lab}</span>
@@ -285,6 +315,11 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
                     <span className={`fl-lab-perf-gain ${gainClass}`}>
                       {gain >= 0 ? '+' : ''}{(gain * 100).toFixed(1)}%
                     </span>
+                    {labSigma !== undefined && (
+                      <span className="fl-lab-perf-sigma" title="Noise sigma applied">
+                        {labSigma.toFixed(3)}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -361,6 +396,11 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
                   </div>
                 ))}
               </div>
+            )}
+            {dp?.enabled && (
+              <p className="fl-milestone-privacy">
+                Privacy: {dp.budget_fraction < 0.2 ? 'LOW' : 'OK'} ({(dp.budget_fraction * 100).toFixed(0)}% remaining)
+              </p>
             )}
             <p className="fl-milestone-hint">click to dismiss</p>
           </div>

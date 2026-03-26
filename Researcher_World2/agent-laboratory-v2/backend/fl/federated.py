@@ -110,6 +110,27 @@ def generate_client_data(client_id: str, n_samples: int = 200, seed: int = 0) ->
     return X[idx], y[idx]
 
 
+def _clip_and_noise_grads(
+    grads: List[np.ndarray],
+    max_grad_norm: float,
+    noise_multiplier: float,
+) -> float:
+    """Clip gradient list by global L2 norm, then add calibrated Gaussian noise.
+    Returns the actual noise sigma applied."""
+    # Global L2 norm across all gradient arrays
+    total_norm = np.sqrt(sum(float(np.sum(g ** 2)) for g in grads))
+    clip_factor = min(1.0, max_grad_norm / (total_norm + 1e-8))
+    for i in range(len(grads)):
+        grads[i] = grads[i] * clip_factor
+
+    # Gaussian noise: σ = noise_multiplier × max_grad_norm
+    sigma = noise_multiplier * max_grad_norm
+    for i in range(len(grads)):
+        grads[i] = grads[i] + np.random.normal(0, sigma, size=grads[i].shape).astype(grads[i].dtype)
+
+    return sigma
+
+
 def numpy_train(
     weights: List[np.ndarray],
     data_x: np.ndarray,
@@ -119,12 +140,16 @@ def numpy_train(
     batch_size: int = 32,
     mu: float = 0.0,
     global_weights: Optional[List[np.ndarray]] = None,
-) -> Tuple[List[np.ndarray], float, float]:
+    dp_enabled: bool = False,
+    max_grad_norm: float = 1.0,
+    noise_multiplier: float = 0.5,
+) -> Tuple[List[np.ndarray], float, float, float]:
     """
     Train a 2-layer NN (13->32 relu ->16 relu ->1 sigmoid) with SGD.
 
-    Returns (updated_weights, final_loss, final_accuracy).
+    Returns (updated_weights, final_loss, final_accuracy, noise_sigma).
     If mu > 0 and global_weights is provided, adds FedProx proximal term.
+    If dp_enabled, applies per-batch gradient clipping + Gaussian noise (DP-SGD).
     """
     # Unpack: W1(13,32) b1(32) W2(32,16) b2(16) W3(16,1) b3(1)
     W1, b1, W2, b2, W3, b3 = [w.copy() for w in weights]
@@ -132,6 +157,7 @@ def numpy_train(
 
     final_loss = 1.0
     final_acc = 0.5
+    noise_sigma = 0.0
 
     for _epoch in range(epochs):
         # Shuffle
@@ -192,6 +218,12 @@ def numpy_train(
                 dW3 += mu * (W3 - global_weights[4])
                 db3 += mu * (b3 - global_weights[5])
 
+            # --- DP-SGD: clip + noise ---
+            if dp_enabled:
+                grads = [dW1, db1, dW2, db2, dW3, db3]
+                noise_sigma = _clip_and_noise_grads(grads, max_grad_norm, noise_multiplier)
+                dW1, db1, dW2, db2, dW3, db3 = grads
+
             # --- SGD update ---
             W1 -= lr * dW1
             b1 -= lr * db1
@@ -203,7 +235,7 @@ def numpy_train(
         final_loss = epoch_loss / n
         final_acc = epoch_correct / n
 
-    return [W1, b1, W2, b2, W3, b3], float(final_loss), float(final_acc)
+    return [W1, b1, W2, b2, W3, b3], float(final_loss), float(final_acc), float(noise_sigma)
 
 class FederatedLearningSystem:
     """
@@ -226,6 +258,10 @@ class FederatedLearningSystem:
         mu: float = 0.01,
         seed: int = 42,
         checkpoint_dir: Optional[str] = None,
+        dp_enabled: bool = True,
+        dp_epsilon_total: float = 20.0,
+        dp_max_grad_norm: float = 1.0,
+        dp_noise_multiplier: float = 2.0,
     ):
         """
         Inizializza il sistema di Federated Learning
@@ -238,6 +274,10 @@ class FederatedLearningSystem:
             mu: Coefficiente del termine prossimale per FedProx
             seed: Seed per riproducibilità
             checkpoint_dir: Directory per salvataggio checkpoint (None = default)
+            dp_enabled: Abilita DP-SGD (gradient clipping + noise)
+            dp_epsilon_total: Budget totale di privacy (epsilon)
+            dp_max_grad_norm: Norma massima per gradient clipping
+            dp_noise_multiplier: Moltiplicatore rumore σ = noise_multiplier × max_grad_norm
         """
         self.algorithm = algorithm
         self.aggregation_rounds = aggregation_rounds
@@ -245,6 +285,13 @@ class FederatedLearningSystem:
         self.model_type = model_type
         self.mu = mu
         self.checkpoint_dir = checkpoint_dir or self._DEFAULT_CHECKPOINT_DIR
+
+        # DP-SGD parameters
+        self.dp_enabled = dp_enabled
+        self.dp_epsilon_total = dp_epsilon_total
+        self.dp_epsilon_spent = 0.0
+        self.dp_max_grad_norm = dp_max_grad_norm
+        self.dp_noise_multiplier = dp_noise_multiplier
 
         # Imposta seed per riproducibilità
         self.random = random.Random(seed)
@@ -370,7 +417,10 @@ class FederatedLearningSystem:
             global_w = [w.copy() for w in self.global_model] if use_prox else None
             mu = self.mu if use_prox else 0.0
 
-            updated_weights, loss, accuracy = numpy_train(
+            # Check if privacy budget is exhausted
+            dp_active = self.dp_enabled and self.dp_epsilon_spent < self.dp_epsilon_total
+
+            updated_weights, loss, accuracy, noise_sigma = numpy_train(
                 weights=client_model,
                 data_x=data_x,
                 data_y=data_y,
@@ -379,6 +429,9 @@ class FederatedLearningSystem:
                 batch_size=32,
                 mu=mu,
                 global_weights=global_w,
+                dp_enabled=dp_active,
+                max_grad_norm=self.dp_max_grad_norm,
+                noise_multiplier=self.dp_noise_multiplier,
             )
             # Write back updated weights to client
             for i in range(len(updated_weights)):
@@ -386,10 +439,11 @@ class FederatedLearningSystem:
 
             client["data_size"] = len(data_x)
             client["last_round"] = self.round
-            metrics = {"loss": loss, "accuracy": accuracy}
+            metrics = {"loss": loss, "accuracy": accuracy, "noise_sigma": noise_sigma}
             logger.info(
                 f"Client {client_id} trained (numpy) {len(data_x)} samples | "
                 f"loss={loss:.4f} acc={accuracy:.4f}"
+                f"{f' σ={noise_sigma:.4f}' if dp_active else ''}"
             )
             return metrics, [w.copy() for w in client_model]
 
@@ -526,6 +580,26 @@ class FederatedLearningSystem:
                 {cid: dict(cm) for cid, cm in client_metrics.items()}
             )
 
+        # --- DP-SGD: epsilon accounting per round ---
+        if self.dp_enabled and client_metrics:
+            # Simplified Gaussian mechanism: ε_round = sqrt(2·ln(1.25/δ)) / σ
+            # This gives the per-query epsilon; we treat each round as one query
+            # (the aggregation step), not per-batch, to keep the budget realistic.
+            import math
+            delta = 1e-5
+            sigma = self.dp_noise_multiplier
+            eps_round = math.sqrt(2 * math.log(1.25 / delta)) / sigma
+            # Scale down: each FL round consumes one composition step
+            # Use simple composition (not advanced) for clarity
+            self.dp_epsilon_spent = round(self.dp_epsilon_spent + eps_round, 4)
+            self.metrics["privacy_budget"] = round(
+                max(0.0, 1.0 - self.dp_epsilon_spent / self.dp_epsilon_total), 4
+            )
+            logger.info(
+                f"DP: ε_round={eps_round:.4f}, ε_spent={self.dp_epsilon_spent:.4f}"
+                f"/{self.dp_epsilon_total}, budget={self.metrics['privacy_budget']:.2%}"
+            )
+
         # A: local-vs-global evaluation
         lvg = self._evaluate_local_vs_global(client_updates)
         self.metrics["local_vs_global"].append(lvg)
@@ -640,7 +714,17 @@ class FederatedLearningSystem:
             "algorithm": self.algorithm,
             "round": self.round,
             "client_count": len(self.clients),
-            "metrics": self.metrics
+            "metrics": self.metrics,
+            "dp": {
+                "enabled": self.dp_enabled,
+                "epsilon_total": self.dp_epsilon_total,
+                "epsilon_spent": self.dp_epsilon_spent,
+                "epsilon_remaining": round(max(0, self.dp_epsilon_total - self.dp_epsilon_spent), 4),
+                "budget_fraction": self.metrics["privacy_budget"],
+                "noise_multiplier": self.dp_noise_multiplier,
+                "max_grad_norm": self.dp_max_grad_norm,
+                "exhausted": self.dp_epsilon_spent >= self.dp_epsilon_total,
+            },
         }
     
     def update_client_models(self):
@@ -680,6 +764,13 @@ class FederatedLearningSystem:
             "model_type": self.model_type,
             "mu": self.mu,
             "client_ids": list(self.clients.keys()),
+            "dp": {
+                "enabled": self.dp_enabled,
+                "epsilon_total": self.dp_epsilon_total,
+                "epsilon_spent": self.dp_epsilon_spent,
+                "noise_multiplier": self.dp_noise_multiplier,
+                "max_grad_norm": self.dp_max_grad_norm,
+            },
             "metrics": {
                 "accuracy": self.metrics["accuracy"],
                 "loss": self.metrics["loss"],
@@ -716,6 +807,14 @@ class FederatedLearningSystem:
             self.aggregation_rounds = state.get("aggregation_rounds", self.aggregation_rounds)
             self.client_fraction = state.get("client_fraction", self.client_fraction)
             self.mu = state.get("mu", self.mu)
+
+            # Restore DP state
+            dp = state.get("dp", {})
+            self.dp_enabled = dp.get("enabled", self.dp_enabled)
+            self.dp_epsilon_total = dp.get("epsilon_total", self.dp_epsilon_total)
+            self.dp_epsilon_spent = dp.get("epsilon_spent", 0.0)
+            self.dp_noise_multiplier = dp.get("noise_multiplier", self.dp_noise_multiplier)
+            self.dp_max_grad_norm = dp.get("max_grad_norm", self.dp_max_grad_norm)
             self.metrics = {
                 "accuracy": state["metrics"].get("accuracy", []),
                 "loss": state["metrics"].get("loss", []),

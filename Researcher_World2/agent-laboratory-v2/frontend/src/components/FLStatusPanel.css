@@ -404,3 +404,93 @@
     border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.1);
   }
+
+  /* ---- Privacy Budget (DP-SGD) ---- */
+
+  .fl-privacy-budget {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+
+  .fl-privacy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+
+  .fl-privacy-label {
+    color: #ddd;
+    font-weight: 500;
+  }
+
+  .fl-privacy-value {
+    color: #2ecc71;
+    font-weight: bold;
+    font-family: monospace;
+  }
+
+  .fl-privacy-eps {
+    color: #888;
+    font-weight: normal;
+    font-size: 9px;
+    margin-left: 4px;
+  }
+
+  .fl-privacy-exhausted {
+    color: #e74c3c;
+    font-weight: bold;
+    font-size: 10px;
+  }
+
+  .fl-privacy-bar-bg {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+
+  .fl-privacy-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  .fl-privacy-bar-fill.fl-privacy-low {
+    background: linear-gradient(90deg, #e74c3c, #c0392b);
+  }
+
+  .fl-privacy-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: #777;
+    font-family: monospace;
+  }
+
+  /* ---- Sigma per lab (in Lab Performance) ---- */
+
+  .fl-lab-perf-sigma {
+    color: #9b59b6;
+    font-size: 9px;
+    font-family: monospace;
+  }
+
+  .fl-lab-perf-sigma::before {
+    content: "\03C3=";
+    color: #777;
+  }
+
+  /* ---- Privacy line in milestone popup ---- */
+
+  .fl-milestone-privacy {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #aaa;
+  }
