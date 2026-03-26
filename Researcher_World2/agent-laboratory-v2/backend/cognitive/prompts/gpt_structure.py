@@ -287,15 +287,17 @@ def ChatGPT_single_request(prompt):
 
 
 def GPT4_request(prompt):
-    """Request using the primary model (replaces GPT-4 calls)."""
+    """Request using the primary model — temperature from llm_config.json."""
     temp_sleep()
-    return ollama_chat_request(prompt, temperature=0.05, max_tokens=150)
+    return ollama_chat_request(prompt)
 
 
 def ChatGPT_request(prompt):
-    """Request with higher temperature for creative output."""
+    """Request with slightly higher temperature for creative output."""
     try:
-        return ollama_chat_request(prompt, temperature=0.7, max_tokens=150)
+        _service.load_config()
+        creative_temp = min(_service.temperature + 0.2, 1.0)
+        return ollama_chat_request(prompt, temperature=creative_temp)
     except Exception as e:
         logger.error(f"Ollama ERROR in ChatGPT_request: {e}")
         return "OLLAMA ERROR"

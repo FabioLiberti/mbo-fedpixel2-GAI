@@ -10,7 +10,17 @@ Stores long-term memory as ConceptNode objects with:
 """
 import json
 import datetime
+import logging
 import os
+
+logger = logging.getLogger(__name__)
+
+# Maximum nodes per sequence before pruning kicks in.
+# Expired nodes are always removed; if still over limit, lowest-poignancy
+# oldest nodes are dropped.
+MAX_SEQ_EVENT = 200
+MAX_SEQ_THOUGHT = 150
+MAX_SEQ_CHAT = 100
 
 from cognitive import check_if_file_exists, create_folder_if_not_there
 
@@ -128,6 +138,55 @@ class AssociativeMemory:
                 if kw_strength_load.get("kw_strength_thought"):
                     self.kw_strength_thought = kw_strength_load["kw_strength_thought"]
 
+    # ------------------------------------------------------------------
+    # Memory pruning
+    # ------------------------------------------------------------------
+    def _prune(self, seq_name: str, max_size: int):
+        """Remove expired nodes, then drop least-important if over limit."""
+        seq = getattr(self, seq_name)
+        if len(seq) <= max_size:
+            return
+
+        now = datetime.datetime.now()
+        to_remove = []
+
+        # 1) collect expired nodes
+        for node in seq:
+            if node.expiration and node.expiration < now:
+                to_remove.append(node)
+
+        # 2) if still over limit after removing expired, drop lowest-poignancy
+        remaining = len(seq) - len(to_remove)
+        if remaining > max_size:
+            alive = [n for n in seq if n not in set(to_remove)]
+            # sort by poignancy asc, then oldest first
+            alive.sort(key=lambda n: (n.poignancy, n.created))
+            excess = remaining - max_size
+            to_remove.extend(alive[:excess])
+
+        if not to_remove:
+            return
+
+        remove_set = set(id(n) for n in to_remove)
+        # remove from sequence
+        setattr(self, seq_name, [n for n in seq if id(n) not in remove_set])
+
+        # clean up indexes
+        kw_map_name = seq_name.replace("seq_", "kw_to_")
+        kw_map = getattr(self, kw_map_name, {})
+        for kw in list(kw_map.keys()):
+            kw_map[kw] = [n for n in kw_map[kw] if id(n) not in remove_set]
+            if not kw_map[kw]:
+                del kw_map[kw]
+
+        # clean up id_to_node and embeddings
+        for node in to_remove:
+            self.id_to_node.pop(node.node_id, None)
+            self.embeddings.pop(node.embedding_key, None)
+
+        logger.debug(f"Pruned {len(to_remove)} nodes from {seq_name} "
+                     f"(now {len(getattr(self, seq_name))})")
+
     def save(self, out_json):
         create_folder_if_not_there(out_json + "/nodes.json")
 
@@ -207,6 +266,7 @@ class AssociativeMemory:
                     self.kw_strength_event[kw] = 1
 
         self.embeddings[embedding_pair[0]] = embedding_pair[1]
+        self._prune("seq_event", MAX_SEQ_EVENT)
         return node
 
     def add_thought(self, created, expiration, s, p, o,
@@ -246,6 +306,7 @@ class AssociativeMemory:
                     self.kw_strength_thought[kw] = 1
 
         self.embeddings[embedding_pair[0]] = embedding_pair[1]
+        self._prune("seq_thought", MAX_SEQ_THOUGHT)
         return node
 
     def add_chat(self, created, expiration, s, p, o,
@@ -273,6 +334,7 @@ class AssociativeMemory:
         self.id_to_node[node_id] = node
 
         self.embeddings[embedding_pair[0]] = embedding_pair[1]
+        self._prune("seq_chat", MAX_SEQ_CHAT)
         return node
 
     def get_summarized_latest_events(self, retention):

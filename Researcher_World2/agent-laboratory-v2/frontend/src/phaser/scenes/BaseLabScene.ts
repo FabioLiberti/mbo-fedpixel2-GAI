@@ -2,15 +2,20 @@
 
 import Phaser from 'phaser';
 import { BaseScene } from './BaseScene';
-import { Agent } from '../sprites/Agent';
+import { Agent, AgentState } from '../sprites/Agent';
+import { createAgent } from '../sprites/agentFactory';
 import { FLController } from '../fl/FLController';
 import { LabTypeId, LAB_TYPES } from '../types/LabTypeConstants';
 import { DialogController } from '../controllers/DialogController';
 import { FLDialogIntegrator } from '../fl/FLDialogIntegrator';
 import { loadDialogAssets } from '../loader';
 import { DialogDebugger } from '../utils/dialogDebugger';
-import { LabControlsMenu } from '../ui/LabControlsMenu';
+import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
 import { SimpleLLMPanel } from '../ui/simple/SimpleLLMPanel';
+import { AgentsLegend } from '../ui/AgentsLegend';
+import { GlobalAgentController } from '../controllers/GlobalAgentController';
+import { DialogEventTracker } from '../controllers/DialogEventTracker';
+import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
 
 /**
  * Interfaccia per i dati di interazione tra agenti
@@ -20,6 +25,16 @@ interface AgentInteractionData {
   agentId2: string;
   type: string;
   [key: string]: any;
+}
+
+/**
+ * Interfaccia per la configurazione di un agente
+ */
+export interface AgentConfigEntry {
+  type: string;
+  name: string;
+  position: { x: number; y: number };
+  specialization?: string;
 }
 
 /**
@@ -38,34 +53,35 @@ export interface LabTheme {
 }
 
 /**
- * Scena base per tutti i laboratori nel gioco
- * Estende BaseScene e aggiunge funzionalità specifiche per i laboratori
+ * Scena base per tutti i laboratori nel gioco.
+ * Contiene metodi condivisi per debug, texture, animazioni, agenti, camera, interazioni.
+ * Le sottoclassi forniscono solo le parti specifiche (background, titolo, zone, config).
  */
 export class BaseLabScene extends BaseScene {
   // Agenti presenti nel laboratorio
-  protected agents: Agent[] = [];
-  
+  public agents: Agent[] = [];
+
   // Zone di interazione
   protected interactionZones: Phaser.GameObjects.Zone[] = [];
-  
+
   // Griglia per il pathfinding
   protected grid: number[][] = [];
-  
+
   // Controller per il Federated Learning
   protected flController: FLController;
-  
+
   // Controller per i dialoghi degli agenti
-  protected dialogController!: DialogController; // Usiamo ! per dire a TS che verrà assegnato in create()
-  
+  protected dialogController!: DialogController;
+
   // Integratore tra FL e sistema di dialogo
-  protected flDialogIntegrator!: FLDialogIntegrator; // Usiamo ! per dire a TS che verrà assegnato in create()
-  
+  protected flDialogIntegrator!: FLDialogIntegrator;
+
   // Debugger per i dialoghi
   protected dialogDebugger: DialogDebugger | null = null;
-  
+
   // ID del tipo di laboratorio (verrà impostato nelle sottoclassi)
-  protected labTypeId: LabTypeId = LAB_TYPES.MERCATORUM; // Valore di default
-  
+  protected labTypeId: LabTypeId = LAB_TYPES.MERCATORUM;
+
   // Tema del laboratorio (da sovrascrivere nelle classi derivate)
   protected theme: LabTheme = {
     name: "Base Laboratory",
@@ -84,54 +100,69 @@ export class BaseLabScene extends BaseScene {
 
   // Pannello LLM semplificato
   protected simpleLLMPanel: SimpleLLMPanel | null = null;
-  
+
+  // Debug elements
+  public debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  public debugText: Phaser.GameObjects.Text | null = null;
+  protected assetsLoaded: boolean = false;
+  protected textureTestContainers: Phaser.GameObjects.Container[] = [];
+  protected rawSprites: Phaser.GameObjects.Sprite[] = [];
+
+  // Shared controllers
+  public agentsLegend: AgentsLegend | null = null;
+  public agentController: GlobalAgentController | null = null;
+  public dialogEventTracker: DialogEventTracker | null = null;
+
   constructor(key: string) {
     super(key);
     console.log(`BaseLabScene constructor called with key: ${key}`);
     this.flController = FLController.getInstance();
   }
-  
+
   init(): void {
     super.init();
     this.agents = [];
     this.interactionZones = [];
     this.grid = [];
+    this.assetsLoaded = false;
+    this.textureTestContainers = [];
+    this.rawSprites = [];
     console.log(`BaseLabScene initialized: ${this.scene.key}`);
   }
-  
+
   preload(): void {
     super.preload();
     console.log(`BaseLabScene preload called: ${this.scene.key}`);
-    
+
     // Carica il tileset di default se non è stato già caricato
     if (!this.textures.exists(this.theme.tilesetKey)) {
       this.assetLoader.loadImage(this.theme.tilesetKey, '/assets/labs/default/tileset.png');
     }
-    
+
     // Carica gli asset di dialogo
     loadDialogAssets(this);
   }
-  
+
   create(): void {
     console.log(`BaseLabScene create called: ${this.scene.key}`);
-    
+
     // Monitora gli eventi di interazione tra agenti
     this.game.events.on('agent-interaction', (data: AgentInteractionData) => {
       console.log('DEBUG: Agent interaction event detected', data);
     });
-    
+
     // Imposta il colore di sfondo
     this.cameras.main.setBackgroundColor(this.theme.backgroundColor);
-    
+
     // Crea le animazioni dei personaggi
     this.createAnimations();
-    
+
     // Inizializza la griglia di base per il pathfinding
     this.initializeGrid();
-    
+
     // Crea le zone di interazione
     this.createInteractionZones();
-    
+
     // Mostra il nome del laboratorio (Debug/Placeholder)
     this.add.text(
       this.cameras.main.centerX,
@@ -141,331 +172,586 @@ export class BaseLabScene extends BaseScene {
         fontSize: '24px',
         color: '#ffffff',
         backgroundColor: '#000000',
-        padding: {
-          left: 10,
-          right: 10,
-          top: 5,
-          bottom: 5
-        }
+        padding: { left: 10, right: 10, top: 5, bottom: 5 }
       }
     ).setOrigin(0.5, 0).setDepth(100).setScrollFactor(0);
-    
+
     // Inizializza gli effetti FL per questo laboratorio
     this.flController.initLabEffects(this);
-    
+
     // Inizializza il controller dei dialoghi
     this.dialogController = new DialogController(this);
-    
+
     // Registra gli agenti col sistema di dialogo
     this.registerAgentsWithDialogController();
-    
-    // Log per debug
-    console.log(`DEBUG: Registered ${this.agents.length} agents with DialogController`);
-    
+
     // Integra FL con il sistema di dialogo
     this.flDialogIntegrator = new FLDialogIntegrator(
       this.dialogController,
       this.flController,
-      this // Passa la scena come terzo parametro
+      this
     );
-    
+
     // Inizializza il debugger dei dialoghi (solo in modalità sviluppo)
     if (process.env.NODE_ENV !== 'production') {
       this.dialogDebugger = new DialogDebugger(this, this.dialogController, this.agents);
     }
-    
+
     // Inizializza il menu dei controlli
     this.initializeControlsMenu();
-    
+
     console.log(`BaseLabScene ${this.scene.key} setup complete`);
-    
+
     // Emetti un evento quando la scena viene chiusa
     this.events.on('shutdown', () => {
       this.game.events.emit('sceneShutdown', this.scene.key);
-      
-      // Pulisci le risorse del dialog controller
-      if (this.dialogController) {
-        this.dialogController.destroy();
-      }
-      
-      // Pulisci le risorse dell'integratore FL
-      if (this.flDialogIntegrator) {
-        this.flDialogIntegrator.destroy();
-      }
-      
-      // Pulisci il debugger dei dialoghi
-      if (this.dialogDebugger) {
-        this.dialogDebugger.destroy();
-        this.dialogDebugger = null;
-      }
-      
-      // Pulisci il menu dei controlli
-      if (this.labControlsMenu) {
-        this.labControlsMenu.destroy();
-        this.labControlsMenu = null;
-      }
-
-      // Pulisci il pannello LLM
-      if (this.simpleLLMPanel) {
-        this.simpleLLMPanel.destroy();
-        this.simpleLLMPanel = null;
-      }
-      
-      // Rimuovi gli ascoltatori di eventi
+      if (this.dialogController) this.dialogController.destroy();
+      if (this.flDialogIntegrator) this.flDialogIntegrator.destroy();
+      if (this.dialogDebugger) { this.dialogDebugger.destroy(); this.dialogDebugger = null; }
+      if (this.labControlsMenu) { this.labControlsMenu.destroy(); this.labControlsMenu = null; }
+      if (this.simpleLLMPanel) { this.simpleLLMPanel.destroy(); this.simpleLLMPanel = null; }
       this.game.events.off('agent-interaction');
     });
   }
 
-  /**
-   * Inizializza il menu dei controlli del laboratorio
-   */
+  // ------------------------------------------------------------------
+  // Controls menu
+  // ------------------------------------------------------------------
+
   protected initializeControlsMenu(): void {
     try {
-      // Crea il menu dei controlli con config di default
       this.labControlsMenu = new LabControlsMenu(this as any, {
         labId: 'default', labName: 'Lab', labDescription: '',
         theme: { primary: 0x3f51b5, secondary: 0x1a1a2e, accent: 0xf5f5dc },
         navigation: [],
       });
-
-      // Crea il pannello LLM semplificato
       this.simpleLLMPanel = new SimpleLLMPanel(this, 20, 60);
-
-      // Configura il pannello LLM con il controller dei dialoghi
       if (this.simpleLLMPanel && this.dialogController) {
         this.simpleLLMPanel.setDialogController(this.dialogController);
       }
-
-      // Aggiungi il pannello LLM al menu dei controlli
-      // Questo dovrebbe essere sostituito con una logica che riflette la vera interfaccia di LabControlsMenu
-      if (this.labControlsMenu && this.simpleLLMPanel) {
-        // Supponendo che ci sia un metodo per aggiungere pulsanti o elementi UI
-        // this.labControlsMenu.addButton('LLM Panel', () => this.simpleLLMPanel?.toggle());
-      }
-
       console.log('Controls menu initialized successfully');
     } catch (error) {
       console.error('Error initializing controls menu:', error);
     }
   }
 
-  /**
-   * Ottiene il menu dei controlli
-   */
-  public getControlsMenu(): LabControlsMenu | null {
-    return this.labControlsMenu;
-  }
+  public getControlsMenu(): LabControlsMenu | null { return this.labControlsMenu; }
+  public getLLMPanel(): SimpleLLMPanel | null { return this.simpleLLMPanel; }
 
-  /**
-   * Ottiene il pannello LLM
-   */
-  public getLLMPanel(): SimpleLLMPanel | null {
-    return this.simpleLLMPanel;
-  }
-  
-  /**
-   * Questo metodo sostituisce la chiamata diretta a registerAgent
-   /**
-   * Registra gli agenti col controller di dialogo
-   */
   protected registerAgentsWithDialogController(): void {
-    // Registra ogni agente con il controller dei dialoghi
     this.agents.forEach(agent => {
       if (agent && this.dialogController) {
-        // Creiamo un dialogo per l'agente con i dati corretti
-        // Utilizziamo un metodo più semplice che non richiede un tipo di dialogo specifico
         this.dialogController.trackAgent(agent.getId(), {
           id: agent.getId(),
           name: agent.name || `Agent ${agent.getId()}`,
           type: agent.getData('type') || 'researcher',
           role: agent.getData('role') || 'researcher'
         });
-        
-        console.log(`Agent registered for dialogs: ${agent.getId()}`);
       }
     });
   }
-  
-  update(time: number, delta: number): void {
-    // Aggiorna tutti gli agenti
-    this.updateAgents(time, delta);
-    
-    // Controlla le interazioni
-    this.checkInteractions();
-    
-    // Aggiorna la lista degli agenti nel debugger (se necessario)
-    if (this.dialogDebugger) {
-      this.dialogDebugger.updateAgents(this.agents);
-    }
 
-    // Aggiorna il pannello LLM (se ha un metodo update)
-    // Qui non facciamo nulla perché il SimpleLLMPanel non ha un metodo update
+  update(time: number, delta: number): void {
+    this.updateAgents(time, delta);
+    this.checkInteractions();
+    if (this.dialogDebugger) this.dialogDebugger.updateAgents(this.agents);
   }
-  
-  /**
-   * Restituisce l'ID del tipo di laboratorio di questa scena
-   * Questo metodo è essenziale per il funzionamento del FL
-   */
-  public getLabTypeId(): LabTypeId {
-    return this.labTypeId;
-  }
-  
-  /**
-   * Inizializza la griglia per il pathfinding
-   */
+
+  public getLabTypeId(): LabTypeId { return this.labTypeId; }
+
+  // ------------------------------------------------------------------
+  // Grid & pathfinding
+  // ------------------------------------------------------------------
+
   protected initializeGrid(): void {
-    console.log('Initializing basic grid');
-    
-    // Inizializza una griglia vuota (sovrascrivere nelle sottoclassi)
     const width = Math.ceil(this.cameras.main.width / 32);
     const height = Math.ceil(this.cameras.main.height / 32);
-    
     this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
   }
-  
-  /**
-   * Crea le zone di interazione
-   * (da implementare nelle sottoclassi)
-   */
+
   protected createInteractionZones(): void {
-    console.log('Creating interaction zones');
-    // Implementazione di base vuota, da sovrascrivere nelle sottoclassi
+    console.log('Creating interaction zones (base - override in subclass)');
   }
-  
-  /**
-   * Crea agenti di base per il test
-   * (da implementare nelle sottoclassi)
-   */
+
   protected createTestAgents(): void {
-    console.log('Creating test agents');
-    // Implementazione di base vuota, da sovrascrivere nelle sottoclassi
+    console.log('Creating test agents (base - override in subclass)');
   }
-  
-  /**
-   * Aggiorna tutti gli agenti
-   */
+
   protected updateAgents(time: number, delta: number): void {
     this.agents.forEach(agent => {
-      if (agent && typeof agent.update === 'function') {
-        agent.update(time, delta);
-      }
+      if (agent && typeof agent.update === 'function') agent.update(time, delta);
     });
   }
-  
-  /**
-   * Controlla le interazioni tra agenti e con l'ambiente
-   */
+
   protected checkInteractions(): void {
-    // Controlla le interazioni agente-agente
     for (let i = 0; i < this.agents.length; i++) {
       for (let j = i + 1; j < this.agents.length; j++) {
         const agent1 = this.agents[i];
         const agent2 = this.agents[j];
-        
         if (!agent1 || !agent2) continue;
-        
-        const distance = Phaser.Math.Distance.Between(
-          agent1.x, agent1.y,
-          agent2.x, agent2.y
-        );
-        
-        // Se gli agenti sono abbastanza vicini, possono interagire
-        if (distance < 32) {
-          this.handleAgentInteraction(agent1, agent2);
-        }
+        const distance = Phaser.Math.Distance.Between(agent1.x, agent1.y, agent2.x, agent2.y);
+        if (distance < 32) this.handleAgentInteraction(agent1, agent2);
       }
     }
-    
-    // Controlla le interazioni agente-zona
     this.agents.forEach(agent => {
       if (!agent) return;
-      
       this.interactionZones.forEach(zone => {
         const bounds = zone.getBounds();
-        if (bounds.contains(agent.x, agent.y)) {
-          this.handleZoneInteraction(agent, zone);
-        }
+        if (bounds.contains(agent.x, agent.y)) this.handleZoneInteraction(agent, zone);
       });
     });
   }
-  
-  /**
-   * Registra un agente per il Federated Learning
-   * @param agent L'agente da registrare
-   * @param agentId ID univoco dell'agente
-   */
+
   protected registerAgentForFL(agent: Agent, agentId: string): void {
     if (agent && agentId) {
-      // Emetti un evento per registrare l'agente col controller FL
       this.game.events.emit('agentCreated', agent, agentId, this.labTypeId);
     }
   }
-  
-  /**
-   * Gestisce l'interazione tra due agenti
-   * (implementazione di base, da sovrascrivere nelle sottoclassi)
-   */
+
   protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
-    console.log(`Agent interaction: ${agent1.name} with ${agent2.name}`);
-    
-    // Emetti un evento di interazione che può essere intercettato dal sistema di dialogo
-    if (Math.random() < 0.3) { // Solo una percentuale di interazioni genera un dialogo
+    if (Math.random() < 0.3) {
       this.game.events.emit('agent-interaction', {
-        agentId1: agent1.getId(),
-        agentId2: agent2.getId(),
-        type: 'proximity'
+        agentId1: agent1.getId(), agentId2: agent2.getId(), type: 'proximity'
       });
     }
   }
-  
-  /**
-   * Gestisce l'interazione tra un agente e una zona
-   * (implementazione di base, da sovrascrivere nelle sottoclassi)
-   */
+
   protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
     console.log(`Zone interaction: ${agent.name} with ${zone.name}`);
-    // Implementazione di base vuota, da sovrascrivere nelle sottoclassi
   }
-  
-  /**
-   * Trova un percorso tra due punti (metodo base)
-   * Nelle sottoclassi, implementare l'algoritmo A* completo
-   */
+
   protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
-    // Implementazione base che restituisce solo il punto di partenza e di arrivo
-    return [
-      { x: startX, y: startY },
-      { x: targetX, y: targetY }
-    ];
+    return [{ x: startX, y: startY }, { x: targetX, y: targetY }];
   }
-  
-  /**
-   * Converte una posizione in pixel in una posizione nella griglia
-   */
+
   protected pixelToGrid(x: number, y: number): {gridX: number, gridY: number} {
-    const gridSize = 32; // Dimensione predefinita della griglia
-    return {
-      gridX: Math.floor(x / gridSize),
-      gridY: Math.floor(y / gridSize)
-    };
+    return { gridX: Math.floor(x / 32), gridY: Math.floor(y / 32) };
   }
-  
-  /**
-   * Converte una posizione nella griglia in una posizione in pixel
-   */
+
   protected gridToPixel(gridX: number, gridY: number): {x: number, y: number} {
-    const gridSize = 32; // Dimensione predefinita della griglia
-    return {
-      x: gridX * gridSize + gridSize / 2,
-      y: gridY * gridSize + gridSize / 2
-    };
+    return { x: gridX * 32 + 16, y: gridY * 32 + 16 };
   }
-  
-  /**
-   * Crea pulsanti di navigazione tra laboratori
-   */
-  protected createNavigationButtons(): void {
-    // Implementazione di base, da sovrascrivere nelle sottoclassi
-    console.log('Creating navigation buttons');
+
+  protected createNavigationButtons(): void {}
+
+  // ------------------------------------------------------------------
+  // Shared utility: Debug elements
+  // ------------------------------------------------------------------
+
+  protected createDebugElements(): void {
+    try {
+      this.debugGraphics = this.add.graphics();
+      if (this.debugGraphics) {
+        this.debugGraphics.fillStyle(0x000000, 0.7);
+        this.debugGraphics.fillRect(10, 10, 400, 200);
+        this.debugGraphics.setDepth(1000);
+        this.debugGraphics.setScrollFactor(0);
+      }
+      this.debugText = this.add.text(20, 20, 'Debug info loading...', {
+        fontSize: '14px', color: '#FFFFFF', fontFamily: 'monospace',
+        wordWrap: { width: 380 }
+      });
+      if (this.debugText) { this.debugText.setDepth(1001); this.debugText.setScrollFactor(0); }
+
+      const toggleButton = this.add.text(410, 10, 'X', {
+        fontSize: '16px', color: '#FFFFFF', backgroundColor: '#FF0000',
+        padding: { left: 5, right: 5, top: 2, bottom: 2 }
+      });
+      if (toggleButton) {
+        toggleButton.setDepth(1001); toggleButton.setScrollFactor(0); toggleButton.setVisible(false);
+        toggleButton.setInteractive({ useHandCursor: true });
+        toggleButton.on('pointerdown', () => {
+          if (this.debugGraphics !== null && this.debugText !== null) {
+            const visible = !this.debugGraphics.visible;
+            this.debugGraphics.setVisible(visible);
+            this.debugText.setVisible(visible);
+            toggleButton.setText(visible ? 'X' : 'D');
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error creating debug elements:', error);
+    }
+  }
+
+  protected updateDebugInfo(text: string): void {
+    if (this.debugText && this.debugText.scene) {
+      try { this.debugText.setText(text); } catch (error) {
+        console.error('Error in updateDebugInfo:', error);
+      }
+    }
+  }
+
+  protected displayLoadedAssets(): void {
+    try {
+      const textureKeys = this.textures.getTextureKeys();
+      const infoText = `Scene: ${this.scene.key}\nLoaded textures: ${textureKeys.length}\nKeys: ${textureKeys.slice(0, 5).join(', ')}${textureKeys.length > 5 ? '...' : ''}\nAnimation count: ${this.anims.getAll().length}`;
+      this.updateDebugInfo(infoText);
+      console.log(infoText);
+    } catch (error) {
+      console.error('Error displaying loaded assets:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Texture placeholders & animations
+  // ------------------------------------------------------------------
+
+  protected createMissingTextures(characterTypes: string[]): void {
+    try {
+      characterTypes.forEach(type => {
+        if (!this.textures.exists(type)) {
+          console.log(`Creating missing texture for ${type}`);
+          this.createDirectPlaceholderTexture(type, 32, 48);
+        }
+      });
+    } catch (error) {
+      console.error('Error in createMissingTextures:', error);
+    }
+  }
+
+  protected createImprovedPlaceholders(
+    characterTypes: string[],
+    typeColors: Record<string, { main: string; accent: string }>
+  ): void {
+    try {
+      characterTypes.forEach(type => {
+        if (this.textures.exists(type)) return;
+        console.log(`Creating improved placeholder for ${type}`);
+
+        const frameWidth = 32, frameHeight = 48, frameCount = 4;
+        const canvas = document.createElement('canvas');
+        canvas.width = frameWidth;
+        canvas.height = frameHeight * frameCount;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const colors = typeColors[type] || { main: '#FF00FF', accent: '#AA00AA' };
+
+        for (let frame = 0; frame < frameCount; frame++) {
+          const fy = frame * frameHeight;
+          ctx.fillStyle = colors.main;
+          ctx.fillRect(0, fy, frameWidth, frameHeight);
+          ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1;
+          ctx.strokeRect(1, fy + 1, frameWidth - 2, frameHeight - 2);
+          ctx.fillStyle = colors.accent;
+          ctx.beginPath(); ctx.arc(frameWidth / 2, fy + 12, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          if (frame % 2 === 0) {
+            ctx.fillRect(frameWidth / 2 - 5, fy + 19, 10, 20);
+          } else {
+            ctx.fillRect(frameWidth / 2 - 5, fy + 19, 10, 16);
+            ctx.beginPath();
+            ctx.moveTo(frameWidth / 2 - 4, fy + 35); ctx.lineTo(frameWidth / 2 - 1, fy + 45);
+            ctx.lineTo(frameWidth / 2 + 1, fy + 45); ctx.lineTo(frameWidth / 2 + 4, fy + 35);
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.fillStyle = '#FFFFFF'; ctx.font = '6px Arial'; ctx.textAlign = 'center';
+          const label = frame === 0 ? type : frame === 1 ? 'frame ' + frame : frame === 2 ? 'walking' : 'moving';
+          ctx.fillText(label, frameWidth / 2, fy + frameHeight - 5);
+        }
+
+        this.textures.addCanvas(type, canvas);
+        const texture = this.textures.get(type);
+        for (let i = 0; i < frameCount; i++) {
+          texture.add(i, 0, 0, i * frameHeight, frameWidth, frameHeight);
+        }
+        texture.refresh();
+        console.log(`Placeholder for ${type} created with ${texture.frameTotal} frames`);
+      });
+    } catch (error) {
+      console.error('Error in createImprovedPlaceholders:', error);
+    }
+  }
+
+  protected createDirectPlaceholderTexture(key: string, width: number, height: number): void {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height * 4;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const color = '#FF00FF';
+      for (let frame = 0; frame < 4; frame++) {
+        const fy = frame * height;
+        ctx.fillStyle = color; ctx.fillRect(0, fy, width, height);
+        ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1;
+        ctx.strokeRect(1, fy + 1, width - 2, height - 2);
+        ctx.fillStyle = '#FFFFFF'; ctx.font = '8px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(key, width / 2, fy + height / 2);
+      }
+
+      this.textures.addCanvas(key, canvas);
+      const texture = this.textures.get(key);
+      for (let i = 0; i < 4; i++) {
+        texture.add(i, 0, 0, i * height, width, height);
+      }
+      texture.refresh();
+    } catch (error) {
+      console.error(`Error creating placeholder for ${key}:`, error);
+    }
+  }
+
+  protected createAllCharacterAnimations(characterTypes: string[]): void {
+    try {
+      characterTypes.forEach(char => {
+        if (!this.textures.exists(char)) return;
+        const texture = this.textures.get(char);
+        if (!texture || texture.frameTotal <= 0) return;
+
+        // frameTotal includes __BASE frame
+        const actualFrames = Math.max(1, texture.frameTotal - 1);
+
+        if (!this.anims.exists(`${char}_idle`)) {
+          this.anims.create({ key: `${char}_idle`, frames: this.anims.generateFrameNumbers(char, { start: 0, end: 0 }), frameRate: 1, repeat: 0 });
+        }
+        if (!this.anims.exists(`${char}_walk`)) {
+          this.anims.create({ key: `${char}_walk`, frames: this.anims.generateFrameNumbers(char, { start: 0, end: Math.min(3, actualFrames - 1) }), frameRate: 6, repeat: -1 });
+        }
+        if (!this.anims.exists(`${char}_working`)) {
+          this.anims.create({ key: `${char}_working`, frames: this.anims.generateFrameNumbers(char, { start: 0, end: Math.min(1, actualFrames - 1) }), frameRate: 3, repeat: -1 });
+        }
+        if (!this.anims.exists(`${char}_discussing`)) {
+          const df = actualFrames >= 4 ? { frames: [0, 1, 0, 2] } : actualFrames >= 2 ? { frames: [0, 1] } : { frames: [0] };
+          this.anims.create({ key: `${char}_discussing`, frames: this.anims.generateFrameNumbers(char, df), frameRate: 4, repeat: -1 });
+        }
+      });
+    } catch (error) {
+      console.error('Error creating character animations:', error);
+    }
+  }
+
+  protected runTextureDebug(): void {
+    try {
+      const keys = this.textures.getTextureKeys();
+      console.log(`[TextureDebug] Available textures: ${keys.join(', ')}`);
+      keys.forEach((key: string) => {
+        const tex = this.textures.get(key);
+        console.log(`  ${key}: ${tex.frameTotal} frames`);
+      });
+    } catch (error) {
+      console.error('Error in runTextureDebug:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Agent creation from config
+  // ------------------------------------------------------------------
+
+  protected createAgentsFromConfig(
+    agents: AgentConfigEntry[],
+    portraitTypes: string[] = []
+  ): void {
+    try {
+      agents.forEach(agentConfig => {
+        try {
+          if (!this.textures.exists(agentConfig.type)) {
+            this.createDirectPlaceholderTexture(agentConfig.type, 32, 48);
+          }
+
+          const isPortrait = portraitTypes.includes(agentConfig.type);
+          const agent = createAgent(this, {
+            type: agentConfig.type,
+            name: agentConfig.name,
+            position: agentConfig.position,
+            role: agentConfig.type,
+            scale: isPortrait ? 0.15 : 5.0,
+            speed: 25
+          });
+
+          this.add.existing(agent);
+          this.agents.push(agent);
+          agent.changeState(AgentState.IDLE);
+          console.log(`Agent ${agentConfig.name} created`);
+        } catch (error) {
+          console.error(`Error creating agent ${agentConfig.name}:`, error);
+        }
+      });
+      console.log(`Created ${this.agents.length} agents`);
+    } catch (error) {
+      console.error('Error in createAgentsFromConfig:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Camera
+  // ------------------------------------------------------------------
+
+  protected setupCamera(): void {
+    try {
+      this.cameras.main.setBounds(0, 0, this.cameras.main.width, this.cameras.main.height);
+      this.cameras.main.setZoom(1);
+      this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
+    } catch (error) {
+      console.error('Error in setupCamera:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Grid from image
+  // ------------------------------------------------------------------
+
+  protected createGridFromImage(image: Phaser.GameObjects.Image): void {
+    try {
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) this.grid[y][x] = 1;
+        }
+      }
+      for (let x = 0; x < width; x++) this.grid[0][x] = 1;
+    } catch (error) {
+      console.error('Error in createGridFromImage:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Temporary map (fallback)
+  // ------------------------------------------------------------------
+
+  protected createTemporaryMap(furnitureKey: string): void {
+    try {
+      if (this.textures.exists(furnitureKey)) {
+        const furniture = this.add.image(
+          this.cameras.main.width / 2, this.cameras.main.height / 2, furnitureKey
+        );
+        furniture.setDepth(-5);
+        this.createGridFromImage(furniture);
+        return;
+      }
+
+      const gridSize = 32;
+      const width = Math.ceil(this.cameras.main.width / gridSize);
+      const height = Math.ceil(this.cameras.main.height / gridSize);
+      this.grid = Array(height).fill(0).map(() => Array(width).fill(0));
+
+      const furniture = this.add.graphics();
+      furniture.fillStyle(this.theme.colorPalette.primary, 0.7);
+
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      furniture.fillRect(centerX * gridSize - 80, centerY * gridSize - 40, 160, 80);
+      for (let y = centerY - 1; y <= centerY + 1; y++) {
+        for (let x = centerX - 2; x <= centerX + 2; x++) {
+          if (y >= 0 && y < height && x >= 0 && x < width) this.grid[y][x] = 1;
+        }
+      }
+
+      furniture.fillStyle(this.theme.colorPalette.secondary, 0.7);
+      for (let y = 2; y < height - 2; y += 3) {
+        furniture.fillRect(gridSize, y * gridSize, gridSize * 2, gridSize);
+        if (y >= 0 && y < height) { this.grid[y][1] = 1; this.grid[y][2] = 1; }
+      }
+      for (let y = 2; y < height - 2; y += 3) {
+        furniture.fillRect(width * gridSize - gridSize * 3, y * gridSize, gridSize * 2, gridSize);
+        if (y >= 0 && y < height) { this.grid[y][width - 2] = 1; this.grid[y][width - 3] = 1; }
+      }
+
+      furniture.fillStyle(0x333333, 0.8);
+      furniture.fillRect(0, 0, width * gridSize, gridSize);
+      for (let x = 0; x < width; x++) this.grid[0][x] = 1;
+      furniture.setDepth(-5);
+    } catch (error) {
+      console.error('Error in createTemporaryMap:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: 3D pixel-art title
+  // ------------------------------------------------------------------
+
+  protected create3DTitle(title: string, textColor: string, fontFamily: string = 'monospace'): void {
+    const titleContainer = this.add.container(this.cameras.main.centerX, 25);
+    titleContainer.setDepth(10);
+
+    const tempText = this.add.text(0, 0, title, { fontSize: '40px', fontFamily, fontStyle: 'bold' });
+    const textWidth = tempText.width + 60;
+    const textHeight = tempText.height + 20;
+    tempText.destroy();
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x888888, 0.9);
+    bg.fillRoundedRect(-textWidth / 2 - 5, -textHeight / 2 - 5, textWidth + 10, textHeight + 10, 8);
+    bg.fillStyle(0xFFFFFF, 0.95);
+    bg.fillRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
+    bg.lineStyle(2, 0x000000, 1);
+    bg.strokeRoundedRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight, 8);
+    bg.setDepth(5);
+    titleContainer.add(bg);
+
+    // Shadow layers
+    const shadows = [
+      { offset: 6, color: '#111111', alpha: 0.3, depth: 6 },
+      { offset: 4, color: '#222222', alpha: 0.5, depth: 7 },
+      { offset: 3, color: '#333333', alpha: 0.6, depth: 8 },
+      { offset: 2, color: '#444444', alpha: 0.7, depth: 9 },
+    ];
+    for (const s of shadows) {
+      const t = this.add.text(s.offset, s.offset, title, { fontSize: '40px', color: s.color, align: 'center', fontFamily, fontStyle: 'bold' });
+      t.setOrigin(0.5); t.setDepth(s.depth); t.setAlpha(s.alpha); titleContainer.add(t);
+    }
+
+    const mainText = this.add.text(0, 0, title, { fontSize: '40px', color: textColor, align: 'center', fontFamily, fontStyle: 'bold' });
+    mainText.setOrigin(0.5); mainText.setDepth(10); titleContainer.add(mainText);
+
+    // Pixel art corner decorations
+    const colorNum = parseInt(textColor.replace('#', ''), 16);
+    const corners = this.add.graphics();
+    corners.fillStyle(colorNum, 1);
+    corners.fillRect(-textWidth / 2, -textHeight / 2, 6, 6);
+    corners.fillRect(textWidth / 2 - 6, -textHeight / 2, 6, 6);
+    corners.fillRect(-textWidth / 2, textHeight / 2 - 6, 6, 6);
+    corners.fillRect(textWidth / 2 - 6, textHeight / 2 - 6, 6, 6);
+    corners.setDepth(12);
+    titleContainer.add(corners);
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: Loading listeners for preload()
+  // ------------------------------------------------------------------
+
+  protected setLoadingListeners(): void {
+    this.load.on('progress', (value: number) => {
+      console.log(`Load progress: ${Math.round(value * 100)}%`);
+    });
+    this.load.on('complete', () => {
+      console.log('All assets loaded successfully');
+      this.assetsLoaded = true;
+      this.updateDebugInfo('Assets loaded - creating scene elements');
+    });
+    this.load.on('loaderror', (file: any) => {
+      console.error(`Error loading file: ${file.key} from ${file.url}`);
+      this.updateDebugInfo(`Error loading: ${file.key}`);
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Cleanup
+  // ------------------------------------------------------------------
+
+  destroy(): void {
+    try {
+      this.agents.forEach(agent => { if (agent) agent.destroy(); });
+      this.agents = [];
+      this.interactionZones.forEach(zone => { if (zone) zone.destroy(); });
+      this.interactionZones = [];
+      if (this.debugText) { this.debugText.destroy(); this.debugText = null; }
+      if (this.debugGraphics) { this.debugGraphics.destroy(); this.debugGraphics = null; }
+      this.textureTestContainers.forEach(c => { if (c) c.destroy(); });
+      this.textureTestContainers = [];
+      this.rawSprites.forEach(s => { if (s) s.destroy(); });
+      this.rawSprites = [];
+      if (this.agentsLegend) this.agentsLegend = null;
+      console.log(`Scene ${this.scene.key} resources cleaned up`);
+    } catch (error) {
+      console.error(`Error cleaning up scene ${this.scene.key}:`, error);
+    }
   }
 }
