@@ -233,6 +233,71 @@
     border-radius: 3px;
   }
 
+  /* ---- Lab Performance (local vs global) ---- */
+
+  .fl-lab-perf, .fl-cross-eval {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+
+  .fl-lab-perf h4, .fl-cross-eval h4 {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: #ddd;
+  }
+
+  .fl-lab-perf-row, .fl-cross-eval-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px;
+    margin-bottom: 2px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 10px;
+    color: #ccc;
+  }
+
+  .fl-lab-perf-name, .fl-cross-eval-name {
+    font-weight: bold;
+    color: #eee;
+    min-width: 80px;
+  }
+
+  .fl-lab-perf-local {
+    color: #aaa;
+  }
+
+  .fl-lab-perf-global {
+    color: #3498db;
+  }
+
+  .fl-gain-positive {
+    color: #2ecc71;
+    font-weight: bold;
+  }
+
+  .fl-gain-negative {
+    color: #e74c3c;
+  }
+
+  .fl-cross-eval-acc {
+    color: #2ecc71;
+  }
+
+  .fl-cross-eval-loss {
+    color: #e74c3c;
+  }
+
+  .fl-cross-eval-n {
+    color: #888;
+    font-size: 9px;
+  }
+
   /* ---- Milestone popup ---- */
 
   .fl-milestone-overlay {

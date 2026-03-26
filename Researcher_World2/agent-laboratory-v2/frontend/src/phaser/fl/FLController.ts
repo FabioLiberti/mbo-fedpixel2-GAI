@@ -26,6 +26,8 @@ export interface FLStatusData {
     accuracyHistory?: number[];
     lossHistory?: number[];
     perClient?: Array<Record<string, { accuracy: number; loss: number }>>;
+    localVsGlobal?: Record<string, { local_acc: number; global_acc: number; gain: number }>;
+    crossEval?: Record<string, { accuracy: number; loss: number; samples: number }>;
   };
   connections: Array<{
     source: string; // ID del laboratorio

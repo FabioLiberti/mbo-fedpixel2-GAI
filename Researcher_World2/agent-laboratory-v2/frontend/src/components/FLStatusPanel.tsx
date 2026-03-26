@@ -270,6 +270,42 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
             </div>
           )}
 
+          {/* Local vs Global — per-lab performance comparison */}
+          {metrics?.localVsGlobal && Object.keys(metrics.localVsGlobal).length > 0 && (
+            <div className="fl-lab-perf">
+              <h4>Lab Performance</h4>
+              {Object.entries(metrics.localVsGlobal).map(([lab, v]) => {
+                const gain = v.gain;
+                const gainClass = gain >= 0 ? 'fl-gain-positive' : 'fl-gain-negative';
+                return (
+                  <div key={lab} className="fl-lab-perf-row">
+                    <span className="fl-lab-perf-name">{lab}</span>
+                    <span className="fl-lab-perf-local">loc {(v.local_acc * 100).toFixed(0)}%</span>
+                    <span className="fl-lab-perf-global">fed {(v.global_acc * 100).toFixed(0)}%</span>
+                    <span className={`fl-lab-perf-gain ${gainClass}`}>
+                      {gain >= 0 ? '+' : ''}{(gain * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Cross-Evaluation — global model on each lab's data */}
+          {metrics?.crossEval && Object.keys(metrics.crossEval).length > 0 && (
+            <div className="fl-cross-eval">
+              <h4>Cross-Evaluation</h4>
+              {Object.entries(metrics.crossEval).map(([lab, v]) => (
+                <div key={lab} className="fl-cross-eval-row">
+                  <span className="fl-cross-eval-name">{lab}</span>
+                  <span className="fl-cross-eval-acc">acc {(v.accuracy * 100).toFixed(0)}%</span>
+                  <span className="fl-cross-eval-loss">loss {v.loss.toFixed(4)}</span>
+                  <span className="fl-cross-eval-n">{v.samples}n</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="fl-agents">
             <h4>
               Agents ({activeAgents?.length || 0}

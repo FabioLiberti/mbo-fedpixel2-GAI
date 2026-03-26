@@ -126,6 +126,12 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     const lossArr = Array.isArray(fl?.metrics?.loss) ? fl.metrics.loss as number[] : [];
     const perClientArr = Array.isArray(fl?.metrics?.per_client) ? fl.metrics.per_client : [];
 
+    // local_vs_global e cross_eval: prendi l'ultimo round (array di oggetti per-round)
+    const lvgArr = Array.isArray(fl?.metrics?.local_vs_global) ? fl.metrics.local_vs_global : [];
+    const crossArr = Array.isArray(fl?.metrics?.cross_eval) ? fl.metrics.cross_eval : [];
+    const latestLvg = lvgArr.length > 0 ? lvgArr[lvgArr.length - 1] : undefined;
+    const latestCross = crossArr.length > 0 ? crossArr[crossArr.length - 1] : undefined;
+
     const backendFlStatus: FLStatusData = {
       enabled: fl?.enabled ?? true,
       currentState: phase,
@@ -139,6 +145,8 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         accuracyHistory: accuracyArr,
         lossHistory: lossArr,
         perClient: perClientArr,
+        localVsGlobal: latestLvg,
+        crossEval: latestCross,
       },
       connections: [
         { source: 'MERCATORUM', target: 'BLEKINGE', active: isActive },
