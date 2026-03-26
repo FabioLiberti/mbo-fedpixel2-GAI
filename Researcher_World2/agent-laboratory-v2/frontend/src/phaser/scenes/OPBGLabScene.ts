@@ -123,6 +123,7 @@ export class OPBGLabScene extends BaseLabScene {
         furn.putTileAt(TILE.PLANT, 1, 1); furn.putTileAt(TILE.PLANT, cols - 2, 1);
         furn.putTileAt(TILE.PLANT, 1, rows - 2); furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
       });
+      this.createArenaZones();
       this.createInteractionZones();
 
       // Agents

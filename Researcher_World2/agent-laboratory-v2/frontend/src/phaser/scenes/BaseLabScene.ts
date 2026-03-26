@@ -756,6 +756,86 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   // ------------------------------------------------------------------
+  // Arena zone visualization
+  // ------------------------------------------------------------------
+
+  /**
+   * Arena zone definition for createArenaZones().
+   * Coordinates are in tile units (not pixels).
+   */
+  protected createArenaZones(): void {
+    const cols = Math.floor(this.cameras.main.width / 32);
+    const rows = Math.floor(this.cameras.main.height / 32);
+    if (!this.labTilemap) return;
+    const floorLayer = this.labTilemap.getLayer('floor')?.tilemapLayer;
+    if (!floorLayer) return;
+
+    // Proportional zone layout (matches backend MazeAdapter 20x20 grid):
+    //   workspace:    top half          (y: 0 .. midY-1)
+    //   meeting_room: mid band          (y: midY .. midY + meetH - 1)
+    //   break_room:   bottom-left       (y: midY + meetH .. rows-1, x: 0 .. midX-1)
+    //   server_room:  bottom-right      (y: midY + meetH .. rows-1, x: midX .. cols-1)
+    const midY = Math.floor(rows * 0.5);
+    const meetH = Math.max(2, Math.floor(rows * 0.25));
+    const bottomY = midY + meetH;
+    const midX = Math.floor(cols / 2);
+
+    // 1. Paint zone-colored floors
+    // Workspace keeps default checkerboard (FLOOR/FLOOR_ALT) — no repaint
+    // Meeting room
+    for (let y = midY; y < bottomY && y < rows; y++)
+      for (let x = 0; x < cols; x++)
+        floorLayer.putTileAt(TILE.FLOOR_MEETING, x, y);
+    // Break room (bottom-left)
+    for (let y = bottomY; y < rows; y++)
+      for (let x = 0; x < midX; x++)
+        floorLayer.putTileAt(TILE.FLOOR_BREAK, x, y);
+    // Server room (bottom-right)
+    for (let y = bottomY; y < rows; y++)
+      for (let x = midX; x < cols; x++)
+        floorLayer.putTileAt(TILE.FLOOR_SERVER, x, y);
+
+    // 2. Internal wall dividers (on furniture layer so they block pathfinding)
+    const furnLayer = this.labTilemap.getLayer('furniture')?.tilemapLayer;
+    if (furnLayer) {
+      // Divider between workspace and meeting room
+      for (let x = 1; x < cols - 1; x++) {
+        if (!furnLayer.getTileAt(x, midY) || furnLayer.getTileAt(x, midY)?.index === -1) {
+          furnLayer.putTileAt(TILE.WALL_INTERNAL, x, midY);
+        }
+      }
+      // Divider between meeting and break/server
+      for (let x = 1; x < cols - 1; x++) {
+        if (!furnLayer.getTileAt(x, bottomY) || furnLayer.getTileAt(x, bottomY)?.index === -1) {
+          furnLayer.putTileAt(TILE.WALL_INTERNAL, x, bottomY);
+        }
+      }
+    }
+
+    // 3. Text labels + emoji icons
+    const labelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+      fontSize: '10px',
+      fontFamily: 'monospace',
+      color: '#ffffff',
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      padding: { x: 3, y: 1 },
+    };
+
+    const zones = [
+      { name: '💻 Workspace',    x: 2, y: 1 },
+      { name: '🤝 Meeting Room', x: 2, y: midY + 1 },
+      { name: '☕ Break Room',    x: 2, y: Math.min(bottomY + 1, rows - 2) },
+      { name: '🖥️ Server Room',  x: midX + 1, y: Math.min(bottomY + 1, rows - 2) },
+    ];
+
+    for (const z of zones) {
+      const label = this.add.text(z.x * 32, z.y * 32, z.name, labelStyle);
+      label.setDepth(-2);
+      label.setAlpha(0.85);
+    }
+  }
+
+  // ------------------------------------------------------------------
   // Shared utility: 3D pixel-art title
   // ------------------------------------------------------------------
 

@@ -78,6 +78,11 @@ export const TILE = {
   CABINET:     21,
   MONITOR:     22,
   COUCH:       23,
+  // Arena zone tiles (24-27)
+  FLOOR_MEETING: 24,  // meeting room floor (blue-tinted)
+  FLOOR_BREAK:   25,  // break room floor (warm-tinted)
+  FLOOR_SERVER:  26,  // server room floor (green-tinted)
+  WALL_INTERNAL: 27,  // thin internal divider
 };
 
 // ── Generator ─────────────────────────────────────────────────────────
@@ -123,6 +128,10 @@ export function generateTilesetCanvas(theme: TilesetTheme): HTMLCanvasElement {
   drawTile(ctx, TILE.CABINET, theme, drawCabinet);
   drawTile(ctx, TILE.MONITOR, theme, drawMonitor);
   drawTile(ctx, TILE.COUCH, theme, drawCouch);
+  drawTile(ctx, TILE.FLOOR_MEETING, theme, drawFloorMeeting);
+  drawTile(ctx, TILE.FLOOR_BREAK, theme, drawFloorBreak);
+  drawTile(ctx, TILE.FLOOR_SERVER, theme, drawFloorServer);
+  drawTile(ctx, TILE.WALL_INTERNAL, theme, drawWallInternal);
 
   return canvas;
 }
@@ -430,4 +439,57 @@ function drawCouch(ctx: CanvasRenderingContext2D, x: number, y: number, s: numbe
   ctx.moveTo(x + s / 2, y + 10);
   ctx.lineTo(x + s / 2, y + s - 5);
   ctx.stroke();
+}
+
+// ── Arena zone floor tiles ──────────────────────────────────────────
+
+/** Blend hex color with a tint at given ratio (0-1). */
+function blendColor(base: string, tint: string, ratio: number): string {
+  const b = parseInt(base.replace('#', ''), 16);
+  const t = parseInt(tint.replace('#', ''), 16);
+  const mix = (shift: number) => {
+    const bv = (b >> shift) & 0xff;
+    const tv = (t >> shift) & 0xff;
+    return Math.round(bv + (tv - bv) * ratio);
+  };
+  const r = mix(16), g = mix(8), bl = mix(0);
+  return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0')}`;
+}
+
+function drawFloorMeeting(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#bbdefb', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#90caf9', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawFloorBreak(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#fff9c4', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#fff176', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawFloorServer(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#c8e6c9', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#a5d6a7', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawWallInternal(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  // Floor base with a thin horizontal divider stripe
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  ctx.fillStyle = t.wallEdge;
+  ctx.globalAlpha = 0.6;
+  ctx.fillRect(x, y + s / 2 - 2, s, 4);
+  ctx.globalAlpha = 1.0;
+  // Subtle dots for visual interest
+  ctx.fillStyle = t.wall;
+  ctx.fillRect(x + 4, y + s / 2 - 1, 2, 2);
+  ctx.fillRect(x + s - 6, y + s / 2 - 1, 2, 2);
 }

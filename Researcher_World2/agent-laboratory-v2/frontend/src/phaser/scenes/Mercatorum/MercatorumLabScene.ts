@@ -120,6 +120,7 @@ export class MercatorumLabScene extends BaseLabScene {
         // Whiteboard
         furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) - 1, 1); furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) + 1, 1);
       });
+      this.createArenaZones();
       this.createInteractionZones();
 
       // Agents (portrait types get 0.15 scale, spritesheets get 5.0)

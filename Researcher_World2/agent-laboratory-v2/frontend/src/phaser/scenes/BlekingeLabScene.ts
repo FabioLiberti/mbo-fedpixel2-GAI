@@ -120,6 +120,7 @@ export class BlekingeLabScene extends BaseLabScene {
           floor.putTileAt(TILE.RUG, cols - 3 + dx, rows - 3 + dy);
         }
       });
+      this.createArenaZones();
       this.createInteractionZones();
 
       // Agents
