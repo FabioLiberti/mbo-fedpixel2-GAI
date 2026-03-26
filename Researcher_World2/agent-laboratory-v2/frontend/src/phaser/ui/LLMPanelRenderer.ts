@@ -36,8 +36,8 @@ export class LLMPanelRenderer {
   private scrollStartY: number = 0;
   
   // Dimensioni
-  private width: number = 380;
-  private height: number = 650;
+  private width: number = 300;
+  private height: number = 420;
   private padding: number = 15;
   
   // Area log migliorata
@@ -1074,8 +1074,8 @@ export class LLMPanelRenderer {
       dialogContainer.add(modalOverlay);
       
       // Finestra di dialogo
-      const dialogWidth = 500; // Aumentato per più spazio
-      const dialogHeight = 400; // Aumentato per più spazio
+      const dialogWidth = 360;
+      const dialogHeight = 300;
       
       const dialogBg = this.scene.add.graphics();
       dialogBg.fillStyle(0x212121, 0.95);

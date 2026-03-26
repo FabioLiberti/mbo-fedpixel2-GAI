@@ -33,9 +33,9 @@ export class LegendInfoPanel {
   private agentSprite!: Phaser.GameObjects.Sprite;
   private placeholderCircle: Phaser.GameObjects.Graphics | null = null;
   
-  private width: number = 300;
-  private height: number = 450; // Aumentata da 350 a 450 per avere più spazio
-  private padding: number = 15;
+  private width: number = 260;
+  private height: number = 340;
+  private padding: number = 12;
   private isVisible: boolean = false;
   
   constructor(scene: Phaser.Scene) {

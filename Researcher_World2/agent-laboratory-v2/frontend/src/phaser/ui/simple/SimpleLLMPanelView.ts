@@ -50,10 +50,10 @@ export class SimpleLLMPanelView {
   private scrollThumb!: Phaser.GameObjects.Graphics;
   
   // Dimensioni e posizionamento
-  private width: number = 400;
-  private height: number = 650;
-  private padding: number = 15;
-  private logAreaHeight: number = 250;
+  private width: number = 300;
+  private height: number = 420;
+  private padding: number = 12;
+  private logAreaHeight: number = 160;
   
   // Stato di scrolling
   private isScrolling: boolean = false;
@@ -1090,9 +1090,9 @@ export class SimpleLLMPanelView {
     dialogContainer.add(modalOverlay);
     
     // Dimensioni finestra
-    const dialogWidth = 500;
-    const dialogHeight = 400;
-    
+    const dialogWidth = 360;
+    const dialogHeight = 300;
+
     // Sfondo finestra
     const dialogBg = this.scene.add.graphics();
     dialogBg.fillStyle(0x212121, 0.95);

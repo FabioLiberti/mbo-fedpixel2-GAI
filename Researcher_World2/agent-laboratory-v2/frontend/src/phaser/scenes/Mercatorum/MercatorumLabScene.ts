@@ -21,9 +21,8 @@ const MERCATORUM_AGENTS: AgentConfigEntry[] = [
   { type: 'researcher',         name: 'Sofia Greco',   position: { x: 350, y: 180 }, specialization: 'privacy_engineering' },
 ];
 
-// Only spritesheet types get placeholder/animations; portrait types are static images
-const SPRITESHEET_TYPES = ['student', 'researcher'];
-const PORTRAIT_TYPES = ['professor', 'privacy_specialist'];
+// All agents use pixel-art spritesheets (consistent with Blekinge/OPBG)
+const CHARACTER_TYPES = ['professor', 'privacy_specialist', 'student', 'researcher'];
 
 const TYPE_COLORS: Record<string, { main: string; accent: string }> = {
   student:    { main: '#FB8C00', accent: '#E65100' },
@@ -52,11 +51,9 @@ export class MercatorumLabScene extends BaseLabScene {
     super.preload();
     this.setLoadingListeners();
 
-    // Mercatorum: professor e privacy_specialist usano ritratti come immagini statiche
-    this.load.image('professor', 'assets/sprites/1024x1536/_Professor3.png');
-    this.load.image('privacy_specialist', 'assets/sprites/1024x1536/_Manager.png');
-
-    // student e researcher usano spritesheets pixel-art standard
+    // All agents use pixel-art spritesheets (same pattern as Blekinge/OPBG)
+    this.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('privacy_specialist', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
 
@@ -82,11 +79,11 @@ export class MercatorumLabScene extends BaseLabScene {
       setTimeout(() => this.cameras.main.setBackgroundColor(this.theme.backgroundColor), 1000);
 
       // Textures & animations (only spritesheet types)
-      this.createImprovedPlaceholders(SPRITESHEET_TYPES, TYPE_COLORS);
+      this.createImprovedPlaceholders(CHARACTER_TYPES, TYPE_COLORS);
       this.runTextureDebug();
       this.displayLoadedAssets();
-      this.createMissingTextures(SPRITESHEET_TYPES);
-      this.createAllCharacterAnimations(SPRITESHEET_TYPES);
+      this.createMissingTextures(CHARACTER_TYPES);
+      this.createAllCharacterAnimations(CHARACTER_TYPES);
 
       // Scene layout: background + tilemap
       this.createItalianClassicBackground();
@@ -123,8 +120,8 @@ export class MercatorumLabScene extends BaseLabScene {
       this.createArenaZones();
       this.createInteractionZones();
 
-      // Agents (portrait types get 0.15 scale, spritesheets get 5.0)
-      this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
+      // Agents (all spritesheets, scale 5.0 — no portrait types)
+      this.createAgentsFromConfig(MERCATORUM_AGENTS);
 
       // Camera
       this.setupCamera();
