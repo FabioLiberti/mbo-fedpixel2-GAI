@@ -121,9 +121,17 @@ interface FLStatusPanelProps {
  * La visibilità è gestita interamente via localStorage + evento DOM personalizzato,
  * senza dipendere dal registry Phaser (che si perde al cambio scena).
  */
+const MILESTONE_THRESHOLD = 0.80;
+
 const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, totalAgentCount, currentLabName }) => {
   const [visible, setVisible] = useState<boolean>(getFLPanelState());
   const [collapsed, setCollapsed] = useState<boolean>(true);
+  const [milestoneData, setMilestoneData] = useState<{
+    accuracy: number;
+    round: number;
+    perClient: Record<string, { accuracy: number; loss: number }>;
+  } | null>(null);
+  const milestoneFiredRef = useRef<boolean>(false);
 
   // Ascolta toggle dal pulsante "FL Process" (evento DOM personalizzato)
   useEffect(() => {
@@ -132,6 +140,29 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
     });
     return cleanup;
   }, []);
+
+  // Milestone detection: fire once when accuracy >= threshold
+  useEffect(() => {
+    if (milestoneFiredRef.current) return;
+    const acc = flStatus?.metrics?.accuracy;
+    if (acc === undefined || acc < MILESTONE_THRESHOLD) return;
+
+    milestoneFiredRef.current = true;
+
+    // Extract per-client data from the latest round
+    const pcArr = flStatus?.metrics?.perClient;
+    const latestPC = pcArr && pcArr.length > 0 ? pcArr[pcArr.length - 1] : {};
+
+    setMilestoneData({
+      accuracy: acc,
+      round: flStatus?.metrics?.round ?? 0,
+      perClient: latestPC,
+    });
+
+    // Auto-dismiss after 8s
+    const timer = setTimeout(() => setMilestoneData(null), 8000);
+    return () => clearTimeout(timer);
+  }, [flStatus?.metrics?.accuracy, flStatus?.metrics?.round, flStatus?.metrics?.perClient]);
 
   // Se il pannello non è visibile, non mostrare nulla
   if (!visible) return null;
@@ -268,6 +299,36 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
             </div>
           </div>
         </>
+      )}
+
+      {/* Milestone popup — centered overlay */}
+      {milestoneData && (
+        <div className="fl-milestone-overlay" onClick={() => setMilestoneData(null)}>
+          <div className="fl-milestone-popup">
+            <div className="fl-milestone-icon">&#x2714;</div>
+            <h3 className="fl-milestone-title">FL Milestone Reached!</h3>
+            <p className="fl-milestone-acc">
+              Accuracy: <strong>{(milestoneData.accuracy * 100).toFixed(1)}%</strong>
+              &nbsp;at round {milestoneData.round}
+            </p>
+            {Object.keys(milestoneData.perClient).length > 0 && (
+              <div className="fl-milestone-labs">
+                {Object.entries(milestoneData.perClient).map(([lab, m]) => (
+                  <div key={lab} className="fl-milestone-lab-row">
+                    <span className="fl-milestone-lab-name">{lab}</span>
+                    <span className="fl-milestone-lab-acc">
+                      acc {(m.accuracy * 100).toFixed(1)}%
+                    </span>
+                    <span className="fl-milestone-lab-loss">
+                      loss {m.loss.toFixed(4)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="fl-milestone-hint">click to dismiss</p>
+          </div>
+        </div>
       )}
     </div>
   );

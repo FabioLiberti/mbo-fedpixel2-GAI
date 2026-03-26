@@ -205,25 +205,26 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 
 ## FEATURE-2: FL training — miglioramenti
 
-**Stato**: FedAvg funzionante con dati sintetici
+**Stato**: COMPLETATO (v0.7.0 + v0.7.1 + v0.7.2)
 **Priorità**: FEATURE
 
-### Stato attuale
-- Rete neurale reale (numpy): 10→32→16→1, SGD, 5 epoch per round
-- FedAvg aggregation con weighted average
-- Dati sintetici non-IID (XOR-like, 10 dim)
-- 5 round, 3 lab come client
-- FedProx opzionale (mu=0.01)
-- Metriche: loss, accuracy per round
-- Integrazione agenti: task FL iniettati nella memoria associativa
+### Implementazione
+- **v0.7.0**: Dataset Heart Disease UCI (303 righe, 13 feature, target binario) al posto di XOR sintetico
+  - Partizioni non-IID per età: mercatorum <50, blekinge 50-59, opbg ≥60
+  - Lazy-loading con cache, normalizzazione min-max, imputation NaN→mediana
+  - NN input dim: 10→13, metriche per-client accumulate
+- **v0.7.1**: Sparkline canvas (200×60px) per accuracy (verde) e loss (rosso) nel pannello FL
+  - FLStatusData esteso con accuracyHistory, lossHistory, perClient
+  - History passato sia dal backend reale che dal fallback locale
+- **v0.7.2**: Milestone popup quando accuracy ≥ 80%
+  - Overlay centrato con breakdown per-lab (accuracy + loss per client)
+  - Auto-dismiss dopo 8s o click, trigger una sola volta per simulazione
 
-### Miglioramenti possibili
-1. **Dataset reale**: sostituire dati sintetici con dataset FL benchmark (MNIST federated, CIFAR non-IID)
-2. **Persistenza modello**: i pesi esistono solo in memoria — salvare/caricare checkpoint
-3. **Privacy budget**: inizializzato a 1.0 ma mai consumato — implementare DP-SGD o accounting
-4. **Communication overhead**: tracciato come metrica ma non implementato realmente
-5. **Agent reasoning su FL**: gli agenti non ragionano sulle scelte FL (iperparametri, strategie) — collegare cognitive pipeline a decisioni FL
-6. **Visualizzazione frontend**: il panel FL mostra solo status testuale — aggiungere grafici loss/accuracy, inspection modello
+### Miglioramenti futuri possibili
+1. **Persistenza modello**: i pesi esistono solo in memoria — salvare/caricare checkpoint
+2. **Privacy budget**: inizializzato a 1.0 ma mai consumato — implementare DP-SGD o accounting
+3. **Communication overhead**: tracciato come metrica ma non implementato realmente
+4. **Agent reasoning su FL**: gli agenti non ragionano sulle scelte FL (iperparametri, strategie) — collegare cognitive pipeline a decisioni FL
 
 ---
 
@@ -251,5 +252,5 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 | LOW-4 | Quality | ~~Ridurre `as any` (54→9)~~ COMPLETATO | Media |
 | LOW-5 | Verifica | ~~Build frontend pulita~~ COMPLETATO | Bassa |
 | FEATURE-1 | Feature | ~~Miglioramento prompt cognitivi~~ COMPLETATO | Alta |
-| FEATURE-2 | Feature | FL dataset reale + persistenza | Alta |
+| FEATURE-2 | Feature | ~~FL dataset reale + visualizzazione~~ COMPLETATO | Alta |
 | FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ COMPLETATO | Media |

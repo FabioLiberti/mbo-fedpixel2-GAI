@@ -233,6 +233,107 @@
     border-radius: 3px;
   }
 
+  /* ---- Milestone popup ---- */
+
+  .fl-milestone-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+    animation: fl-fade-in 0.3s ease;
+  }
+
+  .fl-milestone-popup {
+    background: linear-gradient(135deg, #1a2a1a 0%, #0d1f0d 100%);
+    border: 1px solid rgba(46, 204, 113, 0.4);
+    border-radius: 10px;
+    padding: 24px 32px;
+    text-align: center;
+    min-width: 280px;
+    max-width: 360px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(46, 204, 113, 0.15);
+    animation: fl-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .fl-milestone-icon {
+    font-size: 36px;
+    color: #2ecc71;
+    margin-bottom: 8px;
+  }
+
+  .fl-milestone-title {
+    margin: 0 0 8px;
+    font-size: 16px;
+    color: #2ecc71;
+    font-family: monospace;
+  }
+
+  .fl-milestone-acc {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: #ddd;
+    font-family: monospace;
+  }
+
+  .fl-milestone-acc strong {
+    color: #2ecc71;
+    font-size: 15px;
+  }
+
+  .fl-milestone-labs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .fl-milestone-lab-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #ccc;
+  }
+
+  .fl-milestone-lab-name {
+    font-weight: bold;
+    color: #eee;
+    min-width: 90px;
+    text-align: left;
+  }
+
+  .fl-milestone-lab-acc {
+    color: #2ecc71;
+  }
+
+  .fl-milestone-lab-loss {
+    color: #e74c3c;
+  }
+
+  .fl-milestone-hint {
+    margin: 0;
+    font-size: 10px;
+    color: #666;
+    font-family: monospace;
+  }
+
+  @keyframes fl-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fl-pop-in {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
   .fl-minimize-btn:hover {
     color: #fff;
     border-color: rgba(255, 255, 255, 0.5);
