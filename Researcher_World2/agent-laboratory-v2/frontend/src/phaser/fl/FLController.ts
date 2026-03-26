@@ -23,6 +23,9 @@ export interface FLStatusData {
     loss?: number;
     round?: number;
     clientFraction?: number;
+    accuracyHistory?: number[];
+    lossHistory?: number[];
+    perClient?: Array<Record<string, { accuracy: number; loss: number }>>;
   };
   connections: Array<{
     source: string; // ID del laboratorio

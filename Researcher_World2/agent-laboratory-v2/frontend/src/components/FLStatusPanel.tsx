@@ -1,7 +1,113 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import './FLStatusPanel.css';
 import { FLStatusData } from '../phaser/fl/FLController';
 import { addFLPanelToggleListener, getFLPanelState, emitFLPanelToggle, updateFLPanelState } from '../utils/customEvents';
+
+/* ------------------------------------------------------------------ */
+/* Sparkline: canvas mini-chart for accuracy & loss history            */
+/* ------------------------------------------------------------------ */
+
+interface SparklineProps {
+  data: number[];
+  width?: number;
+  height?: number;
+  color: string;
+  label: string;
+  formatValue?: (v: number) => string;
+}
+
+const Sparkline: React.FC<SparklineProps> = ({
+  data, width = 200, height = 60, color, label,
+  formatValue = (v) => v.toFixed(4),
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (data.length < 2) {
+      ctx.fillStyle = '#666';
+      ctx.font = '10px monospace';
+      ctx.fillText('waiting for data...', 8, height / 2 + 3);
+      return;
+    }
+
+    const pad = { top: 14, bottom: 4, left: 4, right: 4 };
+    const w = width - pad.left - pad.right;
+    const h = height - pad.top - pad.bottom;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+
+    // Label + latest value
+    ctx.fillStyle = '#999';
+    ctx.font = '9px monospace';
+    ctx.fillText(label, pad.left, 10);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(formatValue(data[data.length - 1]), width - pad.right, 10);
+    ctx.textAlign = 'left';
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.top + (h * i) / 4;
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + w, y); ctx.stroke();
+    }
+
+    // Sparkline path
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = pad.left + (i / (data.length - 1)) * w;
+      const y = pad.top + h - ((v - min) / range) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Fill under curve
+    const lastX = pad.left + w;
+    const baseY = pad.top + h;
+    ctx.lineTo(lastX, baseY);
+    ctx.lineTo(pad.left, baseY);
+    ctx.closePath();
+    ctx.fillStyle = color.replace(')', ', 0.10)').replace('rgb(', 'rgba(');
+    ctx.fill();
+
+    // Dot on last point
+    const lx = pad.left + w;
+    const ly = pad.top + h - ((data[data.length - 1] - min) / range) * h;
+    ctx.beginPath();
+    ctx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }, [data, width, height, color, label, formatValue]);
+
+  useEffect(() => { draw(); }, [draw]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fl-sparkline-canvas"
+      style={{ width, height }}
+    />
+  );
+};
 
 interface FLStatusPanelProps {
   flStatus: FLStatusData | null;
@@ -116,6 +222,22 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, tot
               </div>
             </div>
           </div>
+
+          {/* Sparkline charts — accuracy & loss history */}
+          {(metrics?.accuracyHistory?.length ?? 0) >= 2 && (
+            <div className="fl-sparklines">
+              <Sparkline
+                data={metrics!.accuracyHistory!}
+                color="rgb(46, 204, 113)"
+                label="Accuracy"
+              />
+              <Sparkline
+                data={metrics!.lossHistory || []}
+                color="rgb(231, 76, 60)"
+                label="Loss"
+              />
+            </div>
+          )}
 
           <div className="fl-agents">
             <h4>

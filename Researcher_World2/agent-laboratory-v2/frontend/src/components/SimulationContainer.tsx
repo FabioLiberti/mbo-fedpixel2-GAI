@@ -122,6 +122,10 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     const phase = fl?.current_phase || 'idle';
     const isActive = phase !== 'idle' && phase !== null;
 
+    const accuracyArr = Array.isArray(fl?.metrics?.accuracy) ? fl.metrics.accuracy as number[] : [];
+    const lossArr = Array.isArray(fl?.metrics?.loss) ? fl.metrics.loss as number[] : [];
+    const perClientArr = Array.isArray(fl?.metrics?.per_client) ? fl.metrics.per_client : [];
+
     const backendFlStatus: FLStatusData = {
       enabled: fl?.enabled ?? true,
       currentState: phase,
@@ -132,6 +136,9 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         loss: latestLoss,
         round: fl?.round ?? 0,
         clientFraction: 0.8,
+        accuracyHistory: accuracyArr,
+        lossHistory: lossArr,
+        perClient: perClientArr,
       },
       connections: [
         { source: 'MERCATORUM', target: 'BLEKINGE', active: isActive },
@@ -317,15 +324,28 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         if (!prevState) return prevState;
         
         // Stato globale
+        const newAcc = Math.min(0.95, (prevState.metrics.accuracy ?? 0) + 0.05);
+        const newLoss = Math.max(0.05, (prevState.metrics.loss ?? 1) - 0.05);
+
+        // Accumula history quando il round si completa (transizione → IDLE)
+        const accHist = [...(prevState.metrics.accuracyHistory || [])];
+        const lossHist = [...(prevState.metrics.lossHistory || [])];
+        if (newState === FLState.IDLE && currentStateIndex === 0) {
+          accHist.push(newAcc);
+          lossHist.push(newLoss);
+        }
+
         const updatedState = {
           ...prevState,
           currentState: newState,
-          fromSimulation: true, // Mantiene il flag
+          fromSimulation: true,
           metrics: {
             ...prevState.metrics,
-            accuracy: Math.min(0.95, (prevState.metrics.accuracy ?? 0) + 0.05),
-            loss: Math.max(0.05, (prevState.metrics.loss ?? 1) - 0.05),
-            round: round
+            accuracy: newAcc,
+            loss: newLoss,
+            round: round,
+            accuracyHistory: accHist,
+            lossHistory: lossHist,
           }
         };
         

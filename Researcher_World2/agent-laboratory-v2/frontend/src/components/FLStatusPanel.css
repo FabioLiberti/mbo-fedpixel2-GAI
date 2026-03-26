@@ -216,6 +216,23 @@
     line-height: 1;
   }
 
+  /* ---- Sparkline charts ---- */
+
+  .fl-sparklines {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 6px 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+  }
+
+  .fl-sparkline-canvas {
+    display: block;
+    border-radius: 3px;
+  }
+
   .fl-minimize-btn:hover {
     color: #fff;
     border-color: rgba(255, 255, 255, 0.5);
