@@ -42,7 +42,7 @@ export class MercatorumLabScene extends BaseLabScene {
 
 ## LOW-2: Aggiornare test backend
 
-**Stato**: da fare
+**Stato**: COMPLETATO (v0.6.2 + v0.6.7)
 **Priorità**: LOW
 
 `backend/tests/test_researcher_agent.py` ha riferimenti obsoleti ai vecchi nomi e ruoli persona.
@@ -105,7 +105,7 @@ agents_config = [
 
 ## LOW-3: Aggiornare generate_personas.py
 
-**Stato**: da fare
+**Stato**: COMPLETATO (già aggiornato in precedenza)
 **Priorità**: LOW
 
 Lo script `backend/config/personas/generate_personas.py` ha ancora i nomi persona vecchi.
@@ -246,8 +246,8 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 | ID | Tipo | Descrizione | Complessità |
 |----|------|-------------|-------------|
 | LOW-1 | Refactor | MercatorumLabScene → BaseLabScene | Media |
-| LOW-2 | Fix | Test backend aggiornamento nomi/ruoli | Bassa |
-| LOW-3 | Fix | generate_personas.py nomi vecchi | Bassa |
+| LOW-2 | Fix | ~~Test backend aggiornamento nomi/ruoli~~ COMPLETATO | Bassa |
+| LOW-3 | Fix | ~~generate_personas.py nomi vecchi~~ COMPLETATO | Bassa |
 | LOW-4 | Quality | Ridurre `as any` (54→~10) | Media |
 | LOW-5 | Verifica | Build frontend pulita | Bassa |
 | FEATURE-1 | Feature | ~~Miglioramento prompt cognitivi~~ COMPLETATO | Alta |

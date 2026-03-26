@@ -75,20 +75,20 @@ class AdvancedLLMIntegrationTest:
         ]
         
         try:
-            # Crea un agente PhD Student
-            phd_agent_id = "test_phd_student"
+            # Crea un agente student
+            phd_agent_id = "test_student"
             specialization = Specialization.PRIVACY_ENGINEERING
-            
+
             # Registra l'agente nel controller
             success = self.controller.register_agent(
                 agent_id=phd_agent_id,
-                agent_type="PhD Student",
+                agent_type="student",
                 lab_id="test_lab",
                 specialization=specialization.value
             )
             
             if not success:
-                logger.error(f"Failed to register PhD agent")
+                logger.error("Failed to register student agent")
                 return False
             
             # Testa dialoghi per ogni stato
