@@ -194,6 +194,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         { source: 'OPBG', target: 'MERCATORUM', active: isActive },
       ],
       dataDistribution: dataDistributionRef.current,
+      convergence: fl?.convergence || undefined,
     };
 
     setFLStatus(backendFlStatus);

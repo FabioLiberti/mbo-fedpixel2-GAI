@@ -668,6 +668,7 @@ class SimulationController:
                     "mu": self.fl_system.mu if self.fl_system else 0.01,
                     "metrics": fl_state["metrics"],
                     "dp": fl_state.get("dp"),
+                    "convergence": self.fl_system.check_convergence() if self.fl_system else None,
                     "conversations": self.fl_conversations,
                 }
 

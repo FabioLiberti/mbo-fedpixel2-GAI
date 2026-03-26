@@ -174,7 +174,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
     emitFLPanelToggle(false);
   };
 
-  const { enabled, currentState, activeAgents, metrics, connections, dp, algorithm, mu, dataDistribution } = flStatus || {};
+  const { enabled, currentState, activeAgents, metrics, connections, dp, algorithm, mu, dataDistribution, convergence } = flStatus || {};
 
   const formatMetric = (value: number | undefined): string => {
     return value !== undefined ? value.toFixed(4) : 'N/A';
@@ -439,6 +439,45 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
               ))}
             </div>
           </div>
+
+          {/* Convergence status badge */}
+          {convergence && convergence.rounds_completed > 0 && (
+            <div className={`fl-convergence ${convergence.should_stop ? 'fl-convergence-stop' : ''}`}>
+              {convergence.converged && (
+                <span className="fl-convergence-badge fl-converged">Converged</span>
+              )}
+              {convergence.budget_exhausted && (
+                <span className="fl-convergence-badge fl-budget-out">Budget Exhausted</span>
+              )}
+              {!convergence.should_stop && (
+                <span className="fl-convergence-badge fl-training-active">Training</span>
+              )}
+              <span className="fl-convergence-best">best {(convergence.best_accuracy * 100).toFixed(1)}%</span>
+            </div>
+          )}
+
+          {/* Export button */}
+          <button
+            className="fl-export-btn"
+            onClick={async () => {
+              try {
+                const res = await fetch('http://localhost:8091/fl/export');
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `fl-metrics-r${data.total_rounds || 0}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch {
+                console.warn('Export failed (backend offline?)');
+              }
+            }}
+            title="Export FL metrics (JSON)"
+          >
+            Export Metrics
+          </button>
         </>
       )}
 

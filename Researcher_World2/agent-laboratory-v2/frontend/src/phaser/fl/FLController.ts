@@ -54,6 +54,13 @@ export interface FLStatusData {
     positive_ratio: number;
     age_histogram: { bins: string[]; counts: number[] };
   }>;
+  convergence?: {
+    converged: boolean;
+    budget_exhausted: boolean;
+    rounds_completed: number;
+    best_accuracy: number;
+    should_stop: boolean;
+  };
   fromSimulation?: boolean; // Campo opzionale per indicare se i dati provengono dalla simulazione React
 }
 

@@ -255,6 +255,22 @@ async def get_fl_data_distribution():
     return controller.fl_system.get_data_distribution()
 
 
+@app.get("/fl/export")
+async def export_fl_metrics():
+    """Export full FL metrics history (JSON)."""
+    if not controller.fl_system:
+        raise HTTPException(status_code=400, detail="FL system not initialized")
+    return controller.fl_system.export_metrics()
+
+
+@app.get("/fl/convergence")
+async def get_fl_convergence():
+    """Check FL convergence status and budget exhaustion."""
+    if not controller.fl_system:
+        raise HTTPException(status_code=400, detail="FL system not initialized")
+    return controller.fl_system.check_convergence()
+
+
 # --- LLM Toggle Routes ---
 
 @app.post("/llm/toggle")

@@ -1,7 +1,7 @@
 # TODO Roadmap — mbo-fedpixel2-GAI
 
-> Aggiornato: 2026-03-26 dopo v0.8.3
-> Completati: LOW-1→5, FEATURE-1→6 (tutto fino a v0.8.3)
+> Aggiornato: 2026-03-26 dopo v0.8.4
+> Completati: LOW-1→5, FEATURE-1→6, FEATURE-8→9 (tutto fino a v0.8.4)
 > Questo file traccia tutte le modifiche residue e il piano degli sviluppi futuri.
 
 ---
@@ -339,7 +339,7 @@ Animazioni di particelle e connessioni durante le fasi FL nelle scene di gioco.
 
 ## FEATURE-8: Export metriche FL
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.4)
 **Priorità**: BASSA
 **Complessità**: Bassa
 
@@ -360,7 +360,7 @@ Bottone per scaricare un report completo delle metriche FL.
 
 ## FEATURE-9: Convergence detection e auto-stop
 
-**Stato**: DA FARE
+**Stato**: COMPLETATO (v0.8.4)
 **Priorità**: BASSA
 **Complessità**: Bassa
 
@@ -394,5 +394,5 @@ Rilevamento automatico della convergenza del modello FL e stop del training.
 | FEATURE-5 | Feature | ~~Dialoghi LLM tra agenti sul FL~~ | Alta | COMPLETATO |
 | FEATURE-6 | Feature | ~~Visualizzazione distribuzione Non-IID~~ | Media | COMPLETATO |
 | **FEATURE-7** | Feature | Effetti visivi Phaser durante fasi FL | Media | DA FARE |
-| **FEATURE-8** | Feature | Export metriche FL (JSON/CSV) | Bassa | DA FARE |
-| **FEATURE-9** | Feature | Convergence detection e auto-stop | Bassa | DA FARE |
+| FEATURE-8 | Feature | ~~Export metriche FL (JSON/CSV)~~ | Bassa | COMPLETATO |
+| FEATURE-9 | Feature | ~~Convergence detection e auto-stop~~ | Bassa | COMPLETATO |

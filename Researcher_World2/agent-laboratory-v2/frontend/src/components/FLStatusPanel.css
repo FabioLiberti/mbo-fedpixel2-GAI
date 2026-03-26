@@ -653,3 +653,72 @@
     font-family: monospace;
     margin-top: 1px;
   }
+
+  /* ---- Convergence status ---- */
+
+  .fl-convergence {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 6px 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 10px;
+  }
+
+  .fl-convergence-stop {
+    border-left: 3px solid #e74c3c;
+  }
+
+  .fl-convergence-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+
+  .fl-converged {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+  }
+
+  .fl-budget-out {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+  }
+
+  .fl-training-active {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+  }
+
+  .fl-convergence-best {
+    color: #aaa;
+    margin-left: auto;
+  }
+
+  /* ---- Export button ---- */
+
+  .fl-export-btn {
+    display: block;
+    width: 100%;
+    padding: 6px 0;
+    background: rgba(52, 152, 219, 0.15);
+    border: 1px solid rgba(52, 152, 219, 0.3);
+    color: #3498db;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .fl-export-btn:hover {
+    background: rgba(52, 152, 219, 0.25);
+    border-color: rgba(52, 152, 219, 0.5);
+    color: #5dade2;
+  }

@@ -754,6 +754,57 @@ class FederatedLearningSystem:
             }
         return result
 
+    def export_metrics(self) -> Dict[str, Any]:
+        """Return full metrics history for export (JSON/CSV)."""
+        rounds = []
+        n = len(self.metrics["accuracy"])
+        for i in range(n):
+            entry: Dict[str, Any] = {
+                "round": i + 1,
+                "accuracy": self.metrics["accuracy"][i],
+                "loss": self.metrics["loss"][i],
+            }
+            if i < len(self.metrics["per_client"]):
+                entry["per_client"] = self.metrics["per_client"][i]
+            if i < len(self.metrics["local_vs_global"]):
+                entry["local_vs_global"] = self.metrics["local_vs_global"][i]
+            if i < len(self.metrics["cross_eval"]):
+                entry["cross_eval"] = self.metrics["cross_eval"][i]
+            rounds.append(entry)
+        return {
+            "algorithm": self.algorithm,
+            "mu": self.mu,
+            "total_rounds": n,
+            "dp": {
+                "enabled": self.dp_enabled,
+                "epsilon_total": self.dp_epsilon_total,
+                "epsilon_spent": self.dp_epsilon_spent,
+            },
+            "rounds": rounds,
+        }
+
+    def check_convergence(self, patience: int = 3) -> Dict[str, Any]:
+        """Check if training has converged (accuracy plateau) or privacy budget exhausted.
+        Returns status dict with convergence info."""
+        acc = self.metrics["accuracy"]
+        n = len(acc)
+        budget_exhausted = self.dp_enabled and self.dp_epsilon_spent >= self.dp_epsilon_total
+
+        converged = False
+        if n >= patience + 1:
+            recent = acc[-(patience + 1):]
+            best_before = max(recent[:-1])
+            converged = all(a <= best_before for a in recent[1:])
+
+        return {
+            "converged": converged,
+            "budget_exhausted": budget_exhausted,
+            "rounds_completed": n,
+            "patience": patience,
+            "best_accuracy": round(max(acc), 4) if acc else 0,
+            "should_stop": converged or budget_exhausted,
+        }
+
     def update_client_models(self):
         """Aggiorna i modelli di tutti i client con i pesi del modello globale"""
         if HAS_TF:
