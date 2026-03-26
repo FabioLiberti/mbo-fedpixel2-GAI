@@ -65,8 +65,8 @@ export function applyAssetLoaderFix(): void {
       // Prova a impostare la texture di placeholder
       try {
         // Accesso sicuro alla scena e al gestore di texture
-        const scene = this.scene as any;
-        if (scene && scene.sys && scene.sys.textures && scene.sys.textures.exists('__missing_texture__')) {
+        const scene = this.scene as unknown as Phaser.Scene;
+        if (scene?.textures?.exists('__missing_texture__')) {
           return originalSetTexture.call(this, '__missing_texture__');
         }
       } catch (innerError) {

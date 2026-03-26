@@ -118,8 +118,8 @@ export class DialogRenderer {
           });
       }
 
-      if (!s.showLLMDialogs && dialog.isLLMDialog && typeof (bubble as any).hide === 'function') {
-        (bubble as any).hide();
+      if (!s.showLLMDialogs && dialog.isLLMDialog && 'hide' in bubble && typeof bubble.hide === 'function') {
+        bubble.hide();
       }
 
       s.activeBubbles.set(dialog.sourceId, bubble);
@@ -190,7 +190,7 @@ export class DialogRenderer {
       const agent = this.scene.children.getChildren()
         .find((child: Phaser.GameObjects.GameObject) =>
           (child.getData && child.getData('id') === agentId) ||
-          ((child as any).getId && (child as any).getId() === agentId)
+          ('getId' in child && typeof (child as { getId: () => string }).getId === 'function' && (child as { getId: () => string }).getId() === agentId)
         );
       if (agent && 'x' in agent && 'y' in agent) {
         return { x: agent.x as number, y: agent.y as number };

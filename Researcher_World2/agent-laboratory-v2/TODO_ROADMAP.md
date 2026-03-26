@@ -130,7 +130,7 @@ allineandolo esattamente a `PERSONA_REGISTRY` in `environment.py` e ai file `scr
 
 ## LOW-4: Ridurre ulteriormente `as any` nel frontend
 
-**Stato**: parziale (4 rimossi in v0.6.1, ne restano ~54)
+**Stato**: COMPLETATO (54→9, v0.6.8)
 **Priorità**: LOW
 
 ### Distribuzione attuale (54 occorrenze in 17 file)
@@ -167,7 +167,7 @@ allineandolo esattamente a `PERSONA_REGISTRY` in `environment.py` e ai file `scr
 
 ## LOW-5: Build frontend ottimizzata
 
-**Stato**: da verificare
+**Stato**: COMPLETATO (v0.6.8 — 0 warning, 0 errori, bundle 568KB gzip)
 **Priorità**: LOW
 
 ### Azione
@@ -248,8 +248,8 @@ Toggle runtime: endpoint REST `set_llm_enabled(bool)` + pulsante frontend.
 | LOW-1 | Refactor | MercatorumLabScene → BaseLabScene | Media |
 | LOW-2 | Fix | ~~Test backend aggiornamento nomi/ruoli~~ COMPLETATO | Bassa |
 | LOW-3 | Fix | ~~generate_personas.py nomi vecchi~~ COMPLETATO | Bassa |
-| LOW-4 | Quality | Ridurre `as any` (54→~10) | Media |
-| LOW-5 | Verifica | Build frontend pulita | Bassa |
+| LOW-4 | Quality | ~~Ridurre `as any` (54→9)~~ COMPLETATO | Media |
+| LOW-5 | Verifica | ~~Build frontend pulita~~ COMPLETATO | Bassa |
 | FEATURE-1 | Feature | ~~Miglioramento prompt cognitivi~~ COMPLETATO | Alta |
 | FEATURE-2 | Feature | FL dataset reale + persistenza | Alta |
 | FEATURE-3 | Feature | ~~Tilemap reali con Tiled~~ COMPLETATO | Media |

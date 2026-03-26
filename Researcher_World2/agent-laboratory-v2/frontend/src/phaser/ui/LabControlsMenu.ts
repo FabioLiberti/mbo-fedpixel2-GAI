@@ -7,7 +7,6 @@ import * as Phaser from 'phaser';
 import { SimpleLLMPanel } from './simple/SimpleLLMPanel';
 import { LLMControlPanel } from './LLMControlPanel';
 import { DialogController } from '../controllers/DialogController';
-import { Agent } from '../sprites/Agent';
 import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
 import type { IAgentScene as ILabControlScene } from '../types/IAgentScene';
 
@@ -278,18 +277,13 @@ export class LabControlsMenu {
     try {
       if (this.scene.agentsLegend) {
         // Chiudi solo la legenda
-        if ((this.scene.agentsLegend as any).getContainer) {
-          (this.scene.agentsLegend as any).getContainer().destroy();
-        }
+        this.scene.agentsLegend.getContainer().destroy();
         this.scene.agentsLegend = null;
       } else {
         this.closeAllSubPanels();
         this.closePanel();
-        integrateAgentsLegend(this.scene as any);
-        // Apri espansa
-        if (this.scene.agentsLegend && (this.scene.agentsLegend as any).expand) {
-          (this.scene.agentsLegend as any).expand();
-        }
+        integrateAgentsLegend(this.scene);
+        // Legend is created asynchronously inside integrateAgentsLegend
       }
     } catch (err) { console.error('[LabControlsMenu] toggleAgentsLegend:', err); }
   }
@@ -324,9 +318,7 @@ export class LabControlsMenu {
         (c: Phaser.GameObjects.GameObject) => c.name === 'legend-label' || c.name === 'legend-title'
       );
       legends.forEach((el: Phaser.GameObjects.GameObject) => this.scene.children.remove(el));
-      if ((this.scene.agentsLegend as any).getContainer) {
-        (this.scene.agentsLegend as any).getContainer().destroy();
-      }
+      this.scene.agentsLegend.getContainer().destroy();
       this.scene.agentsLegend = null;
     }
     // Chiudi LLM Dashboard

@@ -69,7 +69,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   protected grid: number[][] = [];
 
   // Controller per il Federated Learning
-  protected flController: FLController;
+  public flController: FLController;
 
   // Controller per i dialoghi degli agenti
   protected dialogController!: DialogController;

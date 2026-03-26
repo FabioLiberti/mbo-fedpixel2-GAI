@@ -7,6 +7,7 @@ import { Agent } from '../sprites/Agent';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { AgentsLegend } from '../ui/AgentsLegend';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
+import type { FLController } from '../fl/FLController';
 
 /**
  * Minimal scene interface for components that need agent access.
@@ -17,8 +18,16 @@ export interface IAgentScene extends Phaser.Scene {
   agentController: GlobalAgentController | null;
   agentsLegend: AgentsLegend | null;
   dialogEventTracker: DialogEventTracker | null;
+  flController?: FLController;
   debugGraphics: Phaser.GameObjects.Graphics | null;
   debugText: Phaser.GameObjects.Text | null;
   theme: { name: string; colorPalette: Record<string, number> };
   updateDebugInfo(text: string): void;
+}
+
+/** Declare custom window properties used across the app. */
+declare global {
+  interface Window {
+    API_BASE_URL?: string;
+  }
 }

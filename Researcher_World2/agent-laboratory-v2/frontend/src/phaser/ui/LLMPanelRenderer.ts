@@ -250,7 +250,7 @@ export class LLMPanelRenderer {
   /**
    * Aggiorna lo stato visivo del toggle
    */
-  private updateToggleVisual(isEnabled: boolean): void {
+  public updateToggleVisual(isEnabled: boolean): void {
     if (!this.llmToggleSwitch) return;
     
     this.llmToggleSwitch.clear();

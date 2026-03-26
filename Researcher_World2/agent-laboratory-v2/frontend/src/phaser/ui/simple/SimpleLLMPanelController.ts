@@ -112,7 +112,7 @@ export class SimpleLLMPanelController {
    */
   private getApiBaseUrl(): string {
     // Cerca di ottenere l'URL base da una variabile di ambiente o config
-    const apiUrl = (window as any).API_BASE_URL;
+    const apiUrl = window.API_BASE_URL;
     
     if (apiUrl) {
       return apiUrl;

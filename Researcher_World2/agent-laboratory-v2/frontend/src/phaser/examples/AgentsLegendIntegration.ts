@@ -6,6 +6,7 @@
 import { AgentsLegend } from '../ui/AgentsLegend';
 // @ts-ignore - Questo tipo è necessario per chi utilizza questa funzione
 import { AgentTypeInfo } from '../ui/LegendInfoPanel';
+import type { IAgentScene } from '../types/IAgentScene';
 
 /**
  * Questo file mostra come integrare la legenda degli agenti in una scena
@@ -14,13 +15,13 @@ import { AgentTypeInfo } from '../ui/LegendInfoPanel';
 // Esempio di uso della legenda in una scena
 // Questo codice può essere aggiunto al metodo create() di BlekingeLabScene.ts
 
-export function integrateAgentsLegend(scene: Phaser.Scene): void {
+export function integrateAgentsLegend(scene: IAgentScene): void {
   // OPZIONE 1: Caricamento asincrono del file JSON
   async function loadAndCreateLegend(): Promise<void> {
     try {
       // Carica il file di configurazione degli agenti
       const agentTypes: Record<string, AgentTypeInfo> = await AgentsLegend.loadAgentTypesConfig(scene);
-      
+
       // Crea la legenda a sinistra (a destra c'è Controlli Lab)
       const legend = new AgentsLegend(
         scene,
@@ -30,9 +31,8 @@ export function integrateAgentsLegend(scene: Phaser.Scene): void {
       );
 
       console.log('Agents legend created successfully');
-      
-      // Esporti legend come proprietà della scena per usarlo altrove
-      (scene as any).agentsLegend = legend;
+
+      scene.agentsLegend = legend;
     } catch (error) {
       console.error('Error creating agents legend:', error);
     }

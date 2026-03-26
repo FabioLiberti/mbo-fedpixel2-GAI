@@ -95,7 +95,7 @@ export function debugTextures(scene: Phaser.Scene): void {
       // Fix: Verifica delle proprietà in modo sicuro
       const webGLInfo = {
         type: renderer.type,
-        contextLost: (renderer as any).contextLost || false
+        contextLost: 'contextLost' in renderer ? (renderer as Phaser.Renderer.WebGL.WebGLRenderer).contextLost : false
       };
       
       console.log(`  - WebGL Info: ${JSON.stringify(webGLInfo)}`);

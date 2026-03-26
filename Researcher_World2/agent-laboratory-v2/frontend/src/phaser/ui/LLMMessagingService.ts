@@ -10,15 +10,6 @@ interface ErrorWithMessage {
 }
 
 /**
- * Interfaccia per la risposta dell'API di stato LLM
- */
-interface LLMStatusResponse {
-  available: boolean;
-  model?: string;
-  message?: string;
-}
-
-/**
  * Verifica se l'errore ha una proprietà message
  */
 function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
@@ -91,7 +82,7 @@ export class LLMMessagingService {
    */
   private getApiBaseUrl(): string {
     // Cerca di ottenere l'URL base da una variabile di ambiente o config
-    const apiUrl = (window as any).API_BASE_URL;
+    const apiUrl = window.API_BASE_URL;
     
     if (apiUrl) {
       return apiUrl;

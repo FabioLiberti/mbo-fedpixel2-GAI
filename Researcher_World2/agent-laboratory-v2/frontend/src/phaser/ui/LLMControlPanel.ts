@@ -146,8 +146,8 @@ export class LLMControlPanel {
     // Aggiorna visivamente lo stato del toggle
     if (this.renderer) {
       // Assicurati che il toggle venga aggiornato visivamente (attraverso metodi aggiuntivi nel renderer)
-      if ((this.renderer as any).updateToggleVisual) {
-        (this.renderer as any).updateToggleVisual(enabled);
+      if (this.renderer.updateToggleVisual) {
+        this.renderer.updateToggleVisual(enabled);
       }
     }
     

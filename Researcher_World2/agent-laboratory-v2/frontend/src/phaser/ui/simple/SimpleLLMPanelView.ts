@@ -651,8 +651,7 @@ export class SimpleLLMPanelView {
     this.logScrollMask.fillRect(this.padding, sectionY + 40, logAreaWidth, this.logAreaHeight);
     
     // Applica maschera
-    const phaserScene = this.scene as any;
-    const mask = new Phaser.Display.Masks.GeometryMask(phaserScene, this.logScrollMask);
+    const mask = new Phaser.Display.Masks.GeometryMask(this.scene as any, this.logScrollMask);
     this.logScrollContent.setMask(mask);
     
     // Scrollbar
@@ -1232,8 +1231,7 @@ export class SimpleLLMPanelView {
         dialogHeight - 250
       );
       
-      const phaserScene = this.scene as any;
-      const mask = new Phaser.Display.Masks.GeometryMask(phaserScene, maskGraphics);
+      const mask = new Phaser.Display.Masks.GeometryMask(this.scene as any, maskGraphics);
       messageContainer.setMask(mask);
       
       // Scrollbar

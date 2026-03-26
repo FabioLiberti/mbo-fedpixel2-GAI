@@ -11,6 +11,7 @@ import { SpeechBubble } from '../ui/SpeechBubble';
 import { ThoughtBubble } from '../ui/ThoughtBubble';
 import { DecisionBubble } from '../ui/DecisionBubble';
 import { FLDialogType as DialogType, CognitiveProcessType } from '../types/DialogTypes';
+import type { IAgentScene } from '../types/IAgentScene';
 
 // ── Shared interfaces ────────────────────────────────────────────────
 
@@ -216,8 +217,8 @@ export class DialogState {
 
   getCurrentFLState(): any {
     try {
-      const flc = (this.scene as any).flController;
-      if (flc && flc.getState) return flc.getState();
+      const flc = (this.scene as IAgentScene).flController;
+      if (flc && 'getState' in flc) return (flc as unknown as { getState: () => unknown }).getState();
     } catch (e) {
       console.warn('[DialogState] getCurrentFLState:', e);
     }

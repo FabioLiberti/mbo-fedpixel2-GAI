@@ -1,6 +1,7 @@
 // frontend/src/phaser/sprites/Agent.ts
 
 import Phaser from 'phaser';
+import type { IAgentScene } from '../types/IAgentScene';
 
 export interface AgentConfig {
   role: string;
@@ -124,9 +125,9 @@ export class Agent extends Phaser.GameObjects.Sprite {
   public getCurrentTime(): number {
     // Usa il tempo di Phaser se disponibile, altrimenti usa il tempo corrente
     try {
-      const sceneAny = this.scene as any;
-      if (sceneAny.time && sceneAny.time.now) {
-        return sceneAny.time.now;
+      const s = this.scene as unknown as Phaser.Scene;
+      if (s?.time?.now) {
+        return s.time.now;
       }
     } catch (e) {
       console.warn('Error getting time from scene:', e);
@@ -140,12 +141,12 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Accede al gioco in modo sicuro attraverso la scena
    */
   protected getGameEvents(): Phaser.Events.EventEmitter {
-    const sceneAny = this.scene as any;
-    if (sceneAny.game?.events) {
-      return sceneAny.game.events;
+    const s = this.scene as unknown as Phaser.Scene;
+    if (s?.game?.events) {
+      return s.game.events;
     }
-    if (sceneAny.events) {
-      return sceneAny.events;
+    if (s?.events) {
+      return s.events;
     }
     return new Phaser.Events.EventEmitter();
   }
@@ -297,9 +298,9 @@ export class Agent extends Phaser.GameObjects.Sprite {
    */
   private moveToRandomPoint(): void {
     // Ottieni le dimensioni dell'area di gioco in modo sicuro
-    const sceneAny = this.scene as any;
-    const width = sceneAny.cameras?.main?.width || 800;
-    const height = sceneAny.cameras?.main?.height || 600;
+    const s = this.scene as unknown as Phaser.Scene;
+    const width = s?.cameras?.main?.width || 800;
+    const height = s?.cameras?.main?.height || 600;
     
     // Genera coordinate casuali all'interno dell'area visibile
     const margin = 50;
@@ -315,9 +316,8 @@ export class Agent extends Phaser.GameObjects.Sprite {
   private findNearbyAgentToInteract(): void {
     try {
       // Ottieni tutti gli agenti nella scena
-      const sceneAny = this.scene as any;
-      const agents = sceneAny.agents || [];
-      
+      const agents = (this.scene as unknown as IAgentScene).agents || [];
+
       // Filtra per escludere se stesso e trovare l'agente più vicino
       let closestAgent: Agent | null = null;
       let minDistance = Number.MAX_VALUE;
@@ -400,9 +400,8 @@ export class Agent extends Phaser.GameObjects.Sprite {
   private findRandomAgentId(): string {
     try {
       // Ottieni tutti gli agenti nella scena
-      const sceneAny = this.scene as any;
-      const agents = sceneAny.agents || [];
-      
+      const agents = (this.scene as unknown as IAgentScene).agents || [];
+
       // Lista per agenti filtrati
       const otherAgents: Agent[] = [];
       
