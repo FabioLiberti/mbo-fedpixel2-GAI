@@ -290,10 +290,21 @@ export class MercatorumLabScene extends BaseLabScene {
       const addZone = (x: number, y: number, w: number, h: number, name: string, label: string) => {
         const z = this.add.zone(x, y, w, h);
         z.setName(name); z.setInteractive();
-        const t = this.add.text(x, y - h / 2 + 6, label, {
+        this.add.text(x, y - h / 2 + 6, label, {
           fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
           padding: { left: 4, right: 4, top: 2, bottom: 2 }
         }).setOrigin(0.5, 0).setDepth(5);
+        this.interactionZones.push(z);
+      };
+
+      // Variant with label at bottom-center of the room (for rooms obscured by scene title)
+      const addZoneCustomLabel = (x: number, y: number, w: number, h: number, name: string, label: string) => {
+        const z = this.add.zone(x, y, w, h);
+        z.setName(name); z.setInteractive();
+        this.add.text(x, y + h / 2 - 6, label, {
+          fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
+          padding: { left: 4, right: 4, top: 2, bottom: 2 }
+        }).setOrigin(0.5, 1).setDepth(5);
         this.interactionZones.push(z);
       };
 
@@ -303,24 +314,25 @@ export class MercatorumLabScene extends BaseLabScene {
       const roomW = (x0: number, x1: number) => (x1 - x0) * gs;
       const roomH = (y0: number, y1: number) => (y1 - y0) * gs;
 
-      // Top-left: Ufficio Prof.
-      addZone(roomCX(1, c1), roomCY(1, midY), roomW(1, c1), roomH(1, midY), 'professor_office', 'Ufficio Prof.');
-      // Top-center: Meeting Room (label top-right to avoid overlap with scene title)
+      // Top-left: Ufficio Prof. (label in basso come le altre top rooms)
+      addZoneCustomLabel(roomCX(1, c1), roomCY(1, midY), roomW(1, c1), roomH(1, midY), 'professor_office', 'Ufficio Prof.');
+      // Top-center: Meeting Room (label shifted down to avoid scene title overlap)
+      addZoneCustomLabel(roomCX(c1 + 1, c2), roomCY(1, midY), roomW(c1 + 1, c2), roomH(1, midY), 'meeting_room', 'Meeting Room');
+      // Top-right: Privacy Lab (label shifted down to avoid scene title overlap)
+      addZoneCustomLabel(roomCX(c2 + 1, cols - 1), roomCY(1, midY), roomW(c2 + 1, cols - 1), roomH(1, midY), 'privacy_lab', 'Privacy Lab');
+      // Bottom-left: Break Room (label centrata sulla porta orizzontale)
       {
-        const mx = roomCX(c1 + 1, c2), my = roomCY(1, midY);
-        const mw = roomW(c1 + 1, c2), mh = roomH(1, midY);
-        const z = this.add.zone(mx, my, mw, mh);
-        z.setName('meeting_room'); z.setInteractive();
-        this.add.text(mx + mw / 2 - 6, my - mh / 2 + 6, 'Meeting Room', {
+        const bx = roomCX(1, c1), by = roomCY(midY + 1, rows - 1);
+        const bw = roomW(1, c1), bh = roomH(midY + 1, rows - 1);
+        const doorX = (Math.floor(c1 / 2) + 1) * gs + gs / 2; // centro porta nel divider
+        const z = this.add.zone(bx, by, bw, bh);
+        z.setName('break_room'); z.setInteractive();
+        this.add.text(doorX, by - bh / 2 + 6, 'Break Room', {
           fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
           padding: { left: 4, right: 4, top: 2, bottom: 2 }
-        }).setOrigin(1, 0).setDepth(5);
+        }).setOrigin(0.5, 0).setDepth(5);
         this.interactionZones.push(z);
       }
-      // Top-right: Privacy Lab
-      addZone(roomCX(c2 + 1, cols - 1), roomCY(1, midY), roomW(c2 + 1, cols - 1), roomH(1, midY), 'privacy_lab', 'Privacy Lab');
-      // Bottom-left: Break Room
-      addZone(roomCX(1, c1), roomCY(midY + 1, rows - 1), roomW(1, c1), roomH(midY + 1, rows - 1), 'break_room', 'Break Room');
       // Bottom-center: Area Ricerca
       addZone(roomCX(c1 + 1, c2), roomCY(midY + 1, rows - 1), roomW(c1 + 1, c2), roomH(midY + 1, rows - 1), 'research_area', 'Area Ricerca');
       // Bottom-right: Server Room
