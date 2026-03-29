@@ -442,12 +442,15 @@ export class Agent extends Phaser.GameObjects.Sprite {
    */
   public changeState(newState: AgentState): void {
     if (this.currentState === newState) return;
-    
+
     this.currentState = newState;
     this.playAnimation();
-    
-    // Debug
-    console.log(`Agent ${this.name} changed state to ${newState}`);
+
+    // Emit event so the scene can show a state icon
+    try {
+      const s = this.scene as unknown as Phaser.Scene;
+      s?.events?.emit('agent-state-change', this, newState);
+    } catch { /* ignore */ }
   }
   
   /**

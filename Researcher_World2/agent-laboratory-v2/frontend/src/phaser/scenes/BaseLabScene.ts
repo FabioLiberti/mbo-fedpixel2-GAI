@@ -327,26 +327,40 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     }
   }
 
-  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
-    // Subclasses override to show icons — base does nothing
+  protected handleZoneInteraction(_agent: Agent, _zone: Phaser.GameObjects.Zone): void {
+    // No-op — icons are now driven by agent state changes, not zone proximity
   }
 
-  /** Show a zone icon above an agent with cooldown + quick fade-out. */
-  protected showZoneIcon(agent: Agent, icon: string): void {
-    const key = agent.getId() + '_zone';
-    const now = this.time.now;
-    if ((this.zoneIconCooldowns.get(key) ?? 0) > now) return;
-    this.zoneIconCooldowns.set(key, now + 4000);
+  /** Map agent states to icons */
+  private static STATE_ICONS: Record<string, string> = {
+    working: '💻',
+    discussing: '💬',
+    meeting: '🤝',
+    walking: '🚶',
+    presenting: '📊',
+  };
 
-    const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '20px' });
-    t.setOrigin(0.5).setDepth(100).setAlpha(1);
-    this.tweens.add({
-      targets: t,
-      alpha: 0,
-      y: agent.y - 55,
-      duration: 1200,
-      ease: 'Power2',
-      onComplete: () => t.destroy(),
+  /** Listen for agent state changes and show the corresponding icon. */
+  protected enableStateIcons(): void {
+    this.events.on('agent-state-change', (agent: Agent, state: string) => {
+      const icon = BaseLabScene.STATE_ICONS[state];
+      if (!icon) return; // no icon for idle
+
+      const key = agent.getId() + '_state';
+      const now = this.time.now;
+      if ((this.zoneIconCooldowns.get(key) ?? 0) > now) return;
+      this.zoneIconCooldowns.set(key, now + 5000);
+
+      const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '18px' });
+      t.setOrigin(0.5).setDepth(100).setAlpha(1);
+      this.tweens.add({
+        targets: t,
+        alpha: 0,
+        y: agent.y - 55,
+        duration: 1200,
+        ease: 'Power2',
+        onComplete: () => t.destroy(),
+      });
     });
   }
 
@@ -648,7 +662,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     const targetX = centerX - cam.width / (2 * zoomLevel);
     const targetY = centerY - cam.height / (2 * zoomLevel);
 
-    // Animate zoom via a dummy object (camera scroll/zoom aren't tween-friendly)
     const proxy = { z: cam.zoom, sx: cam.scrollX, sy: cam.scrollY };
     this.tweens.add({
       targets: proxy,
@@ -699,15 +712,23 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   protected enableZoneZoom(): void {
+    // Zone click → zoom in
     for (const zone of this.interactionZones) {
       zone.on('pointerdown', () => {
-        if (this.isZoomed) {
-          this.resetZoom();
-        } else {
+        if (!this.isZoomed) {
           this.zoomToZone(zone.x, zone.y);
         }
       });
     }
+
+    // Any click on scene background → zoom out (when zoomed)
+    this.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+      if (!this.isZoomed) return;
+      // Don't dezoom if clicking on the back button itself (handled by its own handler)
+      const clickedBackBtn = currentlyOver.some(obj => obj === this.zoomBackBtn);
+      if (clickedBackBtn) return;
+      this.resetZoom();
+    });
   }
 
   // ------------------------------------------------------------------

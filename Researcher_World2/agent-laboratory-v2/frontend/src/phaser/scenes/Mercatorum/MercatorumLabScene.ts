@@ -4,7 +4,6 @@
 
 import Phaser from 'phaser';
 import { BaseLabScene, LabTheme, AgentConfigEntry } from '../BaseLabScene';
-import { Agent } from '../../sprites/Agent';
 import { LabControlsMenu, type LabControlConfig } from '../../ui/LabControlsMenu';
 import { GlobalAgentController } from '../../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../../controllers/DialogEventTracker';
@@ -127,6 +126,7 @@ export class MercatorumLabScene extends BaseLabScene {
 
       // Agents (scale computed dynamically from AGENT_TARGET_HEIGHT)
       this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
+      this.enableStateIcons();
 
       // Camera
       this.setupCamera();
@@ -265,16 +265,6 @@ export class MercatorumLabScene extends BaseLabScene {
     } catch (error) {
       console.error('Error in createInteractionZones:', error);
     }
-  }
-
-  // ---- Scene-specific: Zone interaction icons ---------------------------
-
-  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
-    let icon = '💭';
-    if (zone.name === 'meeting_table') icon = '👥';
-    else if (zone.name === 'library') icon = '📚';
-    else if (zone.name === 'financial_data') icon = '📊';
-    this.showZoneIcon(agent, icon);
   }
 
 }

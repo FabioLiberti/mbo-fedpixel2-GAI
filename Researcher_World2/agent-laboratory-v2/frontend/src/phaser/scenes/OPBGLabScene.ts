@@ -4,7 +4,6 @@
 
 import Phaser from 'phaser';
 import { BaseLabScene, LabTheme, AgentConfigEntry } from './BaseLabScene';
-import { Agent } from '../sprites/Agent';
 import { LabControlsMenu, type LabControlConfig } from '../ui/LabControlsMenu';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
@@ -129,6 +128,7 @@ export class OPBGLabScene extends BaseLabScene {
 
       // Agents
       this.createAgentsFromConfig(OPBG_AGENTS);
+      this.enableStateIcons();
 
       // Camera
       this.setupCamera();
@@ -252,13 +252,4 @@ export class OPBGLabScene extends BaseLabScene {
     }
   }
 
-  // ---- Scene-specific: Zone interaction icons ---------------------------
-
-  protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
-    let icon = '❓';
-    if (zone.name === 'meeting_room') icon = '👥';
-    else if (zone.name === 'data_center') icon = '🖥️';
-    else if (zone.name === 'clinical_area') icon = '🏥';
-    this.showZoneIcon(agent, icon);
-  }
 }
