@@ -7,6 +7,7 @@ import { Agent } from '../sprites/Agent';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { AgentsLegend } from '../ui/AgentsLegend';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
+import type { DialogAnalytics } from '../controllers/DialogAnalytics';
 import type { FLController } from '../fl/FLController';
 
 /**
@@ -18,6 +19,7 @@ export interface IAgentScene extends Phaser.Scene {
   agentController: GlobalAgentController | null;
   agentsLegend: AgentsLegend | null;
   dialogEventTracker: DialogEventTracker | null;
+  dialogAnalytics: DialogAnalytics | null;
   flController?: FLController;
   debugGraphics: Phaser.GameObjects.Graphics | null;
   debugText: Phaser.GameObjects.Text | null;

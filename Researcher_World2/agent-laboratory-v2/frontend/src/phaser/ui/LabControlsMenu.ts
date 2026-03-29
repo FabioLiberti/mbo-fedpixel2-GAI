@@ -143,7 +143,16 @@ export class LabControlsMenu {
       ],
     });
 
-    // 5. Informazioni
+    // 5. Analytics
+    sections.push({
+      title: 'Analytics',
+      buttons: [
+        { label: 'Report Dialoghi', cb: () => this.showAnalyticsReport() },
+        { label: 'Reset Analytics', cb: () => this.resetAnalytics() },
+      ],
+    });
+
+    // 6. Informazioni
     sections.push({
       title: 'Informazioni',
       buttons: [
@@ -474,6 +483,142 @@ export class LabControlsMenu {
     close.setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => info.destroy());
     info.add(close);
+  }
+
+  // ── Analytics ──────────────────────────────────────────────────
+
+  private analyticsOverlay: HTMLDivElement | null = null;
+
+  private showAnalyticsReport(): void {
+    // Toggle off
+    if (this.analyticsOverlay) {
+      this.analyticsOverlay.remove();
+      this.analyticsOverlay = null;
+      return;
+    }
+
+    const analytics = this.scene.dialogAnalytics;
+    if (!analytics) {
+      console.warn('[LabControlsMenu] DialogAnalytics not available');
+      return;
+    }
+
+    const report = analytics.getReport();
+
+    // Also print to console
+    analytics.printReport();
+
+    // Build HTML overlay
+    const div = document.createElement('div');
+    div.id = 'analytics-overlay';
+    div.style.cssText =
+      'position:fixed;top:20px;left:20px;z-index:99999;background:#1a1a2eee;color:#e0e0e0;' +
+      'font:12px/1.5 monospace;padding:16px;max-height:80vh;max-width:600px;overflow:auto;' +
+      'border:2px solid #4fc3f7;border-radius:8px;pointer-events:auto;';
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ Chiudi';
+    closeBtn.style.cssText =
+      'position:absolute;top:8px;right:8px;background:#c62828;color:#fff;border:none;' +
+      'padding:4px 10px;border-radius:4px;cursor:pointer;font:12px monospace;';
+    closeBtn.onclick = () => { div.remove(); this.analyticsOverlay = null; };
+    div.appendChild(closeBtn);
+
+    let html = `<h3 style="color:#4fc3f7;margin:0 0 12px">📊 Dialog Analytics Report</h3>`;
+    html += `<div>Totale dialoghi: <b>${report.totalDialogs}</b></div>`;
+    if (report.timespan) {
+      html += `<div style="color:#888">Periodo: ${report.timespan.first.slice(11, 19)} → ${report.timespan.last.slice(11, 19)}</div>`;
+    }
+
+    // By Category
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Per Categoria</h4>`;
+    html += '<table style="width:100%;border-collapse:collapse">';
+    for (const [cat, count] of Object.entries(report.byCategory).sort((a, b) => b[1] - a[1])) {
+      const pct = report.totalDialogs > 0 ? ((count / report.totalDialogs) * 100).toFixed(1) : '0';
+      html += `<tr><td style="padding:2px 8px">${cat}</td><td style="text-align:right"><b>${count}</b></td><td style="text-align:right;color:#888">${pct}%</td></tr>`;
+    }
+    html += '</table>';
+
+    // By Agent
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Per Agente</h4>`;
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="color:#888"><td>Nome</td><td>Ruolo</td><td>Tot</td><td>Init</td><td>Tgt</td></tr>';
+    for (const [, ag] of Object.entries(report.byAgent).sort((a, b) => b[1].count - a[1].count)) {
+      html += `<tr><td style="padding:2px 4px">${ag.name}</td><td style="color:#888">${ag.role.replace(/_portrait$/, '')}</td>` +
+        `<td style="text-align:right"><b>${ag.count}</b></td>` +
+        `<td style="text-align:right;color:#4caf50">${ag.asInitiator}</td>` +
+        `<td style="text-align:right;color:#ff9800">${ag.asTarget}</td></tr>`;
+    }
+    html += '</table>';
+
+    // By Role Pair
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Per Coppia Ruoli</h4>`;
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += '<tr style="color:#888"><td>Coppia</td><td>N</td><td>Dist.media</td><td>Stessa stanza</td></tr>';
+    for (const [pair, data] of Object.entries(report.byRolePair).sort((a, b) => b[1].count - a[1].count)) {
+      html += `<tr><td style="padding:2px 4px">${pair}</td>` +
+        `<td style="text-align:right"><b>${data.count}</b></td>` +
+        `<td style="text-align:right">${data.avgDistance}px</td>` +
+        `<td style="text-align:right">${data.sameRoomPct}%</td></tr>`;
+    }
+    html += '</table>';
+
+    // By Room
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Per Stanza</h4>`;
+    html += '<table style="width:100%;border-collapse:collapse">';
+    for (const [room, count] of Object.entries(report.byRoom).sort((a, b) => b[1] - a[1])) {
+      html += `<tr><td style="padding:2px 8px">${room}</td><td style="text-align:right"><b>${count}</b></td></tr>`;
+    }
+    html += '</table>';
+
+    // Proximity
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Prossimità (px)</h4>`;
+    const p = report.proximityStats;
+    html += `<div>Media: <b>${p.avgDistance}</b> | Min: ${p.minDistance} | Max: ${p.maxDistance} | Mediana: ${p.medianDistance}</div>`;
+
+    // Movement Triggers
+    if (Object.keys(report.movementTriggers).length > 0) {
+      html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Movimenti Innescati</h4>`;
+      html += '<table style="width:100%;border-collapse:collapse">';
+      for (const [room, count] of Object.entries(report.movementTriggers).sort((a, b) => b[1] - a[1])) {
+        html += `<tr><td style="padding:2px 8px">${room}</td><td style="text-align:right"><b>${count}</b></td></tr>`;
+      }
+      html += '</table>';
+    }
+
+    // Recent dialogs
+    html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Ultimi Dialoghi</h4>`;
+    for (const d of report.recentDialogs.slice(-10)) {
+      const time = d.wallClock.slice(11, 19);
+      const dist = d.distance !== null ? `${d.distance}px` : '-';
+      const target = d.targetName ? ` → ${d.targetName}` : '';
+      const room = d.speakerRoom ?? '?';
+      const cat = d.dialogCategory;
+      const resp = d.isResponse ? ' [R]' : '';
+      html += `<div style="margin:2px 0;font-size:11px;border-left:3px solid ${d.isResponse ? '#22aa88' : '#4fc3f7'};padding-left:6px">` +
+        `<span style="color:#888">${time}</span> <b>${d.speakerName}</b>${target}${resp} ` +
+        `<span style="color:#888">[${cat}]</span> <span style="color:#666">room:${room} dist:${dist}</span><br>` +
+        `"${d.text.slice(0, 80)}${d.text.length > 80 ? '...' : ''}"</div>`;
+    }
+
+    const content = document.createElement('div');
+    content.innerHTML = html;
+    div.appendChild(content);
+    document.body.appendChild(div);
+    this.analyticsOverlay = div;
+  }
+
+  private resetAnalytics(): void {
+    const analytics = this.scene.dialogAnalytics;
+    if (analytics) {
+      analytics.reset();
+      // Close overlay if open
+      if (this.analyticsOverlay) {
+        this.analyticsOverlay.remove();
+        this.analyticsOverlay = null;
+      }
+    }
   }
 
   // ── Canvas diagnostic ───────────────────────────────────────────
