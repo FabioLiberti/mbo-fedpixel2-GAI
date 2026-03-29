@@ -78,11 +78,14 @@ export const TILE = {
   CABINET:     21,
   MONITOR:     22,
   COUCH:       23,
-  // Arena zone tiles (24-27)
+  // Arena zone tiles (24-30)
   FLOOR_MEETING: 24,  // meeting room floor (blue-tinted)
   FLOOR_BREAK:   25,  // break room floor (warm-tinted)
   FLOOR_SERVER:  26,  // server room floor (green-tinted)
   WALL_INTERNAL: 27,  // thin internal divider
+  FLOOR_PROF:    28,  // professor office (warm amber)
+  FLOOR_PRIVACY: 29,  // privacy lab (purple-tinted)
+  FLOOR_RESEARCH:30,  // research area (teal-tinted)
 };
 
 // ── Generator ─────────────────────────────────────────────────────────
@@ -132,6 +135,9 @@ export function generateTilesetCanvas(theme: TilesetTheme): HTMLCanvasElement {
   drawTile(ctx, TILE.FLOOR_BREAK, theme, drawFloorBreak);
   drawTile(ctx, TILE.FLOOR_SERVER, theme, drawFloorServer);
   drawTile(ctx, TILE.WALL_INTERNAL, theme, drawWallInternal);
+  drawTile(ctx, TILE.FLOOR_PROF, theme, drawFloorProf);
+  drawTile(ctx, TILE.FLOOR_PRIVACY, theme, drawFloorPrivacy);
+  drawTile(ctx, TILE.FLOOR_RESEARCH, theme, drawFloorResearch);
 
   return canvas;
 }
@@ -476,6 +482,30 @@ function drawFloorServer(ctx: CanvasRenderingContext2D, x: number, y: number, s:
   ctx.fillStyle = blendColor(t.floor, '#c8e6c9', 0.35);
   ctx.fillRect(x, y, s, s);
   ctx.strokeStyle = blendColor(t.floorAlt, '#a5d6a7', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawFloorProf(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#ffe0b2', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#ffcc80', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawFloorPrivacy(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#e1bee7', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#ce93d8', 0.3);
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+}
+
+function drawFloorResearch(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = blendColor(t.floor, '#b2dfdb', 0.35);
+  ctx.fillRect(x, y, s, s);
+  ctx.strokeStyle = blendColor(t.floorAlt, '#80cbc4', 0.3);
   ctx.lineWidth = 0.5;
   ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
 }

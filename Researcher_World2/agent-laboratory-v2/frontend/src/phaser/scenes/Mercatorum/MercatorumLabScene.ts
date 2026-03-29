@@ -12,12 +12,13 @@ import { THEME_MERCATORUM, TILE } from '../../utils/tilesetGenerator';
 
 // ---------------------------------------------------------------------------
 // Agent config — aligned with backend PERSONA_REGISTRY["mercatorum"]
+// Positions placed inside their thematic rooms
 // ---------------------------------------------------------------------------
 const MERCATORUM_AGENTS: AgentConfigEntry[] = [
-  { type: 'professor_portrait',          name: 'Elena Conti',   position: { x: 120, y: 180 }, specialization: 'privacy_economics' },
-  { type: 'privacy_specialist_portrait', name: 'Luca Bianchi',  position: { x: 600, y: 180 }, specialization: 'compliance_verification' },
-  { type: 'student',                     name: 'Marco Rossi',   position: { x: 250, y: 400 }, specialization: 'data_science' },
-  { type: 'researcher',                  name: 'Sofia Greco',   position: { x: 500, y: 400 }, specialization: 'privacy_engineering' },
+  { type: 'professor_portrait',          name: 'Elena Conti',   position: { x: 130, y: 140 }, specialization: 'privacy_economics' },
+  { type: 'privacy_specialist_portrait', name: 'Luca Bianchi',  position: { x: 660, y: 140 }, specialization: 'compliance_verification' },
+  { type: 'student',                     name: 'Marco Rossi',   position: { x: 400, y: 420 }, specialization: 'data_science' },
+  { type: 'researcher',                  name: 'Sofia Greco',   position: { x: 400, y: 140 }, specialization: 'privacy_engineering' },
 ];
 
 // Portrait types use high-res images (unique keys to avoid conflict with WorldMapScene spritesheets)
@@ -88,39 +89,85 @@ export class MercatorumLabScene extends BaseLabScene {
       this.createMissingTextures(SPRITESHEET_TYPES);
       this.createAllCharacterAnimations(SPRITESHEET_TYPES);
 
-      // Scene layout: background + tilemap
+      // Scene layout: background + tilemap with 6-room grid
       this.createItalianClassicBackground();
       this.createLabTilemap(THEME_MERCATORUM, (floor, furn, cols, rows) => {
-        // Walls around perimeter
+        // --- Layout constants ---
+        const midY = Math.floor(rows / 2);      // horizontal divider row
+        const c1 = Math.floor(cols / 3);         // first vertical divider col
+        const c2 = Math.floor(2 * cols / 3);     // second vertical divider col
+
+        // --- Perimeter walls ---
         for (let x = 0; x < cols; x++) { furn.putTileAt(TILE.WALL_H, x, 0); furn.putTileAt(TILE.WALL_H, x, rows - 1); }
         for (let y = 1; y < rows - 1; y++) { furn.putTileAt(TILE.WALL, 0, y); furn.putTileAt(TILE.WALL, cols - 1, y); }
         furn.putTileAt(TILE.WALL_CORNER, 0, 0); furn.putTileAt(TILE.WALL_CORNER, cols - 1, 0);
         furn.putTileAt(TILE.WALL_CORNER, 0, rows - 1); furn.putTileAt(TILE.WALL_CORNER, cols - 1, rows - 1);
-        // Bookshelves along top wall
-        for (let x = 2; x < cols - 2; x++) furn.putTileAt(TILE.BOOKSHELF, x, 1);
-        // Doors
-        furn.putTileAt(TILE.DOOR, Math.floor(cols / 2), rows - 1);
-        // Desks along left/right walls
-        for (let y = 3; y < rows - 3; y += 3) {
-          furn.putTileAt(TILE.DESK, 1, y); furn.putTileAt(TILE.CHAIR, 2, y);
-          furn.putTileAt(TILE.DESK, cols - 2, y); furn.putTileAt(TILE.CHAIR, cols - 3, y);
+
+        // --- Internal dividers (horizontal at midY, vertical at c1 & c2) ---
+        for (let x = 1; x < cols - 1; x++) furn.putTileAt(TILE.WALL_INTERNAL, x, midY);
+        for (let y = 1; y < rows - 1; y++) {
+          if (y !== midY) { // leave gap at intersection
+            furn.putTileAt(TILE.WALL_INTERNAL, c1, y);
+            furn.putTileAt(TILE.WALL_INTERNAL, c2, y);
+          }
         }
-        // Central meeting table
-        const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
-        for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) furn.putTileAt(TILE.TABLE, cx + dx, cy + dy);
-        // Rug under table area
-        for (let dx = -3; dx <= 3; dx++) for (let dy = -2; dy <= 2; dy++) {
-          const tx = cx + dx, ty = cy + dy;
-          if (!furn.getTileAt(tx, ty) || furn.getTileAt(tx, ty)!.index === -1) floor.putTileAt(TILE.RUG, tx, ty);
-        }
-        // Plants in corners
-        furn.putTileAt(TILE.PLANT, 1, rows - 2); furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
-        // Server rack
-        furn.putTileAt(TILE.SERVER, 1, 1); furn.putTileAt(TILE.SERVER, 1, 2);
-        // Whiteboard
-        furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) - 1, 1); furn.putTileAt(TILE.WHITEBOARD, Math.floor(cols / 2) + 1, 1);
+        // Doors in dividers
+        furn.putTileAt(TILE.DOOR, c1, Math.floor(midY / 2) + 1);
+        furn.putTileAt(TILE.DOOR, c2, Math.floor(midY / 2) + 1);
+        furn.putTileAt(TILE.DOOR, c1, midY + Math.floor((rows - midY) / 2));
+        furn.putTileAt(TILE.DOOR, c2, midY + Math.floor((rows - midY) / 2));
+        furn.putTileAt(TILE.DOOR, Math.floor(c1 / 2) + 1, midY);
+        furn.putTileAt(TILE.DOOR, Math.floor((c1 + c2) / 2), midY);
+        furn.putTileAt(TILE.DOOR, Math.floor((c2 + cols) / 2), midY);
+
+        // --- Paint room floors ---
+        // Top-left: Ufficio Prof (amber)
+        for (let y = 1; y < midY; y++) for (let x = 1; x < c1; x++) floor.putTileAt(TILE.FLOOR_PROF, x, y);
+        // Top-center: Meeting Room (blue)
+        for (let y = 1; y < midY; y++) for (let x = c1 + 1; x < c2; x++) floor.putTileAt(TILE.FLOOR_MEETING, x, y);
+        // Top-right: Privacy Lab (purple)
+        for (let y = 1; y < midY; y++) for (let x = c2 + 1; x < cols - 1; x++) floor.putTileAt(TILE.FLOOR_PRIVACY, x, y);
+        // Bottom-left: Break Room (warm)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = 1; x < c1; x++) floor.putTileAt(TILE.FLOOR_BREAK, x, y);
+        // Bottom-center: Area Ricerca (teal)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = c1 + 1; x < c2; x++) floor.putTileAt(TILE.FLOOR_RESEARCH, x, y);
+        // Bottom-right: Server Room (green)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = c2 + 1; x < cols - 1; x++) floor.putTileAt(TILE.FLOOR_SERVER, x, y);
+
+        // --- Furniture per room ---
+        // Ufficio Prof: desk + bookshelf
+        furn.putTileAt(TILE.DESK, 2, 2); furn.putTileAt(TILE.CHAIR, 3, 2);
+        furn.putTileAt(TILE.BOOKSHELF, 1, 1); furn.putTileAt(TILE.BOOKSHELF, 2, 1);
+        furn.putTileAt(TILE.PLANT, 1, midY - 1);
+
+        // Meeting Room: central table + whiteboard
+        const mx = Math.floor((c1 + c2) / 2);
+        const my = Math.floor(midY / 2);
+        for (let dx = -1; dx <= 1; dx++) furn.putTileAt(TILE.TABLE, mx + dx, my);
+        furn.putTileAt(TILE.CHAIR, mx - 2, my); furn.putTileAt(TILE.CHAIR, mx + 2, my);
+        furn.putTileAt(TILE.WHITEBOARD, mx, 1);
+
+        // Privacy Lab: desks + server
+        furn.putTileAt(TILE.DESK, c2 + 2, 2); furn.putTileAt(TILE.CHAIR, c2 + 3, 2);
+        furn.putTileAt(TILE.DESK, c2 + 2, 4); furn.putTileAt(TILE.CHAIR, c2 + 3, 4);
+        furn.putTileAt(TILE.MONITOR, cols - 2, 1);
+
+        // Break Room: couch + plant
+        furn.putTileAt(TILE.COUCH, 2, midY + 2); furn.putTileAt(TILE.COUCH, 3, midY + 2);
+        furn.putTileAt(TILE.PLANT, 1, rows - 2);
+
+        // Area Ricerca: desks
+        furn.putTileAt(TILE.DESK, mx - 1, midY + 2); furn.putTileAt(TILE.CHAIR, mx, midY + 2);
+        furn.putTileAt(TILE.DESK, mx - 1, midY + 4); furn.putTileAt(TILE.CHAIR, mx, midY + 4);
+        furn.putTileAt(TILE.BOOKSHELF, mx + 1, midY + 1);
+
+        // Server Room: servers + equipment
+        furn.putTileAt(TILE.SERVER, c2 + 2, midY + 1); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 1);
+        furn.putTileAt(TILE.SERVER, c2 + 2, midY + 2); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 2);
+        furn.putTileAt(TILE.EQUIPMENT, cols - 2, midY + 1);
+        furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
       });
-      this.createArenaZones();
+      // Skip createArenaZones — Mercatorum has its own room layout above
       this.createInteractionZones();
       this.enableZoneZoom();
 
@@ -228,40 +275,46 @@ export class MercatorumLabScene extends BaseLabScene {
     }
   }
 
-  // ---- Scene-specific: Interaction zones --------------------------------
+  // ---- Scene-specific: 6-room interaction zones --------------------------
 
   protected createInteractionZones(): void {
     try {
       const gs = 32;
       const cam = this.cameras.main;
-      const zoneGraphics = this.add.graphics();
-      zoneGraphics.lineStyle(1, 0x00ff00, 0.25);
-      zoneGraphics.setDepth(-3);
+      const cols = Math.floor(cam.width / gs);
+      const rows = Math.floor(cam.height / gs);
+      const midY = Math.floor(rows / 2);
+      const c1 = Math.floor(cols / 3);
+      const c2 = Math.floor(2 * cols / 3);
 
       const addZone = (x: number, y: number, w: number, h: number, name: string, label: string) => {
         const z = this.add.zone(x, y, w, h);
         z.setName(name); z.setInteractive();
-        zoneGraphics.strokeRect(x - w / 2, y - h / 2, w, h);
-        // Label della zona
-        const t = this.add.text(x, y - h / 2 + 8, label, {
-          fontSize: '8px', color: '#ffffff', backgroundColor: '#00000066',
-          padding: { left: 3, right: 3, top: 1, bottom: 1 }
-        }).setOrigin(0.5, 0).setDepth(-2);
+        const t = this.add.text(x, y - h / 2 + 6, label, {
+          fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
+          padding: { left: 4, right: 4, top: 2, bottom: 2 }
+        }).setOrigin(0.5, 0).setDepth(5);
         this.interactionZones.push(z);
       };
 
-      // Zona meeting (centro)
-      addZone(cam.width / 2, cam.height / 2, gs * 6, gs * 4, 'meeting_table', 'Meeting');
-      // Libreria (alto, tutta la larghezza)
-      addZone(cam.width / 2, gs * 2, cam.width - gs * 4, gs * 3, 'library', 'Libreria');
-      // Ufficio professore (alto-sx)
-      addZone(120, 180, gs * 4, gs * 4, 'professor_office', 'Ufficio Prof.');
-      // Ufficio privacy (alto-dx)
-      addZone(600, 180, gs * 4, gs * 4, 'privacy_office', 'Privacy Lab');
-      // Area studenti (basso-sx)
-      addZone(250, 400, gs * 5, gs * 4, 'student_area', 'Area Studenti');
-      // Area ricerca (basso-dx)
-      addZone(500, 400, gs * 5, gs * 4, 'research_area', 'Area Ricerca');
+      // Room center helpers (pixel coords)
+      const roomCX = (x0: number, x1: number) => ((x0 + x1) / 2) * gs;
+      const roomCY = (y0: number, y1: number) => ((y0 + y1) / 2) * gs;
+      const roomW = (x0: number, x1: number) => (x1 - x0) * gs;
+      const roomH = (y0: number, y1: number) => (y1 - y0) * gs;
+
+      // Top-left: Ufficio Prof.
+      addZone(roomCX(1, c1), roomCY(1, midY), roomW(1, c1), roomH(1, midY), 'professor_office', 'Ufficio Prof.');
+      // Top-center: Meeting Room
+      addZone(roomCX(c1 + 1, c2), roomCY(1, midY), roomW(c1 + 1, c2), roomH(1, midY), 'meeting_room', 'Meeting Room');
+      // Top-right: Privacy Lab
+      addZone(roomCX(c2 + 1, cols - 1), roomCY(1, midY), roomW(c2 + 1, cols - 1), roomH(1, midY), 'privacy_lab', 'Privacy Lab');
+      // Bottom-left: Break Room
+      addZone(roomCX(1, c1), roomCY(midY + 1, rows - 1), roomW(1, c1), roomH(midY + 1, rows - 1), 'break_room', 'Break Room');
+      // Bottom-center: Area Ricerca
+      addZone(roomCX(c1 + 1, c2), roomCY(midY + 1, rows - 1), roomW(c1 + 1, c2), roomH(midY + 1, rows - 1), 'research_area', 'Area Ricerca');
+      // Bottom-right: Server Room
+      addZone(roomCX(c2 + 1, cols - 1), roomCY(midY + 1, rows - 1), roomW(c2 + 1, cols - 1), roomH(midY + 1, rows - 1), 'server_room', 'Server Room');
     } catch (error) {
       console.error('Error in createInteractionZones:', error);
     }

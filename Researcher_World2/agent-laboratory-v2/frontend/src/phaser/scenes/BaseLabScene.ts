@@ -332,20 +332,49 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     // No-op — icons are now driven by agent state changes, not zone proximity
   }
 
-  /** Map agent states to icons */
-  private static STATE_ICONS: Record<string, string> = {
-    working: '💻',
-    discussing: '💬',
-    meeting: '🤝',
+  // Room-to-allowed-state mapping for context-aware icons
+  private static ROOM_STATE_ICONS: Record<string, Record<string, string>> = {
+    // working → only in offices / labs / server
+    professor_office: { working: '💻', discussing: '💬' },
+    privacy_lab:      { working: '💻', discussing: '💬' },
+    research_area:    { working: '💻', discussing: '💬' },
+    server_room:      { working: '💻' },
+    // meeting → break room (casual) or meeting room (formal)
+    break_room:       { meeting: '🤝', discussing: '💬' },
+    meeting_room:     { presenting: '📊', meeting: '🤝', discussing: '💬' },
+  };
+  // Fallback: walking shown everywhere, discussing when near another agent
+  private static ANYWHERE_ICONS: Record<string, string> = {
     walking: '🚶',
-    presenting: '📊',
+    discussing: '💬',
   };
 
-  /** Listen for agent state changes and show the corresponding icon. */
+  /** Determine which room an agent is in based on interaction zones. */
+  private getAgentRoom(agent: Agent): string | null {
+    for (const zone of this.interactionZones) {
+      const bounds = zone.getBounds();
+      if (bounds.contains(agent.x, agent.y)) return zone.name;
+    }
+    return null;
+  }
+
+  /** Listen for agent state changes and show room-appropriate icon. */
   protected enableStateIcons(): void {
     this.events.on('agent-state-change', (agent: Agent, state: string) => {
-      const icon = BaseLabScene.STATE_ICONS[state];
-      if (!icon) return; // no icon for idle
+      if (state === 'idle') return;
+
+      const room = this.getAgentRoom(agent);
+      let icon: string | undefined;
+
+      // Check room-specific mapping first
+      if (room && BaseLabScene.ROOM_STATE_ICONS[room]) {
+        icon = BaseLabScene.ROOM_STATE_ICONS[room][state];
+      }
+      // Fallback to anywhere icons
+      if (!icon) {
+        icon = BaseLabScene.ANYWHERE_ICONS[state];
+      }
+      if (!icon) return;
 
       const key = agent.getId() + '_state';
       const now = this.time.now;
@@ -356,7 +385,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const t = this.add.text(agent.x, startY, icon, { fontSize: '22px' });
       t.setOrigin(0.5).setDepth(100).setAlpha(1);
 
-      // Hold visible for 2s, then fade out over 1.5s
       this.tweens.add({
         targets: t,
         alpha: 0,
@@ -664,6 +692,11 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.isZoomed = true;
 
     const cam = this.cameras.main;
+
+    // Remove bounds so the camera can freely scroll to any zone
+    cam.removeBounds();
+
+    // Target: center the zone in the zoomed viewport
     const targetX = centerX - cam.width / (2 * zoomLevel);
     const targetY = centerY - cam.height / (2 * zoomLevel);
 
@@ -708,6 +741,10 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       duration: 400,
       ease: 'Power2',
       onUpdate: () => { cam.setZoom(proxy.z); cam.setScroll(proxy.sx, proxy.sy); },
+      onComplete: () => {
+        // Restore bounds after zoom-out completes
+        cam.setBounds(0, 0, cam.width, cam.height);
+      },
     });
 
     if (this.zoomBackBtn) {
