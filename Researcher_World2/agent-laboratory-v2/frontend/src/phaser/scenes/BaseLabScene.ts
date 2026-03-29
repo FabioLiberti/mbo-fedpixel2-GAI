@@ -364,14 +364,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       meeting_room:     ['Devo preparare i grafici per la riunione.', 'Voglio discutere i risultati con il team.', 'È ora di aggiornarci sui progressi.'],
       _default:         ['Devo verificare una cosa importante.', 'Ho avuto un\'intuizione, vado a controllare.', 'Voglio confrontare i dati con quelli precedenti.'],
     },
-    discussing: {
-      _default: ['Cosa ne pensi?', 'Parliamone.', "Ho un'idea."],
-    },
-    meeting: {
-      break_room:   ['Pausa caffè!', 'Tutto bene con il progetto?', 'Che ne dici dei risultati?'],
-      meeting_room: ['Iniziamo la riunione.', 'Vediamo i progressi del team.', 'Aggiorniamoci sui risultati.'],
-      _default:     ['Confrontiamoci.', 'Serve un allineamento.', 'Discutiamo i prossimi passi.'],
-    },
+    // discussing and meeting: no icon phrases — the dialog system handles speech bubbles
+    discussing: {},
+    meeting: {},
     presenting: {
       _default: ['Ecco i risultati del round.', 'Guardate questi grafici.', 'Vi mostro i dati.'],
     },

@@ -563,8 +563,52 @@ La proposta deve essere concisa, specifica e convincente."""
             Risposta di fallback
         """
         if response_type == "dialog":
+            # Normalize agent type: strip suffixes like _portrait
+            normalized = agent_type.lower().replace("_portrait", "")
+            fallback_pools = {
+                "professor": [
+                    "Vi mostro le garanzie teoriche del nostro approccio al federated learning.",
+                    "Analizziamo le proprietà di convergenza del modello.",
+                    "Dobbiamo confrontare FedAvg con FedProx sui nostri dati.",
+                    "Ho rivisto i risultati: il modello converge dopo 15 round.",
+                    "La distribuzione non-IID è il vero problema qui.",
+                ],
+                "researcher": [
+                    "Sto analizzando le proprietà di convergenza del nostro modello con dati non-IID.",
+                    "Ho trovato un modo per ridurre il budget di privacy.",
+                    "L'efficienza della comunicazione è la sfida principale.",
+                    "Sto testando diverse strategie di partizionamento dati.",
+                    "Il gradient clipping migliora la stabilità del training.",
+                ],
+                "student": [
+                    "Sto implementando un nuovo metodo di aggregazione.",
+                    "Il dataset che uso ha una distribuzione molto sbilanciata.",
+                    "La loss non scende dopo il round 20, possibile overfitting.",
+                    "Sto scrivendo la sezione metodologica del paper.",
+                    "Posso occuparmi dell'implementazione del client sampling.",
+                ],
+                "privacy_specialist": [
+                    "Il nostro approccio fornisce forti garanzie di privacy con perdita minima di accuratezza.",
+                    "Il budget epsilon è quasi esaurito per questo round.",
+                    "Ho verificato la conformità con il framework NIST.",
+                    "La differential privacy locale offre garanzie più forti.",
+                    "Ho simulato un attacco di model inversion: siamo protetti.",
+                ],
+                "doctor": [
+                    "La privacy dei pazienti deve essere la nostra priorità.",
+                    "Il modello federato rispetta le normative GDPR.",
+                    "Servono più ospedali nel consorzio per migliorare l'accuracy.",
+                    "Il comitato etico ha approvato il protocollo federato.",
+                    "La sensibilità del modello diagnostico è al 94%.",
+                ],
+            }
+            import random
+            pool = fallback_pools.get(normalized)
+            if pool:
+                return random.choice(pool)
+            # Try config fallbacks
             fallbacks = self.config.get("dialog_generation", {}).get("fallback_dialogs", {})
-            return fallbacks.get(agent_type.lower(), fallbacks.get("default", "Sono concentrato sulla mia ricerca in federated learning."))
+            return fallbacks.get(normalized, fallbacks.get("default", "Proseguo con la mia ricerca."))
         elif response_type == "fl_decision":
             return "Uso l'algoritmo FedAvg con parametri predefiniti."
         elif response_type == "action_plan":
