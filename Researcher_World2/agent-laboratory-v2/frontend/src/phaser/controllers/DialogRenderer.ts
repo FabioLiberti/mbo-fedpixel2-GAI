@@ -467,4 +467,55 @@ export class DialogRenderer {
     this.coffeeIndex++;
     return pair;
   }
+
+  // ── Meeting room pairs ──────────────────────────────────────────────
+
+  private static MEETING_ROOM: { opener: string; reply: string }[] = [
+    { opener: 'Andiamo a presentare i risultati in sala conferenze?', reply: 'Ottima idea, preparo le slide!' },
+    { opener: 'Dobbiamo discutere i risultati del round. Sala conferenze?', reply: 'Sì, porto anche i grafici.' },
+    { opener: 'Ho preparato la presentazione. Ci vediamo in sala conferenze.', reply: 'Arrivo subito, non vedo l\'ora di vedere i risultati.' },
+    { opener: 'Organizziamo un meeting per allinearci sul progetto?', reply: 'Perfetto, andiamo in sala conferenze.' },
+    { opener: 'I risultati sono pronti. Meeting room?', reply: 'Certo, facciamo il punto della situazione.' },
+  ];
+  private meetingIndex: number = 0;
+
+  getMeetingRoomPair(): { opener: string; reply: string } {
+    const pair = DialogRenderer.MEETING_ROOM[this.meetingIndex % DialogRenderer.MEETING_ROOM.length];
+    this.meetingIndex++;
+    return pair;
+  }
+
+  // ── Server room pairs ───────────────────────────────────────────────
+
+  private static SERVER_ROOM: { opener: string; reply: string }[] = [
+    { opener: 'Andiamo a controllare l\'elaborazione in sala server?', reply: 'Sì, voglio vedere le metriche in tempo reale.' },
+    { opener: 'Il training sta girando. Andiamo a controllare i server.', reply: 'Buona idea, verifico anche i log.' },
+    { opener: 'Devo monitorare il round corrente. Vieni con me in sala server?', reply: 'Certo, controlliamo insieme.' },
+    { opener: 'I server sembrano sotto carico. Andiamo a verificare.', reply: 'Arrivo, porto il laptop per i diagnostici.' },
+    { opener: 'Controlliamo lo stato dell\'aggregazione in sala server.', reply: 'Ok, voglio vedere se il modello sta convergendo.' },
+  ];
+  private serverIndex: number = 0;
+
+  getServerRoomPair(): { opener: string; reply: string } {
+    const pair = DialogRenderer.SERVER_ROOM[this.serverIndex % DialogRenderer.SERVER_ROOM.length];
+    this.serverIndex++;
+    return pair;
+  }
+
+  // ── Professor office pairs (professor invites colleague) ────────────
+
+  private static PROF_OFFICE: { opener: string; reply: string }[] = [
+    { opener: 'Vieni a parlarne nel mio ufficio.', reply: 'Certo, professoressa. Arrivo subito.' },
+    { opener: 'Ho bisogno di discutere una cosa. Vieni nel mio ufficio.', reply: 'Va bene, vengo immediatamente.' },
+    { opener: 'Parliamone con calma nel mio ufficio.', reply: 'D\'accordo, mi fa piacere confrontarci.' },
+    { opener: 'Ti aspetto nel mio ufficio, devo mostrarti qualcosa.', reply: 'Arrivo tra un momento.' },
+    { opener: 'Facciamo il punto nel mio ufficio.', reply: 'Perfetto, ho anche alcune domande da farti.' },
+  ];
+  private profOfficeIndex: number = 0;
+
+  getProfOfficePair(): { opener: string; reply: string } {
+    const pair = DialogRenderer.PROF_OFFICE[this.profOfficeIndex % DialogRenderer.PROF_OFFICE.length];
+    this.profOfficeIndex++;
+    return pair;
+  }
 }

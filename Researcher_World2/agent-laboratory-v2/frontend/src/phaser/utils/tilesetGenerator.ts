@@ -86,13 +86,22 @@ export const TILE = {
   FLOOR_PROF:    28,  // professor office (warm amber)
   FLOOR_PRIVACY: 29,  // privacy lab (purple-tinted)
   FLOOR_RESEARCH:30,  // research area (teal-tinted)
+  // Row 4: extra furniture (31-38)
+  LAMP:          31,
+  PAINTING:      32,
+  PROJECTOR:     33,
+  COFFEE_TABLE:  34,
+  FRIDGE:        35,
+  VENDING:       36,
+  PRINTER:       37,
+  UPS:           38,
 };
 
 // ── Generator ─────────────────────────────────────────────────────────
 
 const TILE_SIZE = 32;
 const COLS = 8;
-const ROWS = 4;
+const ROWS = 5;
 
 /**
  * Generate a themed tileset canvas. Returns the canvas element.
@@ -138,6 +147,14 @@ export function generateTilesetCanvas(theme: TilesetTheme): HTMLCanvasElement {
   drawTile(ctx, TILE.FLOOR_PROF, theme, drawFloorProf);
   drawTile(ctx, TILE.FLOOR_PRIVACY, theme, drawFloorPrivacy);
   drawTile(ctx, TILE.FLOOR_RESEARCH, theme, drawFloorResearch);
+  drawTile(ctx, TILE.LAMP, theme, drawLamp);
+  drawTile(ctx, TILE.PAINTING, theme, drawPainting);
+  drawTile(ctx, TILE.PROJECTOR, theme, drawProjector);
+  drawTile(ctx, TILE.COFFEE_TABLE, theme, drawCoffeeTable);
+  drawTile(ctx, TILE.FRIDGE, theme, drawFridge);
+  drawTile(ctx, TILE.VENDING, theme, drawVending);
+  drawTile(ctx, TILE.PRINTER, theme, drawPrinter);
+  drawTile(ctx, TILE.UPS, theme, drawUPS);
 
   return canvas;
 }
@@ -522,4 +539,196 @@ function drawWallInternal(ctx: CanvasRenderingContext2D, x: number, y: number, s
   ctx.fillStyle = t.wall;
   ctx.fillRect(x + 4, y + s / 2 - 1, 2, 2);
   ctx.fillRect(x + s - 6, y + s / 2 - 1, 2, 2);
+}
+
+// ── Extra furniture tiles ────────────────────────────────────────────
+
+function drawLamp(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Base
+  ctx.fillStyle = t.metal;
+  ctx.fillRect(x + 12, y + 24, 8, 6);
+  // Pole
+  ctx.fillStyle = '#888';
+  ctx.fillRect(x + 15, y + 8, 2, 16);
+  // Shade
+  ctx.fillStyle = '#fff8e1';
+  ctx.beginPath();
+  ctx.moveTo(x + 8, y + 10);
+  ctx.lineTo(x + 24, y + 10);
+  ctx.lineTo(x + 20, y + 4);
+  ctx.lineTo(x + 12, y + 4);
+  ctx.closePath();
+  ctx.fill();
+  // Glow
+  ctx.fillStyle = '#ffeb3b';
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath();
+  ctx.arc(x + 16, y + 8, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+}
+
+function drawPainting(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.wall;
+  ctx.fillRect(x, y, s, s);
+  // Frame
+  ctx.fillStyle = t.woodDark;
+  ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+  // Canvas
+  ctx.fillStyle = '#f5f0e0';
+  ctx.fillRect(x + 6, y + 6, s - 12, s - 12);
+  // Abstract art
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(x + 8, y + 10, 6, 8);
+  ctx.fillStyle = '#2980b9';
+  ctx.fillRect(x + 16, y + 8, 8, 6);
+  ctx.fillStyle = '#27ae60';
+  ctx.fillRect(x + 10, y + 18, 10, 4);
+}
+
+function drawProjector(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Ceiling mount
+  ctx.fillStyle = t.metal;
+  ctx.fillRect(x + 13, y, 6, 6);
+  // Projector body
+  ctx.fillStyle = '#444';
+  ctx.fillRect(x + 8, y + 6, 16, 10);
+  // Lens
+  ctx.fillStyle = '#1565c0';
+  ctx.fillRect(x + 10, y + 8, 4, 4);
+  // Light beam (faint)
+  ctx.fillStyle = '#bbdefb';
+  ctx.globalAlpha = 0.25;
+  ctx.beginPath();
+  ctx.moveTo(x + 12, y + 16);
+  ctx.lineTo(x + 4, y + 30);
+  ctx.lineTo(x + 28, y + 30);
+  ctx.lineTo(x + 20, y + 16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+}
+
+function drawCoffeeTable(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Small round table
+  ctx.fillStyle = t.woodDark;
+  ctx.beginPath();
+  ctx.arc(x + 16, y + 16, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = t.wood;
+  ctx.beginPath();
+  ctx.arc(x + 16, y + 16, 8, 0, Math.PI * 2);
+  ctx.fill();
+  // Coffee cup
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 13, y + 12, 6, 5);
+  ctx.fillStyle = '#6d4c41';
+  ctx.fillRect(x + 14, y + 13, 4, 3);
+  // Steam
+  ctx.strokeStyle = '#bbb';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x + 15, y + 11);
+  ctx.quadraticCurveTo(x + 14, y + 8, x + 16, y + 6);
+  ctx.stroke();
+}
+
+function drawFridge(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Body
+  ctx.fillStyle = '#eceff1';
+  ctx.fillRect(x + 6, y + 2, s - 12, s - 4);
+  // Door line
+  ctx.strokeStyle = '#b0bec5';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 14);
+  ctx.lineTo(x + s - 6, y + 14);
+  ctx.stroke();
+  // Handle
+  ctx.fillStyle = '#78909c';
+  ctx.fillRect(x + s - 10, y + 6, 2, 6);
+  ctx.fillRect(x + s - 10, y + 16, 2, 8);
+}
+
+function drawVending(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Machine body
+  ctx.fillStyle = '#37474f';
+  ctx.fillRect(x + 4, y + 2, s - 8, s - 4);
+  // Display window
+  ctx.fillStyle = '#bbdefb';
+  ctx.fillRect(x + 6, y + 4, s - 12, 12);
+  // Product rows
+  ctx.fillStyle = '#e65100';
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 3; c++) {
+      ctx.fillRect(x + 8 + c * 5, y + 5 + r * 5, 3, 3);
+    }
+  }
+  // Coin slot
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(x + s - 10, y + 20, 3, 4);
+  // Dispenser slot
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x + 8, y + 22, 10, 4);
+}
+
+function drawPrinter(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // Body
+  ctx.fillStyle = '#eceff1';
+  ctx.fillRect(x + 4, y + 8, s - 8, s - 14);
+  // Top (feeder)
+  ctx.fillStyle = '#cfd8dc';
+  ctx.fillRect(x + 6, y + 4, s - 12, 6);
+  // Paper
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 8, y + 2, s - 16, 4);
+  // Output tray
+  ctx.fillStyle = '#b0bec5';
+  ctx.fillRect(x + 6, y + s - 8, s - 12, 4);
+  // Status LED
+  ctx.fillStyle = '#4caf50';
+  ctx.fillRect(x + 8, y + 12, 3, 2);
+  // Display
+  ctx.fillStyle = '#1a237e';
+  ctx.fillRect(x + 14, y + 11, 8, 4);
+}
+
+function drawUPS(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: TilesetTheme): void {
+  ctx.fillStyle = t.floor;
+  ctx.fillRect(x, y, s, s);
+  // UPS body (black box)
+  ctx.fillStyle = '#212121';
+  ctx.fillRect(x + 6, y + 4, s - 12, s - 8);
+  // Front panel
+  ctx.fillStyle = '#333';
+  ctx.fillRect(x + 8, y + 6, s - 16, s - 12);
+  // LED indicators
+  ctx.fillStyle = '#4caf50';
+  ctx.fillRect(x + 10, y + 8, 3, 2);
+  ctx.fillRect(x + 14, y + 8, 3, 2);
+  ctx.fillStyle = '#ff9800';
+  ctx.fillRect(x + 18, y + 8, 3, 2);
+  // Battery icon
+  ctx.strokeStyle = '#4caf50';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 10, y + 14, 10, 6);
+  ctx.fillStyle = '#4caf50';
+  ctx.fillRect(x + 11, y + 15, 7, 4);
+  ctx.fillRect(x + 20, y + 16, 2, 2);
+  // Outlets
+  ctx.fillStyle = '#555';
+  ctx.fillRect(x + 10, y + 22, 4, 2);
+  ctx.fillRect(x + 16, y + 22, 4, 2);
 }

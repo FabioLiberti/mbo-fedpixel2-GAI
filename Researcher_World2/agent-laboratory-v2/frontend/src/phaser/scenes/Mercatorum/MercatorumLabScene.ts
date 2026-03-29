@@ -135,36 +135,54 @@ export class MercatorumLabScene extends BaseLabScene {
         for (let y = midY + 1; y < rows - 1; y++) for (let x = c2 + 1; x < cols - 1; x++) floor.putTileAt(TILE.FLOOR_SERVER, x, y);
 
         // --- Furniture per room ---
-        // Ufficio Prof: desk + bookshelf
+        // Ufficio Prof: desk, bookshelf, lamp, painting, rug
         furn.putTileAt(TILE.DESK, 2, 2); furn.putTileAt(TILE.CHAIR, 3, 2);
         furn.putTileAt(TILE.BOOKSHELF, 1, 1); furn.putTileAt(TILE.BOOKSHELF, 2, 1);
         furn.putTileAt(TILE.PLANT, 1, midY - 1);
+        furn.putTileAt(TILE.LAMP, c1 - 1, 1);
+        furn.putTileAt(TILE.PAINTING, c1 - 1, 2);
+        furn.putTileAt(TILE.RUG, 3, 3); furn.putTileAt(TILE.RUG, 4, 3);
 
-        // Meeting Room: central table + whiteboard
+        // Meeting Room: central table, whiteboard, projector, extra chairs
         const mx = Math.floor((c1 + c2) / 2);
         const my = Math.floor(midY / 2);
         for (let dx = -1; dx <= 1; dx++) furn.putTileAt(TILE.TABLE, mx + dx, my);
         furn.putTileAt(TILE.CHAIR, mx - 2, my); furn.putTileAt(TILE.CHAIR, mx + 2, my);
+        furn.putTileAt(TILE.CHAIR, mx - 1, my + 1); furn.putTileAt(TILE.CHAIR, mx + 1, my + 1);
         furn.putTileAt(TILE.WHITEBOARD, mx, 1);
+        furn.putTileAt(TILE.PROJECTOR, mx, my - 2);
+        furn.putTileAt(TILE.PLANT, c2 - 1, 1);
 
-        // Privacy Lab: desks + server
+        // Privacy Lab: desks, server, monitor, printer
         furn.putTileAt(TILE.DESK, c2 + 2, 2); furn.putTileAt(TILE.CHAIR, c2 + 3, 2);
         furn.putTileAt(TILE.DESK, c2 + 2, 4); furn.putTileAt(TILE.CHAIR, c2 + 3, 4);
         furn.putTileAt(TILE.MONITOR, cols - 2, 1);
+        furn.putTileAt(TILE.PRINTER, cols - 2, 3);
+        furn.putTileAt(TILE.BOOKSHELF, c2 + 1, 1);
 
-        // Break Room: couch + plant
+        // Break Room: couch, coffee table, fridge, vending machine, plant
         furn.putTileAt(TILE.COUCH, 2, midY + 2); furn.putTileAt(TILE.COUCH, 3, midY + 2);
+        furn.putTileAt(TILE.COFFEE_TABLE, 2, midY + 3);
+        furn.putTileAt(TILE.FRIDGE, 1, midY + 1);
+        furn.putTileAt(TILE.VENDING, c1 - 1, midY + 1);
         furn.putTileAt(TILE.PLANT, 1, rows - 2);
+        furn.putTileAt(TILE.LAMP, c1 - 1, rows - 2);
 
-        // Area Ricerca: desks
+        // Area Ricerca: desks, bookshelf, printer, lamp
         furn.putTileAt(TILE.DESK, mx - 1, midY + 2); furn.putTileAt(TILE.CHAIR, mx, midY + 2);
         furn.putTileAt(TILE.DESK, mx - 1, midY + 4); furn.putTileAt(TILE.CHAIR, mx, midY + 4);
         furn.putTileAt(TILE.BOOKSHELF, mx + 1, midY + 1);
+        furn.putTileAt(TILE.PRINTER, c2 - 1, midY + 1);
+        furn.putTileAt(TILE.LAMP, c1 + 1, rows - 2);
+        furn.putTileAt(TILE.PLANT, c2 - 1, rows - 2);
 
-        // Server Room: servers + equipment
+        // Server Room: servers, equipment, UPS, monitor
         furn.putTileAt(TILE.SERVER, c2 + 2, midY + 1); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 1);
         furn.putTileAt(TILE.SERVER, c2 + 2, midY + 2); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 2);
         furn.putTileAt(TILE.EQUIPMENT, cols - 2, midY + 1);
+        furn.putTileAt(TILE.UPS, cols - 2, midY + 2);
+        furn.putTileAt(TILE.UPS, cols - 2, midY + 3);
+        furn.putTileAt(TILE.MONITOR, c2 + 1, midY + 3);
         furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
       });
       // Skip createArenaZones — Mercatorum has its own room layout above

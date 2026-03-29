@@ -451,22 +451,26 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   /** Listen for coffee-break events and move agents to break_room zone. */
   protected enableCoffeeBreak(): void {
     this.game.events.on('coffee-break', (data: { agentIds: string[] }) => {
-      // Find break_room zone center
-      const brZone = this.interactionZones.find(z => z.name === 'break_room');
-      if (!brZone) return;
-      const tx = brZone.x;
-      const ty = brZone.y;
-
-      for (const agentId of data.agentIds) {
-        const agent = this.agents.find((a: Agent) => a.getId() === agentId);
-        if (agent) {
-          // Add small random offset so they don't stack
-          const ox = Phaser.Math.Between(-20, 20);
-          const oy = Phaser.Math.Between(-20, 20);
-          agent.moveTo(tx + ox, ty + oy);
-        }
-      }
+      this.moveAgentsToZone(data.agentIds, 'break_room');
     });
+    // Generic go-to-room event: { agentIds: string[], room: string }
+    this.game.events.on('go-to-room', (data: { agentIds: string[]; room: string }) => {
+      this.moveAgentsToZone(data.agentIds, data.room);
+    });
+  }
+
+  /** Move a list of agents to the center of a named zone (with random offset). */
+  private moveAgentsToZone(agentIds: string[], zoneName: string): void {
+    const zone = this.interactionZones.find(z => z.name === zoneName);
+    if (!zone) return;
+    for (const agentId of agentIds) {
+      const agent = this.agents.find((a: Agent) => a.getId() === agentId);
+      if (agent) {
+        const ox = Phaser.Math.Between(-20, 20);
+        const oy = Phaser.Math.Between(-20, 20);
+        agent.moveTo(zone.x + ox, zone.y + oy);
+      }
+    }
   }
 
   protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
@@ -1041,7 +1045,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
       // 7. Update pathfinding grid from furniture layer
       // DOOR tiles are passable (they connect rooms); everything else blocks.
-      const WALKABLE_TILES = new Set([TILE.DOOR, TILE.CHAIR]);
+      const WALKABLE_TILES = new Set([TILE.DOOR, TILE.CHAIR, TILE.RUG, TILE.LAMP]);
       this.grid = Array(r).fill(0).map(() => Array(c).fill(0));
       for (let y = 0; y < r; y++) {
         for (let x = 0; x < c; x++) {

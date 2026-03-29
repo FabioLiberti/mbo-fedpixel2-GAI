@@ -265,42 +265,52 @@ export class DialogEventHandler {
         }
       }
 
-      // Fallback: alternate between greeting, coffee break, and topical dialog
+      // Fallback: alternate between greeting, coffee break, room-based, and topical dialog
+      const isProfessor1 = agent1.role.toLowerCase().includes('professor');
+      const isProfessor2 = agent2.role.toLowerCase().includes('professor');
+      const hasProfessor = isProfessor1 || isProfessor2;
+
       const roll = Math.random();
-      if (roll < 0.3) {
+      if (roll < 0.20) {
         // Greeting
         const { opener, reply } = this.renderer.getGreetingPair();
-        this.creator.createDialog({
-          sourceId: agent1.id, targetId: agent2.id,
-          type: s.getDialogTypeForRole(agent1.role),
-          text: opener, showEffect: true, priority: 5,
-        });
-        setTimeout(() => {
-          this.creator.createDialog({
-            sourceId: agent2.id, targetId: agent1.id,
-            type: s.getDialogTypeForRole(agent2.role),
-            text: reply, showEffect: false, priority: 5, isResponse: true,
-          });
-        }, 5000);
-      } else if (roll < 0.45) {
+        this.emitDialogPair(agent1, agent2, s, opener, reply);
+      } else if (roll < 0.30) {
         // Coffee break — dialog then both agents move to break room
         const { opener, reply } = this.renderer.getCoffeeBreakPair();
-        this.creator.createDialog({
-          sourceId: agent1.id, targetId: agent2.id,
-          type: s.getDialogTypeForRole(agent1.role),
-          text: opener, showEffect: true, priority: 5,
-        });
-        setTimeout(() => {
-          this.creator.createDialog({
-            sourceId: agent2.id, targetId: agent1.id,
-            type: s.getDialogTypeForRole(agent2.role),
-            text: reply, showEffect: false, priority: 5, isResponse: true,
-          });
-        }, 5000);
-        // After dialog, emit event so agents move to break room
+        this.emitDialogPair(agent1, agent2, s, opener, reply);
         setTimeout(() => {
           s.scene.game.events.emit('coffee-break', {
             agentIds: [data.agentId1, data.agentId2],
+          });
+        }, 12000);
+      } else if (roll < 0.40) {
+        // Meeting room — present results
+        const { opener, reply } = this.renderer.getMeetingRoomPair();
+        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        setTimeout(() => {
+          s.scene.game.events.emit('go-to-room', {
+            agentIds: [data.agentId1, data.agentId2], room: 'meeting_room',
+          });
+        }, 12000);
+      } else if (roll < 0.50) {
+        // Server room — check processing
+        const { opener, reply } = this.renderer.getServerRoomPair();
+        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        setTimeout(() => {
+          s.scene.game.events.emit('go-to-room', {
+            agentIds: [data.agentId1, data.agentId2], room: 'server_room',
+          });
+        }, 12000);
+      } else if (roll < 0.60 && hasProfessor) {
+        // Professor office — professor invites colleague
+        const { opener, reply } = this.renderer.getProfOfficePair();
+        const profAgent = isProfessor1 ? agent1 : agent2;
+        const otherAgent = isProfessor1 ? agent2 : agent1;
+        this.emitDialogPair(profAgent, otherAgent, s, opener, reply);
+        setTimeout(() => {
+          s.scene.game.events.emit('go-to-room', {
+            agentIds: [data.agentId1, data.agentId2], room: 'professor_office',
           });
         }, 12000);
       } else {
@@ -325,6 +335,28 @@ export class DialogEventHandler {
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentInteraction error:', e);
     }
+  }
+
+  /** Emit a dialog pair (opener + reply after 5s). */
+  private emitDialogPair(
+    speaker: { id: string; role: string },
+    responder: { id: string; role: string },
+    s: DialogState,
+    opener: string,
+    reply: string,
+  ): void {
+    this.creator.createDialog({
+      sourceId: speaker.id, targetId: responder.id,
+      type: s.getDialogTypeForRole(speaker.role),
+      text: opener, showEffect: true, priority: 5,
+    });
+    setTimeout(() => {
+      this.creator.createDialog({
+        sourceId: responder.id, targetId: speaker.id,
+        type: s.getDialogTypeForRole(responder.role),
+        text: reply, showEffect: false, priority: 5, isResponse: true,
+      });
+    }, 5000);
   }
 
   // ── Agent thinking ────────────────────────────────────────────────
