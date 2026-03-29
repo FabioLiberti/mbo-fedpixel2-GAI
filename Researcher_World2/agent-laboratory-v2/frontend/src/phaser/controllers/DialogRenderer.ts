@@ -78,7 +78,7 @@ export class DialogRenderer {
       }
     }
 
-    const duration = dialog.duration || Math.min(4000 + dialog.text.length * 30, 10000);
+    const duration = dialog.duration || Math.min(6000 + dialog.text.length * 40, 14000);
 
     this.scene.time.delayedCall(duration, () => {
       this.removeBubble(dialog.sourceId);
@@ -143,8 +143,10 @@ export class DialogRenderer {
     if (s.activeBubbles.has(dialog.sourceId)) this.removeBubble(dialog.sourceId);
 
     try {
+      // Offset response bubbles higher to avoid overlapping with question bubble
+      const yOffset = dialog.isResponse ? -80 : -40;
       const bubble = new SpeechBubble(
-        this.scene, sourcePos.x, sourcePos.y - 40, dialog.text, dialog.type, {
+        this.scene, sourcePos.x, sourcePos.y + yOffset, dialog.text, dialog.type, {
           width: 130, padding: 6,
           targetPos: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
           isLLMDialog: dialog.isLLMDialog || false,
@@ -155,6 +157,7 @@ export class DialogRenderer {
       if (!s.showLLMDialogs && dialog.isLLMDialog) bubble.hide();
 
       s.activeBubbles.set(dialog.sourceId, bubble);
+      this.setAgentBubbleFlag(dialog.sourceId, true);
       if (s.debugMode) {
         console.log(`[DialogRenderer] Speech bubble for ${dialog.sourceId}${dialog.isLLMDialog ? ' (LLM)' : ''}`);
       }
@@ -165,11 +168,23 @@ export class DialogRenderer {
 
   // ── Bubble management ─────────────────────────────────────────────
 
+  /** Notify an Agent sprite that its bubble appeared / disappeared. */
+  private setAgentBubbleFlag(agentId: string, active: boolean): void {
+    try {
+      const child = this.scene.children.getChildren()
+        .find((c: any) => c.getId && c.getId() === agentId);
+      if (child && 'setBubbleActive' in child) {
+        (child as any).setBubbleActive(active);
+      }
+    } catch { /* ignore */ }
+  }
+
   removeBubble(agentId: string): void {
     const bubble = this.state.activeBubbles.get(agentId);
     if (bubble) {
       bubble.destroy();
       this.state.activeBubbles.delete(agentId);
+      this.setAgentBubbleFlag(agentId, false);
       if (this.state.debugMode) console.log(`[DialogRenderer] Bubble removed: ${agentId}`);
     }
   }

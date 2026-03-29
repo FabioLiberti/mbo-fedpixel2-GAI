@@ -55,6 +55,11 @@ export class Agent extends Phaser.GameObjects.Sprite {
   // Ultima interazione salvata per evitare ripetizioni
   private lastInteractionTime: number = 0;
   private lastInteractionAgent: string | null = null;
+
+  // Flag: agent has an active speech bubble — freeze movement
+  private hasBubble: boolean = false;
+  // Agent to interact with once we arrive close enough
+  private pendingInteractionAgent: Agent | null = null;
   
   constructor(
     scene: any, // Usiamo any per evitare problemi di tipizzazione con Phaser
@@ -207,6 +212,18 @@ export class Agent extends Phaser.GameObjects.Sprite {
       if (this.currentPathIndex >= this.path.length) {
         this.path = [];
         this.currentPathIndex = 0;
+
+        // If we were walking towards an agent to interact, start interaction
+        if (this.pendingInteractionAgent) {
+          const pa = this.pendingInteractionAgent;
+          const dist = Phaser.Math.Distance.Between(this.x, this.y, pa.x, pa.y);
+          if (dist < 80) {
+            this.startInteraction(pa);
+            return;
+          }
+          this.pendingInteractionAgent = null;
+        }
+
         this.changeState(AgentState.IDLE);
         return;
       }
@@ -241,11 +258,11 @@ export class Agent extends Phaser.GameObjects.Sprite {
     }
     
     // Prendi decisioni autonome solo se non impegnato in altre attività
-    if (time > this.nextDecisionTime && this.currentState === AgentState.IDLE) {
+    if (time > this.nextDecisionTime && this.currentState === AgentState.IDLE && !this.hasBubble) {
       this.makeDecision();
       
-      // Imposta il prossimo momento decisionale con un po' di casualità
-      this.nextDecisionTime = time + Phaser.Math.Between(3000, 8000);
+      // Imposta il prossimo momento decisionale (più rilassato)
+      this.nextDecisionTime = time + Phaser.Math.Between(6000, 14000);
     }
   }
   
@@ -282,23 +299,21 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Fa prendere una decisione autonoma all'agente
    */
   private makeDecision(): void {
-    // Probabilità delle varie azioni
     const rand = Math.random();
-    
-    if (rand < 0.4) {
-      // Spostati in un punto casuale
+
+    if (rand < 0.20) {
+      // Spostati in un punto casuale (meno frequente)
       this.moveToRandomPoint();
-    } else if (rand < 0.7) {
-      // Passa allo stato di lavoro per un po'
+    } else if (rand < 0.45) {
+      // Passa allo stato di lavoro per un periodo più lungo
       this.changeState(AgentState.WORKING);
-      this.stateTimer = this.getCurrentTime() + Phaser.Math.Between(5000, 10000);
-    } else if (rand < 0.9) {
+      this.stateTimer = this.getCurrentTime() + Phaser.Math.Between(8000, 16000);
+    } else if (rand < 0.65) {
       // Cerca altri agenti nelle vicinanze con cui interagire
       this.findNearbyAgentToInteract();
     } else {
-      // Resta in idle
+      // Resta in idle (più frequente — agenti più calmi)
       this.changeState(AgentState.IDLE);
-      // Gioca un'animazione casuale di idle
       if (Math.random() > 0.5) {
         this.playAnimation();
       }
@@ -364,37 +379,26 @@ export class Agent extends Phaser.GameObjects.Sprite {
         }
       }
       
-      // Se abbiamo trovato un agente vicino e la distanza è ragionevole
-      if (closestAgent && minDistance < 200) {
-        // Evita interazioni ripetitive con lo stesso agente in poco tempo
-        const currentTime = this.getCurrentTime();
-        if (this.lastInteractionAgent === closestAgent.getId() &&
-            currentTime - this.lastInteractionTime < 10000) {
-          return;
-        }
+      if (!closestAgent) { this.moveToRandomPoint(); return; }
 
-        this.lastInteractionAgent = closestAgent.getId();
-        this.lastInteractionTime = currentTime;
-
-        const rand = Math.random();
-        const interType = rand < 0.6 ? 'discussion' : 'meeting';
-        const state = interType === 'discussion' ? AgentState.DISCUSSING : AgentState.MEETING;
-        const duration = Phaser.Math.Between(12000, 15000);
-        const endTime = currentTime + duration;
-
-        // Freeze both agents for the conversation duration
-        this.stopAndConverse(state, endTime);
-        closestAgent.stopAndConverse(state, endTime);
-
-        this.getGameEvents().emit('agent-interaction', {
-          agentId1: this.id,
-          agentId2: closestAgent.getId(),
-          type: interType
-        });
-      } else {
-        // Se non ci sono agenti vicini, cerca un punto casuale
+      // Evita interazioni ripetitive con lo stesso agente in poco tempo
+      const currentTime = this.getCurrentTime();
+      if (this.lastInteractionAgent === closestAgent.getId() &&
+          currentTime - this.lastInteractionTime < 15000) {
         this.moveToRandomPoint();
+        return;
       }
+
+      // If far away, walk towards the other agent first
+      if (minDistance > 60) {
+        this.moveTowards(closestAgent.x, closestAgent.y, 40);
+        // Store target agent so we can interact on arrival
+        this.pendingInteractionAgent = closestAgent;
+        return;
+      }
+
+      // Close enough — start interaction
+      this.startInteraction(closestAgent);
     } catch (error) {
       console.error('Error in findNearbyAgentToInteract:', error);
       // In caso di errore, tenta semplicemente di muoversi in un punto casuale
@@ -454,6 +458,40 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Stops movement and enters a conversation state until endTime.
    * Called on BOTH agents involved in a discussion/meeting.
    */
+  /** Start an interaction (discussion/meeting) with another agent. */
+  private startInteraction(other: Agent): void {
+    this.pendingInteractionAgent = null;
+    const currentTime = this.getCurrentTime();
+
+    this.lastInteractionAgent = other.getId();
+    this.lastInteractionTime = currentTime;
+
+    const interType = Math.random() < 0.6 ? 'discussion' : 'meeting';
+    const state = interType === 'discussion' ? AgentState.DISCUSSING : AgentState.MEETING;
+    const duration = Phaser.Math.Between(14000, 18000);
+    const endTime = currentTime + duration;
+
+    this.stopAndConverse(state, endTime);
+    other.stopAndConverse(state, endTime);
+
+    this.getGameEvents().emit('agent-interaction', {
+      agentId1: this.id,
+      agentId2: other.getId(),
+      type: interType,
+    });
+  }
+
+  /** Called by DialogRenderer when a bubble appears/disappears for this agent. */
+  public setBubbleActive(active: boolean): void {
+    this.hasBubble = active;
+    if (active && this.currentState === AgentState.WALKING) {
+      // Freeze movement while bubble is visible
+      this.path = [];
+      this.currentPathIndex = 0;
+      this.changeState(AgentState.IDLE);
+    }
+  }
+
   public stopAndConverse(state: AgentState, endTime: number): void {
     this.path = [];
     this.currentPathIndex = 0;
