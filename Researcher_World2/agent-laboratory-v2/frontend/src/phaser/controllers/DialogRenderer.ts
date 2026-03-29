@@ -518,4 +518,123 @@ export class DialogRenderer {
     this.profOfficeIndex++;
     return pair;
   }
+
+  // ── Role-pair dialogs ──────────────────────────────────────────────
+  // Key = sorted "roleA|roleB". The `speaker` field indicates which role
+  // speaks first (0 = first alphabetically, 1 = second).
+  // `room` is optional: if set, agents move there after the dialog.
+
+  static ROLE_PAIR_DIALOGS: Record<string, {
+    pairs: { opener: string; reply: string }[];
+    speaker: 0 | 1;        // which role speaks first in the sorted key
+    room?: string;          // zone name to move to
+  }> = {
+    // professor + privacy_specialist → Privacy Lab
+    'privacy_specialist|professor': {
+      speaker: 0,  // privacy_specialist speaks first
+      room: 'privacy_lab',
+      pairs: [
+        { opener: 'Professoressa, ragioniamo sull\'adozione della Differential Privacy e sulla PPML.', reply: 'Ottimo spunto. Andiamo al Privacy Lab a studiare i parametri epsilon.' },
+        { opener: 'Ho dei dubbi sul trade-off tra privacy e utilità del modello. Ne parliamo al lab?', reply: 'Assolutamente. La DP richiede un\'analisi attenta del budget di rumore.' },
+        { opener: 'I risultati del secure aggregation sono pronti. Li analizziamo al Privacy Lab?', reply: 'Sì, voglio verificare le garanzie formali di privacy.' },
+        { opener: 'Professoressa, dovremmo valutare l\'impatto della DP locale vs globale.', reply: 'Hai ragione, è fondamentale per il nostro framework PPML. Andiamo.' },
+        { opener: 'Ho simulato un attacco di membership inference. Discutiamone al lab.', reply: 'Importante. Devo vedere i risultati per calibrare le contromisure.' },
+      ],
+    },
+    // professor + researcher → Meeting Room (discuss methodology)
+    'professor|researcher': {
+      speaker: 0,  // professor speaks first
+      room: 'meeting_room',
+      pairs: [
+        { opener: 'Ho rivisto il tuo paper. Discutiamone in sala conferenze.', reply: 'Certo, professoressa. Ho preparato le revisioni.' },
+        { opener: 'I risultati sperimentali meritano un\'analisi approfondita. Meeting room?', reply: 'Sì, porto i grafici di convergenza e le metriche.' },
+        { opener: 'Dobbiamo allineare la metodologia con il framework teorico.', reply: 'D\'accordo, ho alcune proposte da presentarle.' },
+        { opener: 'La tua analisi sulla distribuzione non-IID è interessante. Presentiamola.', reply: 'Grazie! Ho anche nuovi dati da condividere.' },
+        { opener: 'Organizziamo un meeting per pianificare i prossimi esperimenti.', reply: 'Perfetto, ho già una lista di ipotesi da testare.' },
+      ],
+    },
+    // professor + student → Professor Office (mentoring)
+    'professor|student': {
+      speaker: 0,  // professor speaks first
+      room: 'professor_office',
+      pairs: [
+        { opener: 'Marco, vieni nel mio ufficio. Devo darti un feedback sul tuo lavoro.', reply: 'Arrivo subito, professoressa.' },
+        { opener: 'Ho delle osservazioni sulla tua implementazione. Parliamone nel mio ufficio.', reply: 'Certo, sono pronto a prendere appunti.' },
+        { opener: 'Voglio discutere con te la direzione della tua tesi. Vieni.', reply: 'Sì, ho anche delle domande sulla parte sperimentale.' },
+        { opener: 'Hai fatto progressi sul federated learning? Aggiornami nel mio ufficio.', reply: 'Ho dei risultati nuovi da mostrarle, arrivo!' },
+        { opener: 'Ti assegno un nuovo task di ricerca. Passa dal mio ufficio.', reply: 'Certamente, professoressa. Sono curioso.' },
+      ],
+    },
+    // researcher + student → Research Area (collaborative work)
+    'researcher|student': {
+      speaker: 0,  // researcher speaks first
+      room: 'research_area',
+      pairs: [
+        { opener: 'Marco, lavoriamo insieme sulla selezione dei client. Vieni in area ricerca.', reply: 'Sì, sto proprio studiando le strategie di partizionamento.' },
+        { opener: 'Ho bisogno di una mano con i benchmark. Ci vediamo in area ricerca?', reply: 'Certo, porto il mio laptop con i risultati.' },
+        { opener: 'Testiamo insieme l\'aggregazione sui dati non-IID.', reply: 'Ottimo! Ho implementato una nuova funzione di loss.' },
+        { opener: 'Ti mostro come funziona il gradient clipping nel nostro framework.', reply: 'Grazie, è proprio quello che volevo capire.' },
+        { opener: 'Andiamo in area ricerca a debuggare il codice di training.', reply: 'Ok, ho già identificato un possibile problema.' },
+      ],
+    },
+    // researcher + privacy_specialist → Privacy Lab (technical collab)
+    'privacy_specialist|researcher': {
+      speaker: 1,  // researcher speaks first
+      room: 'privacy_lab',
+      pairs: [
+        { opener: 'Luca, ho bisogno di verificare il budget epsilon del mio esperimento.', reply: 'Andiamo al Privacy Lab, ti aiuto con il calcolo della composizione.' },
+        { opener: 'L\'accuracy è calata troppo dopo l\'aggiunta di DP. Analizziamo insieme?', reply: 'Potrebbe essere un problema di calibrazione del rumore. Vediamo al lab.' },
+        { opener: 'Voglio integrare il secure aggregation nel mio pipeline.', reply: 'Buona idea. Ti mostro l\'API al Privacy Lab.' },
+        { opener: 'I gradient clipping e la DP interferiscono. Serve la tua competenza.', reply: 'È un problema noto. Andiamo al lab a trovare il giusto compromesso.' },
+        { opener: 'Ho bisogno di una valutazione formale della privacy del modello.', reply: 'Facciamo un audit completo. Privacy Lab, andiamo.' },
+      ],
+    },
+    // privacy_specialist + student → Privacy Lab (teaching privacy)
+    'privacy_specialist|student': {
+      speaker: 0,  // privacy_specialist speaks first
+      room: 'privacy_lab',
+      pairs: [
+        { opener: 'Marco, vieni al Privacy Lab. Ti spiego la differential privacy in pratica.', reply: 'Ottimo, sto proprio studiando il teorema di composizione.' },
+        { opener: 'Hai applicato il noise mechanism correttamente? Verifico con te al lab.', reply: 'Non sono sicuro del parametro sigma, grazie!' },
+        { opener: 'Ti mostro come funziona un attacco di model inversion. È istruttivo.', reply: 'Wow, sì! Voglio capire le vulnerabilità per difenderci meglio.' },
+        { opener: 'Il tuo codice non implementa il clipping. Correggiamolo al Privacy Lab.', reply: 'Hai ragione, non avevo considerato quel vincolo.' },
+        { opener: 'Facciamo un esercizio pratico sulla privacy-preserving aggregation.', reply: 'Perfetto, imparo molto di più con gli esempi pratici.' },
+      ],
+    },
+  };
+
+  private rolePairIndexes: Map<string, number> = new Map();
+
+  /**
+   * Returns a role-specific dialog pair if one exists for the given roles,
+   * or null if no specific pair is defined.
+   * The returned `speakerFirst` indicates which agent should speak first.
+   */
+  getRolePairDialog(role1: string, role2: string): {
+    opener: string; reply: string; room?: string; speakerFirst: 0 | 1;
+  } | null {
+    const r1 = this.normalizeRole(role1);
+    const r2 = this.normalizeRole(role2);
+    const sorted = [r1, r2].sort();
+    const key = sorted.join('|');
+    const entry = DialogRenderer.ROLE_PAIR_DIALOGS[key];
+    if (!entry) return null;
+
+    const idx = this.rolePairIndexes.get(key) ?? 0;
+    const pair = entry.pairs[idx % entry.pairs.length];
+    this.rolePairIndexes.set(key, idx + 1);
+
+    // Determine which agent (0=agent with role1, 1=agent with role2) speaks first
+    // entry.speaker refers to the index in the SORTED key
+    const sortedSpeaker = entry.speaker;
+    const speakerRole = sorted[sortedSpeaker];
+    const speakerFirst: 0 | 1 = (r1 === speakerRole) ? 0 : 1;
+
+    return { opener: pair.opener, reply: pair.reply, room: entry.room, speakerFirst };
+  }
+
+  /** Normalize role names: strip _portrait suffix, lowercase */
+  private normalizeRole(role: string): string {
+    return role.replace(/_portrait$/, '').toLowerCase();
+  }
 }

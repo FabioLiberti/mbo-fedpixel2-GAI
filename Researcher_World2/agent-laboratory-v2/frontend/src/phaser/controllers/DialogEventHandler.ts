@@ -265,17 +265,29 @@ export class DialogEventHandler {
         }
       }
 
-      // Fallback: alternate between greeting, coffee break, room-based, and topical dialog
-      const isProfessor1 = agent1.role.toLowerCase().includes('professor');
-      const isProfessor2 = agent2.role.toLowerCase().includes('professor');
-      const hasProfessor = isProfessor1 || isProfessor2;
-
+      // Fallback: role-pair specific, greeting, coffee break, room-based, or topical
       const roll = Math.random();
-      if (roll < 0.20) {
+
+      // 35% chance: role-pair specific dialog (context-aware by profession)
+      const rolePair = (roll < 0.35) ? this.renderer.getRolePairDialog(agent1.role, agent2.role) : null;
+
+      if (rolePair) {
+        // Role-pair dialog: speaker order determined by role match
+        const speaker = rolePair.speakerFirst === 0 ? agent1 : agent2;
+        const responder = rolePair.speakerFirst === 0 ? agent2 : agent1;
+        this.emitDialogPair(speaker, responder, s, rolePair.opener, rolePair.reply);
+        if (rolePair.room) {
+          setTimeout(() => {
+            s.scene.game.events.emit('go-to-room', {
+              agentIds: [data.agentId1, data.agentId2], room: rolePair.room,
+            });
+          }, 12000);
+        }
+      } else if (roll < 0.45) {
         // Greeting
         const { opener, reply } = this.renderer.getGreetingPair();
         this.emitDialogPair(agent1, agent2, s, opener, reply);
-      } else if (roll < 0.30) {
+      } else if (roll < 0.55) {
         // Coffee break — dialog then both agents move to break room
         const { opener, reply } = this.renderer.getCoffeeBreakPair();
         this.emitDialogPair(agent1, agent2, s, opener, reply);
@@ -284,7 +296,7 @@ export class DialogEventHandler {
             agentIds: [data.agentId1, data.agentId2],
           });
         }, 12000);
-      } else if (roll < 0.40) {
+      } else if (roll < 0.65) {
         // Meeting room — present results
         const { opener, reply } = this.renderer.getMeetingRoomPair();
         this.emitDialogPair(agent1, agent2, s, opener, reply);
@@ -293,7 +305,7 @@ export class DialogEventHandler {
             agentIds: [data.agentId1, data.agentId2], room: 'meeting_room',
           });
         }, 12000);
-      } else if (roll < 0.50) {
+      } else if (roll < 0.75) {
         // Server room — check processing
         const { opener, reply } = this.renderer.getServerRoomPair();
         this.emitDialogPair(agent1, agent2, s, opener, reply);
@@ -302,19 +314,8 @@ export class DialogEventHandler {
             agentIds: [data.agentId1, data.agentId2], room: 'server_room',
           });
         }, 12000);
-      } else if (roll < 0.60 && hasProfessor) {
-        // Professor office — professor invites colleague
-        const { opener, reply } = this.renderer.getProfOfficePair();
-        const profAgent = isProfessor1 ? agent1 : agent2;
-        const otherAgent = isProfessor1 ? agent2 : agent1;
-        this.emitDialogPair(profAgent, otherAgent, s, opener, reply);
-        setTimeout(() => {
-          s.scene.game.events.emit('go-to-room', {
-            agentIds: [data.agentId1, data.agentId2], room: 'professor_office',
-          });
-        }, 12000);
       } else {
-        // Topical dialog
+        // Topical dialog (role-individual)
         this.creator.createDialog({
           sourceId: agent1.id, targetId: agent2.id,
           type: s.getDialogTypeForRole(agent1.role),
