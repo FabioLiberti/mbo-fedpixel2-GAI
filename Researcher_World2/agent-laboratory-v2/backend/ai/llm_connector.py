@@ -232,7 +232,7 @@ class LLMConnector:
             "collaborations": {}
         }
         self.enable_caching = self.config.get("dialog_generation", {}).get("enable_caching", True)
-        self.cache_expiry = self.config.get("dialog_generation", {}).get("cache_expiry_seconds", 3600)
+        self.cache_expiry = self.config.get("dialog_generation", {}).get("cache_expiry_seconds", 60)
         
         # Sistema di memoria degli agenti
         self.agent_memories = {}

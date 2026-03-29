@@ -6,7 +6,7 @@ import { FLDialogType } from '../types/DialogTypes';
 // Max bubble size as fraction of camera
 const MAX_WIDTH_RATIO = 0.16;
 const MAX_HEIGHT_RATIO = 0.18;
-const MAX_TEXT_LENGTH = 80;
+const MAX_TEXT_LENGTH = 150;
 
 // Shared color palette (same as ThoughtBubble / DecisionBubble)
 function getTypeColor(type: FLDialogType): { fill: number; border: number } {
