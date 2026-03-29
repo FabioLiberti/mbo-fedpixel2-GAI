@@ -538,6 +538,11 @@ export class Agent extends Phaser.GameObjects.Sprite {
     const sceneGrid = (this.scene as unknown as IAgentScene).grid;
     if (sceneGrid && sceneGrid.length > 0) {
       this.path = findPath(sceneGrid, this.x, this.y, x, y);
+      if (this.path.length === 0) {
+        // No valid path — stay put, pick a new destination next cycle
+        this.changeState(AgentState.IDLE);
+        return;
+      }
     } else {
       this.path = [{ x: this.x, y: this.y }, { x, y }];
     }

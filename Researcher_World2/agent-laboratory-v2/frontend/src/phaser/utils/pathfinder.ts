@@ -1,7 +1,7 @@
 // frontend/src/phaser/utils/pathfinder.ts
 //
-// Simple A* pathfinder operating on a 2D grid (0=walkable, 1=blocked).
-// Returns a path of pixel waypoints at 32px tile centers.
+// A* pathfinder on a 2D grid (0=walkable, 1=blocked).
+// Returns pixel waypoints at 32px tile centers, or [] if unreachable.
 
 const TILE_SIZE = 32;
 
@@ -16,8 +16,8 @@ interface Node {
 
 /**
  * Find a path from (sx,sy) to (ex,ey) in pixel coordinates.
- * Returns an array of {x,y} waypoints (pixel centers of tiles), or
- * a direct line if no grid path is found (fallback).
+ * Returns an array of {x,y} waypoints, or **empty array** if no valid path
+ * exists — the caller must handle that case (e.g. pick a new destination).
  */
 export function findPath(
   grid: number[][],
@@ -25,18 +25,29 @@ export function findPath(
   ex: number, ey: number,
 ): { x: number; y: number }[] {
   const rows = grid.length;
-  if (rows === 0) return [{ x: sx, y: sy }, { x: ex, y: ey }];
+  if (rows === 0) return [];
   const cols = grid[0].length;
 
   // Convert pixel → tile
-  const startCol = clamp(Math.floor(sx / TILE_SIZE), 0, cols - 1);
-  const startRow = clamp(Math.floor(sy / TILE_SIZE), 0, rows - 1);
+  let startCol = clamp(Math.floor(sx / TILE_SIZE), 0, cols - 1);
+  let startRow = clamp(Math.floor(sy / TILE_SIZE), 0, rows - 1);
   const endCol   = clamp(Math.floor(ex / TILE_SIZE), 0, cols - 1);
   const endRow   = clamp(Math.floor(ey / TILE_SIZE), 0, rows - 1);
 
-  // If start or end is blocked, fallback
-  if (grid[startRow]?.[startCol] === 1 || grid[endRow]?.[endCol] === 1) {
-    return [{ x: sx, y: sy }, { x: ex, y: ey }];
+  // If start is inside a wall, snap to nearest walkable tile
+  if (grid[startRow]?.[startCol] === 1) {
+    const snapped = nearestWalkable(grid, startCol, startRow, cols, rows);
+    if (!snapped) return [];
+    startCol = snapped.x;
+    startRow = snapped.y;
+  }
+
+  // If destination is blocked, no valid path
+  if (grid[endRow]?.[endCol] === 1) return [];
+
+  // Trivial case
+  if (startCol === endCol && startRow === endRow) {
+    return [{ x: endCol * TILE_SIZE + TILE_SIZE / 2, y: endRow * TILE_SIZE + TILE_SIZE / 2 }];
   }
 
   // A*
@@ -49,14 +60,12 @@ export function findPath(
   startNode.f = startNode.h;
   open.push(startNode);
 
-  // 4-directional neighbors
   const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
   let iterations = 0;
-  const maxIter = cols * rows * 2; // safety cap
+  const maxIter = cols * rows * 2;
 
   while (open.length > 0 && iterations++ < maxIter) {
-    // Find node with lowest f
     let bestIdx = 0;
     for (let i = 1; i < open.length; i++) {
       if (open[i].f < open[bestIdx].f) bestIdx = i;
@@ -91,19 +100,42 @@ export function findPath(
     }
   }
 
-  // No path found — fallback to direct line
-  return [{ x: sx, y: sy }, { x: ex, y: ey }];
+  // No path found — do NOT fallback to direct line
+  return [];
+}
+
+/** Find the nearest walkable cell via BFS (small radius). */
+function nearestWalkable(
+  grid: number[][], cx: number, cy: number, cols: number, rows: number,
+): { x: number; y: number } | null {
+  const visited = new Set<string>();
+  const queue: { x: number; y: number }[] = [{ x: cx, y: cy }];
+  visited.add(`${cx},${cy}`);
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (grid[cur.y]?.[cur.x] === 0) return cur;
+    for (const [dx, dy] of dirs) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      const k = `${nx},${ny}`;
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && !visited.has(k)) {
+        visited.add(k);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+  }
+  return null;
 }
 
 function heuristic(ax: number, ay: number, bx: number, by: number): number {
-  return Math.abs(ax - bx) + Math.abs(ay - by); // Manhattan
+  return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
 function reconstructPath(node: Node): { x: number; y: number }[] {
   const path: { x: number; y: number }[] = [];
   let n: Node | null = node;
   while (n) {
-    // Convert tile → pixel center
     path.unshift({ x: n.x * TILE_SIZE + TILE_SIZE / 2, y: n.y * TILE_SIZE + TILE_SIZE / 2 });
     n = n.parent;
   }

@@ -694,8 +694,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     const cam = this.cameras.main;
     cam.removeBounds();
 
-    // Tween only zoom; recalculate scroll each frame to keep (centerX,centerY)
-    // perfectly centered at every intermediate zoom level.
+    // Tween only zoom; use centerOn() each frame so the target point stays
+    // at the exact center of the viewport regardless of scale mode or DPI.
     const proxy = { z: cam.zoom };
     this.tweens.add({
       targets: proxy,
@@ -704,10 +704,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       ease: 'Power2',
       onUpdate: () => {
         cam.setZoom(proxy.z);
-        cam.setScroll(
-          centerX - cam.width / (2 * proxy.z),
-          centerY - cam.height / (2 * proxy.z),
-        );
+        cam.centerOn(centerX, centerY);
       },
     });
 
@@ -731,9 +728,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.isZoomed = false;
 
     const cam = this.cameras.main;
-    // Capture current center to maintain focus during zoom-out
-    const focusX = cam.scrollX + cam.width / (2 * cam.zoom);
-    const focusY = cam.scrollY + cam.height / (2 * cam.zoom);
+    // Capture current center via worldView (accurate with any scale mode)
+    const focusX = cam.worldView.centerX;
+    const focusY = cam.worldView.centerY;
 
     const proxy = { z: cam.zoom };
     this.tweens.add({
@@ -743,10 +740,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       ease: 'Power2',
       onUpdate: () => {
         cam.setZoom(proxy.z);
-        cam.setScroll(
-          focusX - cam.width / (2 * proxy.z),
-          focusY - cam.height / (2 * proxy.z),
-        );
+        cam.centerOn(focusX, focusY);
       },
       onComplete: () => {
         cam.setZoom(1);
@@ -974,11 +968,13 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       layoutFn(floorLayer, furnitureLayer, c, r);
 
       // 7. Update pathfinding grid from furniture layer
+      // DOOR tiles are passable (they connect rooms); everything else blocks.
+      const WALKABLE_TILES = new Set([TILE.DOOR, TILE.CHAIR]);
       this.grid = Array(r).fill(0).map(() => Array(c).fill(0));
       for (let y = 0; y < r; y++) {
         for (let x = 0; x < c; x++) {
           const tile = furnitureLayer.getTileAt(x, y);
-          if (tile && tile.index !== -1) {
+          if (tile && tile.index !== -1 && !WALKABLE_TILES.has(tile.index)) {
             this.grid[y][x] = 1; // blocked
           }
         }
