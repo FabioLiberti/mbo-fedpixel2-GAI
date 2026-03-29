@@ -314,17 +314,17 @@ export class MercatorumLabScene extends BaseLabScene {
       const roomW = (x0: number, x1: number) => (x1 - x0) * gs;
       const roomH = (y0: number, y1: number) => (y1 - y0) * gs;
 
-      // Top-left: Ufficio Prof. (label centrata sulla porta verticale)
+      // Top-left: Ufficio Prof. (label centrata sulla porta verso Break Room)
       {
         const px = roomCX(1, c1), py = roomCY(1, midY);
         const pw = roomW(1, c1), ph = roomH(1, midY);
-        const doorY = (Math.floor(midY / 2) + 1) * gs + gs / 2; // centro porta nel divider c1
+        const doorX = (Math.floor(c1 / 2) + 1) * gs + gs / 2; // centro porta nel divider midY
         const z = this.add.zone(px, py, pw, ph);
         z.setName('professor_office'); z.setInteractive();
-        this.add.text(px + pw / 2 - 6, doorY, 'Ufficio Prof.', {
+        this.add.text(doorX, py + ph / 2 - 6, 'Ufficio Prof.', {
           fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
           padding: { left: 4, right: 4, top: 2, bottom: 2 }
-        }).setOrigin(1, 0.5).setDepth(5);
+        }).setOrigin(0.5, 1).setDepth(5);
         this.interactionZones.push(z);
       }
       // Top-center: Meeting Room (label shifted down to avoid scene title overlap)
