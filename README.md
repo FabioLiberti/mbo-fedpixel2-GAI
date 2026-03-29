@@ -1,353 +1,334 @@
 # Federated Generative Agents
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.7%2B-blue)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-4.9%2B-blue)](https://www.typescriptlang.org/)
 [![Phaser 3](https://img.shields.io/badge/Phaser-3.55.2%2B-orange)](https://phaser.io/)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-green)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11-green)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.85%2B-teal)](https://fastapi.tiangolo.com/)
-[![Django](https://img.shields.io/badge/Django-4.0%2B-darkgreen)](https://www.djangoproject.com/)
-[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.9%2B-orange)](https://www.tensorflow.org/)
-[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-purple)](https://ollama.ai/)
+[![Mesa](https://img.shields.io/badge/Mesa-1.1%2B-darkgreen)](https://mesa.readthedocs.io/)
+[![Ollama](https://img.shields.io/badge/Ollama-qwen3.5%3A4b-purple)](https://ollama.ai/)
 
-**Fusione di Agent Laboratory v2 e Generative Agents: ricercatori autonomi con architettura cognitiva believable in un ecosistema di federated learning distribuito.**
+**Ricercatori autonomi con architettura cognitiva believable in un ecosistema di Federated Learning distribuito: simulazione multi-agente con dialoghi LLM-driven, navigazione A\*, interazioni role-aware e analytics in tempo reale.**
 
 <p align="center">
   <img src="Researcher_World2/agent-laboratory-v2/frontend/public/logo192.png" width="680" alt="Federated Generative Agents" />
 </p>
 
-## 🔬 Panoramica
+---
 
-Federated Generative Agents integra due sistemi complementari in un unico framework di ricerca:
+## Panoramica scientifica
 
-- **Agent Laboratory v2**: Simulatore di ecosistemi di ricerca in federated learning distribuito tra tre laboratori virtuali (Università Mercatorum, Blekinge University, OPBG IRCCS) con visualizzazione pixel art 2D
-- **Generative Agents**: Fork locale del paper Stanford (Park et al., ACM UIST 2023) con architettura cognitiva a 5 stadi e memoria associativa con retrieval semantico
+Federated Generative Agents (FGA) esplora l'intersezione tra **Federated Learning** (McMahan et al., AISTATS 2017) e **agenti generativi believable** (Park et al., ACM UIST 2023). Il sistema simula un ecosistema di ricerca distribuito in cui agenti autonomi, dotati di ruoli professionali distinti (professor, researcher, privacy specialist, student, doctor), collaborano alla costruzione di modelli federati rispettando vincoli di privacy.
 
-L'obiettivo è creare ricercatori autonomi che:
-1. **Percepiscono** l'ambiente del laboratorio e i risultati FL (Perceive)
-2. **Recuperano** esperienze passate dalla memoria associativa (Retrieve)
-3. **Pianificano** la partecipazione ai round di federated learning (Plan)
-4. **Riflettono** sul proprio contributo alla convergenza del modello (Reflect)
-5. **Eseguono** training locale, aggregazione e collaborazione inter-laboratorio (Execute)
+A differenza dei simulatori FL tradizionali che trattano i client come nodi passivi, FGA modella ogni partecipante come un agente con:
 
-### Caratteristiche principali:
+- **Autonomia decisionale**: gli agenti scelgono indipendentemente quando lavorare, interagire, spostarsi o riposarsi
+- **Dialoghi contestuali**: le conversazioni riflettono la competenza professionale di ciascun ruolo e la relazione tra le coppie di agenti
+- **Comportamento spaziale**: navigazione A* su griglia con pathfinding attraverso porte e corridoi, evitando muri e mobili
+- **Dinamiche sociali emergenti**: pause caffe, riunioni spontanee, mentoring, audit di privacy — innescati dalla prossimita e dal ruolo
 
-- **Architettura cognitiva a 5 stadi** da Generative Agents applicata ai ricercatori FL
-- **Memoria a 3 livelli** con retrieval semantico pesato (recency + importance + relevance)
-- **Federated Learning distribuito** con FedAvg tra tre laboratori virtuali
-- **Visualizzazione pixel art 2D** con React + Phaser 3 e WebSocket real-time
-- **LLM locale** via Ollama (nessuna dipendenza da API cloud)
-- **Comportamento emergente**: relazioni, coalizioni e negoziazione tra agenti
+### Contributi principali
 
-## 🏗️ Architettura & Stack Tecnologico
+1. **Role-pair dialog system**: dialoghi specifici per ogni coppia di ruoli professionali con movimento contestuale verso le stanze pertinenti (Privacy Lab, Meeting Room, Server Room, Ufficio Prof.)
+2. **Dialog Analytics**: sistema di tracking che registra ogni dialogo con posizioni degli agenti, prossimita, stanza, categoria e genera report aggregati
+3. **Navigazione A* su tilemap**: pathfinding 4-direzionale su griglia 32px con distinzione walkable/blocked per porta, muro, mobile
+4. **Integrazione LLM locale**: generazione dialoghi via Ollama (qwen3.5:4b) con cache, fallback deterministico round-robin e stripping automatico dei think-tag
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    FEDERATED GENERATIVE AGENTS                  │
-│              (Agent Laboratory × Generative Agents)             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-   │  Mercatorum  │    │  Blekinge   │    │    OPBG     │
-   │     Lab      │    │     Lab     │    │    IRCCS    │
-   └─────────────┘    └─────────────┘    └─────────────┘
-          │                   │                   │
-          └───────────────────┼───────────────────┘
-                              │
-              ┌───────────────▼───────────────┐
-              │       LAYER COGNITIVO         │
-              │   (da Generative Agents)      │
-              │                               │
-              │  PERCEIVE → RETRIEVE → PLAN   │
-              │         ↓                     │
-              │       REFLECT → EXECUTE       │
-              └───────────────┬───────────────┘
-                              │
-              ┌───────────────▼───────────────┐
-              │       MEMORIA 3 LIVELLI       │
-              │                               │
-              │  Spatial    → Topologia lab   │
-              │  Associative → Esperienza FL  │
-              │  Scratch    → Task corrente   │
-              └───────────────┬───────────────┘
-                              │
-              ┌───────────────▼───────────────┐
-              │      LAYER FL OPERATIVO       │
-              │   (da Agent Laboratory v2)    │
-              │                               │
-              │  Training → Sending →         │
-              │  Aggregating → Receiving      │
-              └───────────────────────────────┘
-```
+---
 
-### Frontend (da Agent Laboratory v2)
-- **Framework**: React 18.0+ con TypeScript 4.7+
-- **Rendering 2D**: Phaser 3.55.2+ con PixelPerfect scaling
-- **UI Components**: Dashboard analitiche e controlli simulazione
-- **Comunicazione**: Socket.io per WebSocket bidirezionale
-
-### Backend Cognitivo (da Generative Agents)
-- **Pipeline cognitiva**: Perceive → Retrieve → Plan → Reflect → Execute
-- **Memoria**: Spatial memory (tree), Associative memory (embeddings), Scratch (working)
-- **Retrieval**: Cosine similarity con pesi recency + importance + relevance
-- **LLM**: Ollama locale con qwen3.5:4b (default) e supporto multi-modello (llama3, mistral, gemma)
-
-### Backend FL (da Agent Laboratory v2)
-- **Framework**: Python 3.9+ con FastAPI 0.85+
-- **Simulazione Multi-Agente**: Mesa 1.1.1+
-- **Machine Learning**: TensorFlow 2.9+
-- **Algoritmi**: FedAvg implementato, FedProx in sviluppo
-
-## 🔗 Ambienti di Laboratorio
-
-Il simulatore presenta tre laboratori virtuali, ciascuno con tema visivo e specializzazione FL unici:
-
-### 1. Università Mercatorum Lab
-<details>
-  <summary><b>Dettagli</b></summary>
-
-  - **Tema Visivo**: Stile italiano classico con elementi moderni
-  - **Palette Colori**: Tonalità terracotta, blu navy, crema
-  - **Specializzazione FL**: Business intelligence, analytics finanziaria federata, compliance GDPR
-  - **Layout**: Grande area centrale per meeting collaborativi, workstation individuali perimetrali
-</details>
-
-### 2. Blekinge University Lab
-<details>
-  <summary><b>Dettagli</b></summary>
-
-  - **Tema Visivo**: Design scandinavo minimalista high-tech
-  - **Palette Colori**: Bianco, azzurro ghiaccio, grigio chiaro, accenti gialli
-  - **Specializzazione FL**: Algoritmi di aggregazione avanzati, ottimizzazione per IoT, quantizzazione
-  - **Layout**: Open space con isole collaborative, parete di schermi per visualizzazione
-</details>
-
-### 3. OPBG IRCCS Lab
-<details>
-  <summary><b>Dettagli</b></summary>
-
-  - **Tema Visivo**: Laboratorio clinico con elementi ospedalieri child-friendly
-  - **Palette Colori**: Bianco, verde acqua, rosa pallido, blu cielo
-  - **Specializzazione FL**: FL per dati medici sensibili, diagnosi collaborativa, modelli personalizzati pediatrici
-  - **Layout**: Area centrale sicura per dati sensibili, postazioni con doppi monitor
-</details>
-
-## 🧠 Architettura Cognitiva degli Agenti
-
-Gli agenti combinano la state machine di Agent Laboratory con la pipeline cognitiva di Generative Agents:
+## Architettura
 
 ```
-                    ┌─────────────────────┐
-                    │   PERCEIVE          │
-                    │   - Eventi FL       │
-                    │   - Agenti vicini   │
-                    │   - Metriche round  │
-                    └─────────┬───────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │   RETRIEVE          │
-                    │   - Memoria assoc.  │
-                    │   - Cosine sim.     │
-                    │   - Top-N ranked    │
-                    └─────────┬───────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │   PLAN              │
-                    │   - Schedule giorn. │
-                    │   - Round FL        │
-                    │   - Collaborazioni  │
-                    └─────────┬───────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │   REFLECT           │
-                    │   - Insight FL      │
-                    │   - Auto-valutaz.   │
-                    │   - Consolidamento  │
-                    └─────────┬───────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │   EXECUTE           │
-                    │   - Training locale │
-                    │   - Aggregazione    │
-                    │   - Comunicazione   │
-                    └─────────────────────┘
+                    FEDERATED GENERATIVE AGENTS
+                              |
+          +-------------------+-------------------+
+          v                   v                   v
+   +-------------+    +-------------+    +-------------+
+   | Mercatorum  |    |  Blekinge   |    |    OPBG     |
+   |   4 agenti  |    |   3 agenti  |    |   3 agenti  |
+   | 6 stanze    |    |             |    |   IRCCS     |
+   +------+------+    +------+------+    +------+------+
+          |                   |                   |
+          +-------------------+-------------------+
+                              |
+              +---------------v---------------+
+              |        FRONTEND               |
+              |  React 18 + Phaser 3 + TS     |
+              |                               |
+              |  BaseLabScene (zoom, grid,    |
+              |    A* pathfinding, icons)     |
+              |  Agent sprite (state machine, |
+              |    autonomous behavior)       |
+              |  DialogRenderer (bubbles,     |
+              |    role-pair, analytics)      |
+              |  LabControlsMenu (UI panel)  |
+              +---------------+---------------+
+                              |  REST API
+              +---------------v---------------+
+              |        BACKEND                |
+              |  FastAPI + Mesa + Ollama      |
+              |                               |
+              |  SimulationController         |
+              |  FedAvg (numpy fallback)      |
+              |  LLM Connector (qwen3.5:4b)  |
+              |  Cognitive pipeline           |
+              +-------------------------------+
 ```
 
-### Mapping FL → Memoria Cognitiva
+### Stack tecnologico
 
-| Evento FL | ConceptNode | Poignancy |
+| Layer | Tecnologia | Dettaglio |
 |---|---|---|
-| Round completato con accuracy +5% | `("Lab X", "completed", "round N with acc 0.87")` | 5/10 |
-| Convergenza raggiunta | `("Global model", "converged", "at round N")` | 9/10 |
-| Collaborazione inter-lab | `("Lab X", "shared model with", "Lab Y")` | 6/10 |
-| Fallimento round | `("Lab X", "failed", "round N due to timeout")` | 8/10 |
+| **Frontend** | React 18.2, TypeScript 4.9, Phaser 3.55.2 | Pixel art 2D, zoom zone-based, state management con Zustand |
+| **Backend** | FastAPI 0.85, Mesa 1.1, Python 3.11 | Simulazione multi-agente, REST API, FL orchestration |
+| **LLM** | Ollama + qwen3.5:4b (4.7B params, Q4_K_M) | Generazione dialoghi, thinking, decisioni, reazioni |
+| **FL** | FedAvg con numpy (TensorFlow opzionale) | Training federato distribuito tra 3 laboratori |
+| **Ambiente** | Conda `mbo_gai` (/opt/miniconda3) | Python 3.11, porta backend 8091, porta frontend 3026 |
 
-## 🚀 Quick Start
+---
+
+## Ambienti di laboratorio
+
+### Universita Mercatorum Lab
+
+Layout a **6 stanze** con tilemap procedurale e mobili pixel art:
+
+| Stanza | Floor | Mobili | Funzione |
+|---|---|---|---|
+| **Ufficio Prof.** | Amber | Scrivania, librerie, lampada, quadro, tappeto | Mentoring, feedback, direzione ricerca |
+| **Meeting Room** | Blue | Tavolo centrale, whiteboard, proiettore, sedie | Presentazioni, allineamento progetto |
+| **Privacy Lab** | Purple | Scrivanie, server, stampante, libreria | DP analysis, PPML, audit privacy |
+| **Break Room** | Warm | Divani, tavolino caffe, frigo, distributore | Pause, socializzazione |
+| **Area Ricerca** | Teal | Scrivanie, libreria, stampante, lampada | Sviluppo, sperimentazione |
+| **Server Room** | Green | Server rack (x4), UPS (x2), monitor, equipment | Monitoraggio training, diagnostica |
+
+**Agenti**: Elena Conti (Professor), Luca Bianchi (Privacy Specialist), Sofia Greco (Researcher), Marco Rossi (Student)
+
+### Blekinge University Lab
+Design scandinavo minimalista. Specializzazione: algoritmi di aggregazione avanzati, ottimizzazione IoT.
+
+### OPBG IRCCS Lab
+Stile clinico child-friendly. Specializzazione: FL per dati medici sensibili, diagnosi pediatrica federata.
+
+---
+
+## Sistema di dialoghi
+
+### Pipeline
+
+```
+Agent.makeDecision()
+    |
+    v  emit('agent-interaction')
+DialogEventHandler.handleAgentInteraction()
+    |
+    +-- LLM available? --> Ollama qwen3.5:4b --> thinking + dialog
+    |
+    +-- Fallback (probabilistic):
+        |-- 35%  Role-pair dialog (context-aware per coppia ruoli)
+        |-- 10%  Greeting (10 coppie round-robin)
+        |-- 10%  Coffee break --> move to Break Room
+        |-- 10%  Meeting room --> move to Meeting Room
+        |-- 10%  Server room --> move to Server Room
+        |-- 25%  Topical (15 frasi per ruolo, round-robin)
+    |
+    v
+DialogRenderer --> SpeechBubble (question: blue, response: teal)
+    |
+    v
+DialogAnalytics --> record con timestamp, posizioni, prossimita, stanza
+```
+
+### Role-pair dialogs
+
+Ogni coppia di ruoli ha **5 dialoghi specifici** con stanza destinazione:
+
+| Coppia | Tema | Stanza |
+|---|---|---|
+| Professor + Privacy Specialist | Differential Privacy, PPML, epsilon budget | Privacy Lab |
+| Professor + Researcher | Paper review, metodologia, risultati | Meeting Room |
+| Professor + Student | Mentoring, feedback tesi, task assignment | Ufficio Prof. |
+| Researcher + Privacy Specialist | Budget epsilon, DP integration, audit | Privacy Lab |
+| Researcher + Student | Benchmark, coding collaborativo, training | Area Ricerca |
+| Privacy Specialist + Student | Insegnamento DP, attacchi, clipping | Privacy Lab |
+
+Il dialogo rispetta la gerarchia: il professore invita nel suo ufficio, il privacy specialist propone di analizzare al lab, il researcher guida lo studente in area ricerca.
+
+### Persistenza e freeze
+
+- **Durata bolla**: `8000 + text.length * 50` ms (max 18000ms)
+- **Freeze agente**: l'agente si ferma finche il dialogo non scompare (`hasBubble` flag)
+- **Avvicinamento**: se distanza > 50px, l'agente cammina verso l'interlocutore prima di parlare
+- **Offset risposta**: la bolla di risposta e posizionata -80px (vs -40px per la domanda) per evitare sovrapposizione
+
+---
+
+## Dialog Analytics
+
+Sistema di tracking integrato che registra ogni dialogo con metadati completi.
+
+### Dati registrati per ogni dialogo
+
+| Campo | Descrizione |
+|---|---|
+| `speakerId`, `speakerName`, `speakerRole` | Identita del parlante |
+| `targetId`, `targetName`, `targetRole` | Identita del destinatario |
+| `speakerPos`, `targetPos` | Coordinate (x, y) al momento del dialogo |
+| `speakerRoom`, `targetRoom` | Stanza rilevata per ciascun agente |
+| `distance` | Distanza in pixel tra i due agenti |
+| `sameRoom` | Se i due agenti sono nella stessa stanza |
+| `dialogCategory` | greeting, coffee_break, meeting_room, server_room, role_pair, topical, thinking, state_phrase, llm |
+| `isResponse` | Se e una risposta a un dialogo precedente |
+| `isLLM` | Se generato da LLM o da fallback |
+| `destinationRoom` | Stanza destinazione se il dialogo innesca movimento |
+
+### Report aggregato
+
+Accessibile dal menu **Controlli Lab > Analytics > Report Dialoghi**:
+
+- **Per categoria**: distribuzione percentuale dei tipi di dialogo
+- **Per agente**: conteggio totale, come iniziatore vs target
+- **Per coppia di ruoli**: frequenza, distanza media, % stessa stanza
+- **Per stanza**: dove avvengono i dialoghi
+- **Prossimita**: media, min, max, mediana distanza tra agenti
+- **Movimenti innescati**: quante volte ogni stanza e stata destinazione
+- **Ultimi 10 dialoghi**: timeline dettagliata
+
+Anche disponibile da console browser: `window.dialogAnalytics.printReport()`
+
+---
+
+## Navigazione A*
+
+Gli agenti navigano attraverso un **pathfinding A\*** su griglia 32px, derivata dal tilemap del furniture layer:
+
+- **Walkable**: pavimento, porte, sedie, tappeti, lampade
+- **Blocked**: muri, scrivanie, server, librerie, divani, frigoriferi, UPS, ecc.
+- **BFS snap**: se un agente si trova in una cella bloccata, `nearestWalkable()` lo riposiziona
+- **No fallback**: se A* non trova un percorso, l'agente resta fermo (no through-wall movement)
+
+---
+
+## Quick Start
 
 ### Prerequisiti
-- Node.js (v14+)
-- Python 3.9+
-- Ollama installato con almeno un modello (consigliato: `llama3:8b`)
-- npm o yarn
 
-### Setup Ollama
+- **Node.js** v14+ e npm
+- **Python 3.11** via Conda (`conda create -n mbo_gai python=3.11`)
+- **Ollama** installato con modello `qwen3.5:4b`
 
-```bash
-# Installa modello LLM
-ollama pull llama3:8b
-
-# Installa modello embeddings
-ollama pull nomic-embed-text
-
-# Verifica
-ollama list
-```
-
-### Installazione
-
-<details>
-  <summary><b>Agent Laboratory v2 — Backend</b></summary>
+### Setup
 
 ```bash
+# 1. Installa modello LLM
+ollama pull qwen3.5:4b
+ollama serve   # lasciare attivo
+
+# 2. Backend
+conda activate mbo_gai
 cd Researcher_World2/agent-laboratory-v2/backend
-
-# Crea ambiente virtuale Python
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-
-# Installa dipendenze
 pip install -r requirements.txt
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8091 --reload
 
-# Avvia il server backend
-uvicorn api.main:app --host 0.0.0.0 --port 8091 --reload
-```
-</details>
-
-<details>
-  <summary><b>Agent Laboratory v2 — Frontend</b></summary>
-
-```bash
+# 3. Frontend (in un altro terminale)
 cd Researcher_World2/agent-laboratory-v2/frontend
-
-# Installa dipendenze
 npm install
+npm start    # apre http://localhost:3026
 
-# Avvia il server di sviluppo
-npm start
+# 4. Attivare LLM nel backend (una tantum)
+curl -X POST "http://localhost:8091/llm/toggle?enabled=true"
 ```
-</details>
 
-<details>
-  <summary><b>Generative Agents — Backend</b></summary>
+### Verifica stato
 
 ```bash
-cd LLM_Generative_Agents/generative_agents/reverie/backend_server
-
-# Crea ambiente virtuale Python
-python -m venv venv
-source venv/bin/activate
-
-# Installa dipendenze
-pip install -r ../../requirements.txt
-
-# Avvia il server
-python reverie.py
+curl http://localhost:11434/api/tags          # Ollama: modelli disponibili
+curl http://localhost:8091/                    # Backend: status
+curl http://localhost:8091/llm/status          # LLM: enabled + reachable
+curl http://localhost:8091/simulation/state    # Simulazione: stato corrente
 ```
-</details>
 
-<details>
-  <summary><b>Generative Agents — Frontend</b></summary>
+---
 
-```bash
-cd LLM_Generative_Agents/generative_agents/environment/frontend_server
-
-# Avvia Django
-python manage.py runserver
-
-# Apri http://localhost:8000/fixed_simulator/
-```
-</details>
-
-## 📊 Stato di Sviluppo
-
-### Agent Laboratory v2
-
-| Area | Stato | Voto |
-|---|---|---|
-| Frontend React + Phaser | Funzionante | 8/10 |
-| WebSocket bidirezionale | Funzionante | 7/10 |
-| FedAvg | Funzionante | 7/10 |
-| FedProx | Bypassed | 0/10 |
-| Metodi environment.py | Incompleti | 3/10 |
-| Sistema agenti | Design buono, env incompleto | 6/10 |
-
-### Generative Agents
-
-| Area | Stato | Voto |
-|---|---|---|
-| Pipeline cognitiva 5 stadi | Completa | 9/10 |
-| Memoria 3 livelli + retrieval | Completa | 9/10 |
-| Ollama integration | Funzionante | 8/10 |
-| Fixed simulator UI | Funzionante | 9/10 |
-| Phaser renderer | Rotto | 2/10 |
-| Multi-model support | Implementato | 7/10 |
-
-### Fusione — Roadmap
-
-- [ ] **Fase 0**: Decisioni architetturali (comunicazione, clock, grid system)
-- [ ] **Fase 1**: Stabilizzazione Agent Lab v2 (fix 4 bug critici)
-- [ ] **Fase 2**: Innesto layer cognitivo GA nei ricercatori AL
-- [ ] **Fase 3**: FL come evento cognitivo nella memoria associativa
-- [ ] **Fase 4**: Comportamento emergente e coalizioni inter-lab
-
-## 🧩 Struttura del Progetto
+## Struttura del progetto
 
 ```
 Researcher_World3_GAI/
-├── Analysis_Fusion.md              # Analisi comparativa e piano di fusione
-├── README.md                       # Questo file
-├── Researcher_World2/              # Agent Laboratory v2
-│   └── agent-laboratory-v2/
-│       ├── frontend/               # React 18 + Phaser 3 + TypeScript
-│       │   ├── src/
-│       │   │   ├── phaser/         # Scene laboratori, sprite, animazioni
-│       │   │   ├── components/     # Componenti React UI
-│       │   │   └── services/       # WebSocket + API client
-│       │   └── public/assets/      # Sprite pixel art e tileset
-│       └── backend/
-│           ├── api/                # FastAPI server + WebSocket
-│           ├── models/agents/      # ResearcherAgent (state machine)
-│           ├── fl/                 # FedAvg, FedProx (in sviluppo)
-│           ├── ai/                 # Ollama LLM connector + memoria
-│           └── simulation/         # Controller orchestrazione
-└── LLM_Generative_Agents/         # Generative Agents (fork Stanford)
-    └── generative_agents/
-        ├── reverie/backend_server/
-        │   ├── persona/
-        │   │   ├── cognitive_modules/   # perceive, retrieve, plan, reflect, execute
-        │   │   ├── memory_structures/   # spatial, associative, scratch
-        │   │   └── prompt_template/     # Ollama wrapper + prompt engineering
-        │   ├── reverie.py              # Orchestratore simulazione
-        │   └── maze.py                 # Rappresentazione mondo + pathfinding
-        └── environment/frontend_server/
-            ├── templates/              # Django views (fixed_simulator)
-            ├── static_dirs/            # Asset 2D villaggio
-            └── storage/                # Template simulazioni (3 e 25 agenti)
++-- README.md
++-- Researcher_World2/
+|   +-- agent-laboratory-v2/
+|       +-- frontend/                         # React 18 + Phaser 3
+|       |   +-- src/
+|       |   |   +-- phaser/
+|       |   |   |   +-- scenes/
+|       |   |   |   |   +-- BaseLabScene.ts       # Zoom, grid, A*, state icons, analytics
+|       |   |   |   |   +-- Mercatorum/            # 6-room layout con mobili
+|       |   |   |   +-- sprites/
+|       |   |   |   |   +-- Agent.ts               # State machine, autonomous behavior
+|       |   |   |   +-- controllers/
+|       |   |   |   |   +-- DialogEventHandler.ts  # Pipeline dialoghi LLM + fallback
+|       |   |   |   |   +-- DialogRenderer.ts      # Bubble rendering, role-pair pairs
+|       |   |   |   |   +-- DialogAnalytics.ts     # Tracking posizioni e prossimita
+|       |   |   |   |   +-- GlobalAgentController.ts
+|       |   |   |   +-- utils/
+|       |   |   |   |   +-- pathfinder.ts          # A* pathfinding
+|       |   |   |   |   +-- tilesetGenerator.ts    # Tileset procedurale (38 tile types)
+|       |   |   |   +-- ui/
+|       |   |   |       +-- SpeechBubble.ts        # Bolle dialogo (question/response)
+|       |   |   |       +-- LabControlsMenu.ts     # Pannello controlli + analytics
+|       |   |   +-- components/                # React UI components
+|       |   |   +-- services/                  # API client
+|       |   +-- public/assets/                 # Sprite, tileset, icone
+|       +-- backend/
+|           +-- api/main.py                    # FastAPI + REST endpoints
+|           +-- ai/llm_connector.py            # Ollama connector + cache + fallback
+|           +-- cognitive/prompts/             # LLM prompt engineering
+|           +-- models/agents/                 # Mesa agent models
+|           +-- simulation/                    # FL controller
++-- LLM_Generative_Agents/                    # Generative Agents (fork Stanford)
+    +-- generative_agents/
+        +-- reverie/backend_server/
+        |   +-- persona/cognitive_modules/     # perceive, retrieve, plan, reflect, execute
+        |   +-- persona/memory_structures/     # spatial, associative, scratch
+        +-- environment/frontend_server/       # Django UI
 ```
 
-## 🔗 Riferimenti
+---
 
-- Park, J.S. et al., *Generative Agents: Interactive Simulacra of Human Behavior*, ACM UIST 2023
-- McMahan, B. et al., *Communication-Efficient Learning of Deep Networks from Decentralized Data*, AISTATS 2017
-- Li, T. et al., *Federated Optimization in Heterogeneous Networks* (FedProx), MLSys 2020
+## Stato di sviluppo
 
-## 📝 Licenza
+| Componente | Stato | Note |
+|---|---|---|
+| Frontend React + Phaser | Operativo | 3 scene lab, world map, zoom zone-based |
+| Tilemap procedurale | Operativo | 38 tile types, 6 stanze Mercatorum con mobili |
+| A* Pathfinding | Operativo | 4-dir, BFS snap, door/corridor navigation |
+| Sistema dialoghi | Operativo | LLM + fallback, 6 role-pair, 5+ categorie |
+| Dialog Analytics | Operativo | Tracking completo, report UI + console |
+| Agent autonomy | Operativo | State machine, idle thoughts, coffee breaks |
+| FedAvg | Operativo | numpy fallback (TensorFlow opzionale) |
+| Ollama LLM | Operativo | qwen3.5:4b, cache 60s, think-tag stripping |
+| Blekinge Lab | Base | Layout semplice, da arricchire |
+| OPBG Lab | Base | Layout semplice, da arricchire |
+| FedProx | Non implementato | Previsto per fase successiva |
+| Pipeline cognitiva completa | Parziale | Thinking/decision/planning attivi, memory retrieval da completare |
 
-Questo progetto è rilasciato sotto licenza MIT. Vedi il file [LICENSE](LICENSE) per maggiori dettagli.
+---
+
+## Riferimenti
+
+- Park, J.S., O'Brien, J.C., Cai, C.J., Morris, M.R., Liang, P., Bernstein, M.S. (2023). *Generative Agents: Interactive Simulacra of Human Behavior*. ACM UIST 2023. DOI: 10.1145/3586183.3606763
+- McMahan, B., Moore, E., Ramage, D., Hampson, S., Arcas, B.A. (2017). *Communication-Efficient Learning of Deep Networks from Decentralized Data*. AISTATS 2017.
+- Li, T., Sahu, A.K., Zaheer, M., Sanjabi, M., Talwalkar, A., Smith, V. (2020). *Federated Optimization in Heterogeneous Networks*. MLSys 2020.
+- Dwork, C., Roth, A. (2014). *The Algorithmic Foundations of Differential Privacy*. Foundations and Trends in Theoretical Computer Science, 9(3-4):211-407.
+
+---
+
+## Licenza
+
+Questo progetto e rilasciato sotto licenza MIT. Vedi il file [LICENSE](LICENSE) per dettagli.
 
 ---
 
 <p align="center">
-  <small>© 2025-2026 Fabio Liberti — Federated Generative Agents Research Project</small>
+  <small>&copy; 2025-2026 Fabio Liberti &mdash; Federated Generative Agents Research Project</small>
 </p>
