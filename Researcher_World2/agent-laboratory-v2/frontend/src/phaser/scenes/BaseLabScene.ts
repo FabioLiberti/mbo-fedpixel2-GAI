@@ -334,20 +334,43 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
   // Room-to-allowed-state mapping for context-aware icons
   private static ROOM_STATE_ICONS: Record<string, Record<string, string>> = {
-    // working → only in offices / labs / server
     professor_office: { working: '💻', discussing: '💬' },
     privacy_lab:      { working: '💻', discussing: '💬' },
     research_area:    { working: '💻', discussing: '💬' },
     server_room:      { working: '💻' },
-    // meeting → break room (casual) or meeting room (formal)
     break_room:       { meeting: '🤝', discussing: '💬' },
     meeting_room:     { presenting: '📊', meeting: '🤝', discussing: '💬' },
   };
-  // Fallback: walking shown everywhere, discussing when near another agent
   private static ANYWHERE_ICONS: Record<string, string> = {
     walking: '🚶',
     discussing: '💬',
   };
+
+  // Contextual phrases triggered after state icons (round-robin per key)
+  private static STATE_PHRASES: Record<string, Record<string, string[]>> = {
+    working: {
+      professor_office: ['Sto rivedendo i risultati...', 'Preparo il prossimo esperimento.', 'Analizzo i dati del round precedente.'],
+      privacy_lab:      ['Verifico le garanzie di privacy.', 'Testo il protocollo di anonimizzazione.', 'Controllo il budget epsilon.'],
+      research_area:    ['Implemento il nuovo algoritmo.', 'Ottimizzo i parametri del modello.', 'Scrivo il codice di training.'],
+      server_room:      ['Monitoro le risorse del cluster.', 'Aggiorno la configurazione del server.', 'Verifico i log di aggregazione.'],
+      _default:         ['Sto lavorando...', 'Ci sono progressi.', 'Quasi finito con questa parte.'],
+    },
+    walking: {
+      _default: ['Mi sposto...', 'Vado a controllare.', 'Un momento, arrivo.'],
+    },
+    discussing: {
+      _default: ['Cosa ne pensi?', 'Parliamone.', "Ho un'idea."],
+    },
+    meeting: {
+      break_room:   ['Pausa caffè!', 'Tutto bene con il progetto?', 'Che ne dici dei risultati?'],
+      meeting_room: ['Iniziamo la riunione.', 'Vediamo i progressi del team.', 'Aggiorniamoci sui risultati.'],
+      _default:     ['Confrontiamoci.', 'Serve un allineamento.', 'Discutiamo i prossimi passi.'],
+    },
+    presenting: {
+      _default: ['Ecco i risultati del round.', 'Guardate questi grafici.', 'Vi mostro i dati.'],
+    },
+  };
+  private statePhrasesIndexes: Map<string, number> = new Map();
 
   /** Determine which room an agent is in based on interaction zones. */
   private getAgentRoom(agent: Agent): string | null {
@@ -366,11 +389,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const room = this.getAgentRoom(agent);
       let icon: string | undefined;
 
-      // Check room-specific mapping first
       if (room && BaseLabScene.ROOM_STATE_ICONS[room]) {
         icon = BaseLabScene.ROOM_STATE_ICONS[room][state];
       }
-      // Fallback to anywhere icons
       if (!icon) {
         icon = BaseLabScene.ANYWHERE_ICONS[state];
       }
@@ -379,8 +400,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const key = agent.getId() + '_state';
       const now = this.time.now;
       if ((this.zoneIconCooldowns.get(key) ?? 0) > now) return;
-      this.zoneIconCooldowns.set(key, now + 6000);
+      this.zoneIconCooldowns.set(key, now + 8000);
 
+      // Show icon
       const startY = agent.y - 35;
       const t = this.add.text(agent.x, startY, icon, { fontSize: '22px' });
       t.setOrigin(0.5).setDepth(100).setAlpha(1);
@@ -394,6 +416,34 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         ease: 'Power1',
         onComplete: () => t.destroy(),
       });
+
+      // After icon fades a bit, show contextual phrase as small speech bubble
+      const phrases = BaseLabScene.STATE_PHRASES[state];
+      if (phrases) {
+        const pool = (room && phrases[room]) || phrases._default;
+        if (pool && pool.length > 0) {
+          const phraseKey = `${state}_${room || '_'}`;
+          const idx = this.statePhrasesIndexes.get(phraseKey) ?? 0;
+          const phrase = pool[idx % pool.length];
+          this.statePhrasesIndexes.set(phraseKey, idx + 1);
+
+          this.time.delayedCall(1200, () => {
+            const bubble = this.add.text(agent.x, agent.y - 52, phrase, {
+              fontSize: '8px', fontFamily: 'Arial',
+              color: '#ffffff', backgroundColor: '#000000aa',
+              padding: { left: 5, right: 5, top: 3, bottom: 3 },
+            }).setOrigin(0.5, 1).setDepth(101).setAlpha(0);
+
+            this.tweens.add({
+              targets: bubble, alpha: 1, duration: 300, ease: 'Power1',
+            });
+            this.tweens.add({
+              targets: bubble, alpha: 0, delay: 3500, duration: 1000, ease: 'Power1',
+              onComplete: () => bubble.destroy(),
+            });
+          });
+        }
+      }
     });
   }
 

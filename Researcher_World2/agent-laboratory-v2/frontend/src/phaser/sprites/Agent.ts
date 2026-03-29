@@ -379,7 +379,7 @@ export class Agent extends Phaser.GameObjects.Sprite {
         const rand = Math.random();
         const interType = rand < 0.6 ? 'discussion' : 'meeting';
         const state = interType === 'discussion' ? AgentState.DISCUSSING : AgentState.MEETING;
-        const duration = Phaser.Math.Between(4000, 8000);
+        const duration = Phaser.Math.Between(12000, 15000);
         const endTime = currentTime + duration;
 
         // Freeze both agents for the conversation duration

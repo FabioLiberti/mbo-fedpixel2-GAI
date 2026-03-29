@@ -12,6 +12,7 @@ import type { DialogState, DialogConfig } from './DialogState';
 
 export class DialogRenderer {
   private state: DialogState;
+  private presetIndexes: Map<string, number> = new Map();
 
   constructor(state: DialogState) {
     this.state = state;
@@ -402,7 +403,13 @@ export class DialogRenderer {
         "Il rapporto tra privacy e utilità è accettabile con epsilon 1.0.",
       ],
     };
-    const roleDialogs = dialogs[role.toLowerCase()] || dialogs.researcher;
-    return roleDialogs[Math.floor(Math.random() * roleDialogs.length)];
+    const roleKey = role.toLowerCase();
+    const roleDialogs = dialogs[roleKey] || dialogs.researcher;
+
+    // Round-robin: cycle through all phrases before repeating
+    const idx = this.presetIndexes.get(roleKey) ?? 0;
+    const dialog = roleDialogs[idx % roleDialogs.length];
+    this.presetIndexes.set(roleKey, idx + 1);
+    return dialog;
   }
 }

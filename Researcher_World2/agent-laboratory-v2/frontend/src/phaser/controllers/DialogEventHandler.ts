@@ -265,7 +265,7 @@ export class DialogEventHandler {
         }
       }
 
-      // Fallback: preset dialogs
+      // Fallback: preset dialogs — delay long enough for first bubble to finish
       this.creator.createDialog({
         sourceId: agent1.id, targetId: agent2.id,
         type: s.getDialogTypeForRole(agent1.role),
@@ -279,7 +279,7 @@ export class DialogEventHandler {
           text: this.renderer.getPresetDialog(agent2.role, data.type),
           showEffect: false, priority: 5,
         });
-      }, 1500);
+      }, 4000);
       s.scene.game.events.emit('dialog-created', { type: 'standard' });
       s.scene.game.events.emit('dialog-created', { type: 'standard' });
     } catch (e) {
