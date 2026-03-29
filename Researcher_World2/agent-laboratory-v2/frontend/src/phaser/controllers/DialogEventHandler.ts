@@ -265,9 +265,10 @@ export class DialogEventHandler {
         }
       }
 
-      // Fallback: alternate between greeting and topical dialog
-      const useGreeting = Math.random() < 0.4;
-      if (useGreeting) {
+      // Fallback: alternate between greeting, coffee break, and topical dialog
+      const roll = Math.random();
+      if (roll < 0.3) {
+        // Greeting
         const { opener, reply } = this.renderer.getGreetingPair();
         this.creator.createDialog({
           sourceId: agent1.id, targetId: agent2.id,
@@ -280,8 +281,30 @@ export class DialogEventHandler {
             type: s.getDialogTypeForRole(agent2.role),
             text: reply, showEffect: false, priority: 5, isResponse: true,
           });
-        }, 4000);
+        }, 5000);
+      } else if (roll < 0.45) {
+        // Coffee break — dialog then both agents move to break room
+        const { opener, reply } = this.renderer.getCoffeeBreakPair();
+        this.creator.createDialog({
+          sourceId: agent1.id, targetId: agent2.id,
+          type: s.getDialogTypeForRole(agent1.role),
+          text: opener, showEffect: true, priority: 5,
+        });
+        setTimeout(() => {
+          this.creator.createDialog({
+            sourceId: agent2.id, targetId: agent1.id,
+            type: s.getDialogTypeForRole(agent2.role),
+            text: reply, showEffect: false, priority: 5, isResponse: true,
+          });
+        }, 5000);
+        // After dialog, emit event so agents move to break room
+        setTimeout(() => {
+          s.scene.game.events.emit('coffee-break', {
+            agentIds: [data.agentId1, data.agentId2],
+          });
+        }, 12000);
       } else {
+        // Topical dialog
         this.creator.createDialog({
           sourceId: agent1.id, targetId: agent2.id,
           type: s.getDialogTypeForRole(agent1.role),
@@ -295,7 +318,7 @@ export class DialogEventHandler {
             text: this.renderer.getPresetDialog(agent2.role, data.type),
             showEffect: false, priority: 5, isResponse: true,
           });
-        }, 4000);
+        }, 5000);
       }
       s.scene.game.events.emit('dialog-created', { type: 'standard' });
       s.scene.game.events.emit('dialog-created', { type: 'standard' });

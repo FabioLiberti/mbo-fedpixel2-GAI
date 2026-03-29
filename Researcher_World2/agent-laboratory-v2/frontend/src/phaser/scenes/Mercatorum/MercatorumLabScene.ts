@@ -174,6 +174,7 @@ export class MercatorumLabScene extends BaseLabScene {
       // Agents (scale computed dynamically from AGENT_TARGET_HEIGHT)
       this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
       this.enableStateIcons();
+      this.enableCoffeeBreak();
 
       // Camera
       this.setupCamera();

@@ -78,7 +78,7 @@ export class DialogRenderer {
       }
     }
 
-    const duration = dialog.duration || Math.min(6000 + dialog.text.length * 40, 14000);
+    const duration = dialog.duration || Math.min(8000 + dialog.text.length * 50, 18000);
 
     this.scene.time.delayedCall(duration, () => {
       this.removeBubble(dialog.sourceId);
@@ -448,6 +448,23 @@ export class DialogRenderer {
   getGreetingPair(): { opener: string; reply: string } {
     const pair = DialogRenderer.GREETINGS[this.greetingIndex % DialogRenderer.GREETINGS.length];
     this.greetingIndex++;
+    return pair;
+  }
+
+  // ── Coffee break pairs ────────────────────────────────────────────
+
+  private static COFFEE_BREAKS: { opener: string; reply: string }[] = [
+    { opener: 'Andiamo a prendere un caffè?', reply: 'Ottima idea, ne ho bisogno!' },
+    { opener: 'Pausa caffè? Ho bisogno di staccare un attimo.', reply: 'Volentieri, andiamo!' },
+    { opener: 'Ti va un caffè? Devo sgranchirmi le gambe.', reply: 'Sì dai, parliamo dei risultati intanto.' },
+    { opener: 'Che ne dici di una pausa?', reply: 'Perfetto, stavo per proporlo anch\'io.' },
+    { opener: 'Caffè? Ho qualcosa di interessante da raccontarti.', reply: 'Certo, sono curioso. Andiamo!' },
+  ];
+  private coffeeIndex: number = 0;
+
+  getCoffeeBreakPair(): { opener: string; reply: string } {
+    const pair = DialogRenderer.COFFEE_BREAKS[this.coffeeIndex % DialogRenderer.COFFEE_BREAKS.length];
+    this.coffeeIndex++;
     return pair;
   }
 }

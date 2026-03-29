@@ -250,17 +250,38 @@ export class Agent extends Phaser.GameObjects.Sprite {
   /**
    * Gestisce il comportamento autonomo dell'agente
    */
+  // Track how long the agent has been idle for spontaneous thoughts
+  private idleSince: number = 0;
+
   private updateAutonomousBehavior(time: number): void {
     // Aggiorna il timer dello stato
     if (this.stateTimer > 0 && time > this.stateTimer) {
       this.stateTimer = 0;
       this.changeState(AgentState.IDLE);
     }
-    
+
+    // Track idle duration for spontaneous thoughts
+    if (this.currentState === AgentState.IDLE) {
+      if (this.idleSince === 0) this.idleSince = time;
+      // After 12-20s idle, emit a spontaneous thought
+      if (!this.hasBubble && time - this.idleSince > Phaser.Math.Between(12000, 20000)) {
+        this.idleSince = time; // reset so it doesn't repeat immediately
+        try {
+          const s = this.scene as unknown as Phaser.Scene;
+          s?.game?.events?.emit('agent-thinking', {
+            agentId: this.id,
+            context: 'spontaneous reflection during idle time',
+          });
+        } catch { /* ignore */ }
+      }
+    } else {
+      this.idleSince = 0;
+    }
+
     // Prendi decisioni autonome solo se non impegnato in altre attività
     if (time > this.nextDecisionTime && this.currentState === AgentState.IDLE && !this.hasBubble) {
       this.makeDecision();
-      
+
       // Imposta il prossimo momento decisionale (più rilassato)
       this.nextDecisionTime = time + Phaser.Math.Between(6000, 14000);
     }
@@ -390,8 +411,8 @@ export class Agent extends Phaser.GameObjects.Sprite {
       }
 
       // If far away, walk towards the other agent first
-      if (minDistance > 60) {
-        this.moveTowards(closestAgent.x, closestAgent.y, 40);
+      if (minDistance > 50) {
+        this.moveTowards(closestAgent.x, closestAgent.y, 35);
         // Store target agent so we can interact on arrival
         this.pendingInteractionAgent = closestAgent;
         return;

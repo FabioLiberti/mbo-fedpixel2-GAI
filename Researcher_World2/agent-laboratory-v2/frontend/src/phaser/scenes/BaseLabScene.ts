@@ -448,6 +448,27 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     });
   }
 
+  /** Listen for coffee-break events and move agents to break_room zone. */
+  protected enableCoffeeBreak(): void {
+    this.game.events.on('coffee-break', (data: { agentIds: string[] }) => {
+      // Find break_room zone center
+      const brZone = this.interactionZones.find(z => z.name === 'break_room');
+      if (!brZone) return;
+      const tx = brZone.x;
+      const ty = brZone.y;
+
+      for (const agentId of data.agentIds) {
+        const agent = this.agents.find((a: Agent) => a.getId() === agentId);
+        if (agent) {
+          // Add small random offset so they don't stack
+          const ox = Phaser.Math.Between(-20, 20);
+          const oy = Phaser.Math.Between(-20, 20);
+          agent.moveTo(tx + ox, ty + oy);
+        }
+      }
+    });
+  }
+
   protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
     return [{ x: startX, y: startY }, { x: targetX, y: targetY }];
   }
