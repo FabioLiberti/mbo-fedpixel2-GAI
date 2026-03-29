@@ -120,8 +120,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Zoom state
   private isZoomed: boolean = false;
   private zoomBackBtn: Phaser.GameObjects.Text | null = null;
+  private zoomTimestamp: number = 0; // when last zoom-in happened
 
-  // Cooldown per zone interaction icons (agentId → next allowed timestamp)
+  // Cooldown per state icons (agentId → next allowed timestamp)
   private zoneIconCooldowns: Map<string, number> = new Map();
 
   constructor(key: string) {
@@ -349,16 +350,20 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const key = agent.getId() + '_state';
       const now = this.time.now;
       if ((this.zoneIconCooldowns.get(key) ?? 0) > now) return;
-      this.zoneIconCooldowns.set(key, now + 5000);
+      this.zoneIconCooldowns.set(key, now + 6000);
 
-      const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '18px' });
+      const startY = agent.y - 35;
+      const t = this.add.text(agent.x, startY, icon, { fontSize: '22px' });
       t.setOrigin(0.5).setDepth(100).setAlpha(1);
+
+      // Hold visible for 2s, then fade out over 1.5s
       this.tweens.add({
         targets: t,
         alpha: 0,
-        y: agent.y - 55,
-        duration: 1200,
-        ease: 'Power2',
+        y: startY - 20,
+        delay: 2000,
+        duration: 1500,
+        ease: 'Power1',
         onComplete: () => t.destroy(),
       });
     });
@@ -712,21 +717,21 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   protected enableZoneZoom(): void {
-    // Zone click → zoom in
+    // Zone label click → zoom in (only via label text, not the invisible zone)
     for (const zone of this.interactionZones) {
       zone.on('pointerdown', () => {
         if (!this.isZoomed) {
+          this.zoomTimestamp = Date.now();
           this.zoomToZone(zone.x, zone.y);
         }
       });
     }
 
-    // Any click on scene background → zoom out (when zoomed)
-    this.input.on('pointerdown', (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+    // Any click → zoom out (when zoomed), with 600ms grace period to avoid
+    // the same pointerdown that triggered zoom-in also triggering zoom-out
+    this.input.on('pointerdown', () => {
       if (!this.isZoomed) return;
-      // Don't dezoom if clicking on the back button itself (handled by its own handler)
-      const clickedBackBtn = currentlyOver.some(obj => obj === this.zoomBackBtn);
-      if (clickedBackBtn) return;
+      if (Date.now() - this.zoomTimestamp < 600) return;
       this.resetZoom();
     });
   }

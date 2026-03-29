@@ -350,50 +350,31 @@ export class Agent extends Phaser.GameObjects.Sprite {
       
       // Se abbiamo trovato un agente vicino e la distanza è ragionevole
       if (closestAgent && minDistance < 200) {
-        // Passa allo stato di discussione o meeting
-        const rand = Math.random();
-        
         // Evita interazioni ripetitive con lo stesso agente in poco tempo
         const currentTime = this.getCurrentTime();
-        if (this.lastInteractionAgent === closestAgent.getId() && 
+        if (this.lastInteractionAgent === closestAgent.getId() &&
             currentTime - this.lastInteractionTime < 10000) {
           return;
         }
-        
-        // Aggiorna le informazioni dell'ultima interazione
+
         this.lastInteractionAgent = closestAgent.getId();
         this.lastInteractionTime = currentTime;
-        
-        if (rand < 0.6) {
-          this.changeState(AgentState.DISCUSSING);
-          this.stateTimer = this.getCurrentTime() + Phaser.Math.Between(3000, 6000);
-          
-          // Emetti un evento di interazione che può essere intercettato dal sistema di dialogo
-          this.getGameEvents().emit('agent-interaction', {
-            agentId1: this.id,
-            agentId2: closestAgent.getId(),
-            type: 'discussion'
-          });
-          
-          // Log per debug
-          console.log(`${this.name} starting discussion with ${closestAgent.name}`);
-        } else {
-          this.changeState(AgentState.MEETING);
-          this.stateTimer = this.getCurrentTime() + Phaser.Math.Between(4000, 8000);
-          
-          // Emetti un evento di interazione che può essere intercettato dal sistema di dialogo
-          this.getGameEvents().emit('agent-interaction', {
-            agentId1: this.id,
-            agentId2: closestAgent.getId(),
-            type: 'meeting'
-          });
-          
-          // Log per debug
-          console.log(`${this.name} starting meeting with ${closestAgent.name}`);
-        }
-        
-        // Muoviti verso l'agente target per avvicinarti
-        this.moveTowards(closestAgent.x, closestAgent.y, 40);
+
+        const rand = Math.random();
+        const interType = rand < 0.6 ? 'discussion' : 'meeting';
+        const state = interType === 'discussion' ? AgentState.DISCUSSING : AgentState.MEETING;
+        const duration = Phaser.Math.Between(4000, 8000);
+        const endTime = currentTime + duration;
+
+        // Freeze both agents for the conversation duration
+        this.stopAndConverse(state, endTime);
+        closestAgent.stopAndConverse(state, endTime);
+
+        this.getGameEvents().emit('agent-interaction', {
+          agentId1: this.id,
+          agentId2: closestAgent.getId(),
+          type: interType
+        });
       } else {
         // Se non ci sono agenti vicini, cerca un punto casuale
         this.moveToRandomPoint();
@@ -452,7 +433,22 @@ export class Agent extends Phaser.GameObjects.Sprite {
       s?.events?.emit('agent-state-change', this, newState);
     } catch { /* ignore */ }
   }
-  
+
+  /**
+   * Stops movement and enters a conversation state until endTime.
+   * Called on BOTH agents involved in a discussion/meeting.
+   */
+  public stopAndConverse(state: AgentState, endTime: number): void {
+    this.path = [];
+    this.currentPathIndex = 0;
+    this.targetX = null;
+    this.targetY = null;
+    this.changeState(state);
+    this.stateTimer = endTime;
+    // Push next decision time past conversation end so agent stays put
+    this.nextDecisionTime = endTime + Phaser.Math.Between(500, 2000);
+  }
+
   /**
    * Riproduce l'animazione appropriata per lo stato corrente
    */
