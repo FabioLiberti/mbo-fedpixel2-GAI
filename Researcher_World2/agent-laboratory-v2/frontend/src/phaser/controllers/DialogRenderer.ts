@@ -78,7 +78,7 @@ export class DialogRenderer {
       }
     }
 
-    const duration = dialog.duration || Math.min(2000 + dialog.text.length * 30, 8000);
+    const duration = dialog.duration || Math.min(4000 + dialog.text.length * 30, 10000);
 
     this.scene.time.delayedCall(duration, () => {
       this.removeBubble(dialog.sourceId);
@@ -412,5 +412,27 @@ export class DialogRenderer {
     const dialog = roleDialogs[idx % roleDialogs.length];
     this.presetIndexes.set(roleKey, idx + 1);
     return dialog;
+  }
+
+  // ── Greeting pairs ───────────────────────────────────────────────
+
+  private static GREETINGS: { opener: string; reply: string }[] = [
+    { opener: 'Ciao! Come procede il lavoro?', reply: 'Bene, grazie! Sto facendo progressi.' },
+    { opener: 'Buongiorno! Novità sul progetto?', reply: 'Sì, ho qualche aggiornamento interessante.' },
+    { opener: 'Ehi, tutto bene?', reply: 'Sì, sto analizzando i dati del round precedente.' },
+    { opener: 'Ciao! Hai un momento?', reply: 'Certo, dimmi pure.' },
+    { opener: 'Salve! Come va l\'esperimento?', reply: 'Sta procedendo, i risultati sono incoraggianti.' },
+    { opener: 'Ciao collega! Che fai di bello?', reply: 'Sto ottimizzando alcuni parametri. Tu?' },
+    { opener: 'Buongiorno! Pronto per la riunione?', reply: 'Quasi, devo finire un\'analisi.' },
+    { opener: 'Ehi! Hai visto i nuovi dati?', reply: 'Non ancora, me li mostri?' },
+    { opener: 'Ciao! Come stai oggi?', reply: 'Bene! Ho avuto un\'idea sul modello.' },
+    { opener: 'Salve! Possiamo parlare un attimo?', reply: 'Certo, di cosa si tratta?' },
+  ];
+  private greetingIndex: number = 0;
+
+  getGreetingPair(): { opener: string; reply: string } {
+    const pair = DialogRenderer.GREETINGS[this.greetingIndex % DialogRenderer.GREETINGS.length];
+    this.greetingIndex++;
+    return pair;
   }
 }

@@ -356,7 +356,13 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       _default:         ['Sto lavorando...', 'Ci sono progressi.', 'Quasi finito con questa parte.'],
     },
     walking: {
-      _default: ['Mi sposto...', 'Vado a controllare.', 'Un momento, arrivo.'],
+      professor_office: ['Devo verificare i parametri del modello.', 'Vado a rivedere il protocollo sperimentale.', 'Devo aggiornare la documentazione.'],
+      privacy_lab:      ['Voglio controllare i log di privacy.', 'Devo verificare il budget epsilon corrente.', 'Vado a testare il nuovo meccanismo di anonimizzazione.'],
+      research_area:    ['Ho un\'idea per ottimizzare l\'aggregazione.', 'Devo controllare i risultati dell\'ultimo round.', 'Vado a implementare la nuova strategia di sampling.'],
+      server_room:      ['Devo verificare lo stato del cluster.', 'Vado a controllare i tempi di aggregazione.', 'I log del server mostrano qualcosa di interessante.'],
+      break_room:       ['Una pausa mi aiuterà a pensare meglio.', 'Devo riflettere sull\'approccio da usare.', 'Vado a prendere un caffè e ragionare.'],
+      meeting_room:     ['Devo preparare i grafici per la riunione.', 'Voglio discutere i risultati con il team.', 'È ora di aggiornarci sui progressi.'],
+      _default:         ['Devo verificare una cosa importante.', 'Ho avuto un\'intuizione, vado a controllare.', 'Voglio confrontare i dati con quelli precedenti.'],
     },
     discussing: {
       _default: ['Cosa ne pensi?', 'Parliamone.', "Ho un'idea."],

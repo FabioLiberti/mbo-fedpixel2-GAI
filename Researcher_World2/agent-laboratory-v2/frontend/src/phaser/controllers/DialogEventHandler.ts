@@ -265,21 +265,38 @@ export class DialogEventHandler {
         }
       }
 
-      // Fallback: preset dialogs — delay long enough for first bubble to finish
-      this.creator.createDialog({
-        sourceId: agent1.id, targetId: agent2.id,
-        type: s.getDialogTypeForRole(agent1.role),
-        text: this.renderer.getPresetDialog(agent1.role, data.type),
-        showEffect: true, priority: 5,
-      });
-      setTimeout(() => {
+      // Fallback: alternate between greeting and topical dialog
+      const useGreeting = Math.random() < 0.4;
+      if (useGreeting) {
+        const { opener, reply } = this.renderer.getGreetingPair();
         this.creator.createDialog({
-          sourceId: agent2.id, targetId: agent1.id,
-          type: s.getDialogTypeForRole(agent2.role),
-          text: this.renderer.getPresetDialog(agent2.role, data.type),
-          showEffect: false, priority: 5, isResponse: true,
+          sourceId: agent1.id, targetId: agent2.id,
+          type: s.getDialogTypeForRole(agent1.role),
+          text: opener, showEffect: true, priority: 5,
         });
-      }, 4000);
+        setTimeout(() => {
+          this.creator.createDialog({
+            sourceId: agent2.id, targetId: agent1.id,
+            type: s.getDialogTypeForRole(agent2.role),
+            text: reply, showEffect: false, priority: 5, isResponse: true,
+          });
+        }, 4000);
+      } else {
+        this.creator.createDialog({
+          sourceId: agent1.id, targetId: agent2.id,
+          type: s.getDialogTypeForRole(agent1.role),
+          text: this.renderer.getPresetDialog(agent1.role, data.type),
+          showEffect: true, priority: 5,
+        });
+        setTimeout(() => {
+          this.creator.createDialog({
+            sourceId: agent2.id, targetId: agent1.id,
+            type: s.getDialogTypeForRole(agent2.role),
+            text: this.renderer.getPresetDialog(agent2.role, data.type),
+            showEffect: false, priority: 5, isResponse: true,
+          });
+        }, 4000);
+      }
       s.scene.game.events.emit('dialog-created', { type: 'standard' });
       s.scene.game.events.emit('dialog-created', { type: 'standard' });
     } catch (e) {
