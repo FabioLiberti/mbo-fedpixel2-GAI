@@ -121,6 +121,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   private isZoomed: boolean = false;
   private zoomBackBtn: Phaser.GameObjects.Text | null = null;
 
+  // Cooldown per zone interaction icons (agentId → next allowed timestamp)
+  private zoneIconCooldowns: Map<string, number> = new Map();
+
   constructor(key: string) {
     super(key);
     console.log(`BaseLabScene constructor called with key: ${key}`);
@@ -325,7 +328,26 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
-    console.log(`Zone interaction: ${agent.name} with ${zone.name}`);
+    // Subclasses override to show icons — base does nothing
+  }
+
+  /** Show a zone icon above an agent with cooldown + quick fade-out. */
+  protected showZoneIcon(agent: Agent, icon: string): void {
+    const key = agent.getId() + '_zone';
+    const now = this.time.now;
+    if ((this.zoneIconCooldowns.get(key) ?? 0) > now) return;
+    this.zoneIconCooldowns.set(key, now + 4000);
+
+    const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '20px' });
+    t.setOrigin(0.5).setDepth(100).setAlpha(1);
+    this.tweens.add({
+      targets: t,
+      alpha: 0,
+      y: agent.y - 55,
+      duration: 1200,
+      ease: 'Power2',
+      onComplete: () => t.destroy(),
+    });
   }
 
   protected findPath(startX: number, startY: number, targetX: number, targetY: number): {x: number, y: number}[] {
@@ -618,32 +640,27 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Camera zoom into zone / reset
   // ------------------------------------------------------------------
 
-  /**
-   * Zooms the camera to a specific area of the lab.
-   * @param centerX  World X to center on
-   * @param centerY  World Y to center on
-   * @param zoomLevel  Zoom multiplier (default 2.0)
-   */
   protected zoomToZone(centerX: number, centerY: number, zoomLevel: number = 2.0): void {
     if (this.isZoomed) return;
     this.isZoomed = true;
 
     const cam = this.cameras.main;
+    const targetX = centerX - cam.width / (2 * zoomLevel);
+    const targetY = centerY - cam.height / (2 * zoomLevel);
 
-    // Expand camera bounds so the zoomed view can scroll
-    cam.setBounds(0, 0, cam.width, cam.height);
-
-    // Tween zoom + scroll
+    // Animate zoom via a dummy object (camera scroll/zoom aren't tween-friendly)
+    const proxy = { z: cam.zoom, sx: cam.scrollX, sy: cam.scrollY };
     this.tweens.add({
-      targets: cam,
-      scrollX: centerX - cam.width / (2 * zoomLevel),
-      scrollY: centerY - cam.height / (2 * zoomLevel),
-      zoom: zoomLevel,
+      targets: proxy,
+      z: zoomLevel,
+      sx: targetX,
+      sy: targetY,
       duration: 400,
       ease: 'Power2',
+      onUpdate: () => { cam.setZoom(proxy.z); cam.setScroll(proxy.sx, proxy.sy); },
     });
 
-    // "Back" button (fixed to camera via scrollFactor 0)
+    // "Back" button — scrollFactor 0 keeps it fixed on screen
     this.zoomBackBtn = this.add.text(cam.width - 10, 10, '✕ Vista completa', {
       fontSize: '13px',
       fontFamily: 'Arial',
@@ -659,19 +676,20 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.zoomBackBtn!.on('pointerdown', () => this.resetZoom());
   }
 
-  /** Resets camera zoom back to 1.0 and removes the back button. */
   protected resetZoom(): void {
     if (!this.isZoomed) return;
     this.isZoomed = false;
 
     const cam = this.cameras.main;
+    const proxy = { z: cam.zoom, sx: cam.scrollX, sy: cam.scrollY };
     this.tweens.add({
-      targets: cam,
-      scrollX: 0,
-      scrollY: 0,
-      zoom: 1,
+      targets: proxy,
+      z: 1,
+      sx: 0,
+      sy: 0,
       duration: 400,
       ease: 'Power2',
+      onUpdate: () => { cam.setZoom(proxy.z); cam.setScroll(proxy.sx, proxy.sy); },
     });
 
     if (this.zoomBackBtn) {
@@ -680,7 +698,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     }
   }
 
-  /** Wires interaction zones so clicking on them triggers zoom. */
   protected enableZoneZoom(): void {
     for (const zone of this.interactionZones) {
       zone.on('pointerdown', () => {

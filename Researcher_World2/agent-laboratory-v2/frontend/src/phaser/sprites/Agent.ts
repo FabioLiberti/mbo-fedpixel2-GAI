@@ -75,26 +75,37 @@ export class Agent extends Phaser.GameObjects.Sprite {
     // Configura sprite
     this.setOrigin(0.5);
     
-    // Salva il fattore di scala per usarlo nel calcolo dell'offset dell'etichetta
     const scale = config.scale || 1;
     this.setScale(scale);
-    
-    // Calcola l'offset verticale in base alla dimensione dell'agente e alla scala
-    const labelOffset = 20 * scale;
-    
-    // Calcola la dimensione del font in base alla scala (con limite superiore)
-    const fontSize = Math.max(10, Math.round(12 * Math.min(scale, 1.5)));
-    
-    // Aggiungi etichetta con nome con posizione adattata alla scala
-    this.nameText = scene.add.text(x, y - labelOffset, config.name, { 
-      fontSize: `${fontSize}px`,
+
+    // Name label — hidden by default, shown on click
+    this.nameText = scene.add.text(x, y - 20 * scale, config.name, {
+      fontSize: '11px',
       color: '#ffffff',
-      backgroundColor: '#333333',
-      padding: { left: 3, right: 3, top: 1, bottom: 1 }
+      backgroundColor: '#333333bb',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 }
     });
     this.nameText.setOrigin(0.5);
-    this.nameText.setDepth(1000); // Assicura che l'etichetta sia visibile sopra altri elementi
-    
+    this.nameText.setDepth(1000);
+    this.nameText.setVisible(false);
+
+    // Click to show name briefly
+    this.setInteractive({ useHandCursor: true });
+    this.on('pointerdown', () => {
+      this.nameText.setVisible(true);
+      this.nameText.setAlpha(1);
+      const s = this.scene as unknown as Phaser.Scene;
+      if (s?.tweens) {
+        s.tweens.add({
+          targets: this.nameText,
+          alpha: 0,
+          delay: 1500,
+          duration: 500,
+          onComplete: () => this.nameText.setVisible(false),
+        });
+      }
+    });
+
     // Inizializza tempo corrente
     this.currentTimeValue = Date.now();
     

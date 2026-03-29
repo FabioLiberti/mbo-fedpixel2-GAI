@@ -236,17 +236,10 @@ export class BlekingeLabScene extends BaseLabScene {
   // ---- Scene-specific: Zone interaction icons ---------------------------
 
   protected handleZoneInteraction(agent: Agent, zone: Phaser.GameObjects.Zone): void {
-    try {
-      let icon = '❓';
-      if (zone.name === 'innovation_corner') icon = '💡';
-      else if (zone.name === 'data_wall') icon = '📊';
-      else if (zone.name === 'relax_area') icon = '🌊';
-
-      const t = this.add.text(agent.x, agent.y - 30, icon, { fontSize: '24px' });
-      t.setOrigin(0.5); t.setDepth(100);
-      this.time.delayedCall(1500, () => t.destroy());
-    } catch (error) {
-      console.error('Error in handleZoneInteraction:', error);
-    }
+    let icon = '❓';
+    if (zone.name === 'innovation_corner') icon = '💡';
+    else if (zone.name === 'data_wall') icon = '📊';
+    else if (zone.name === 'relax_area') icon = '🌊';
+    this.showZoneIcon(agent, icon);
   }
 }
