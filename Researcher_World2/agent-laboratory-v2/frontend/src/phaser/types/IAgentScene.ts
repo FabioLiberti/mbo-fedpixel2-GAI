@@ -22,6 +22,8 @@ export interface IAgentScene extends Phaser.Scene {
   debugGraphics: Phaser.GameObjects.Graphics | null;
   debugText: Phaser.GameObjects.Text | null;
   theme: { name: string; colorPalette: Record<string, number> };
+  /** Navigation grid: 0 = walkable, 1 = blocked. Rows×Cols at 32px per cell. */
+  grid?: number[][];
   updateDebugInfo(text: string): void;
 }
 

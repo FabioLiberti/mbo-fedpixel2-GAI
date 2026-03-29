@@ -66,7 +66,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   protected interactionZones: Phaser.GameObjects.Zone[] = [];
 
   // Griglia per il pathfinding
-  protected grid: number[][] = [];
+  public grid: number[][] = [];
 
   // Controller per il Federated Learning
   public flController: FLController;
@@ -692,26 +692,25 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.isZoomed = true;
 
     const cam = this.cameras.main;
-
-    // Remove bounds so the camera can freely scroll to any zone
     cam.removeBounds();
 
-    // Target: center the zone in the zoomed viewport
-    const targetX = centerX - cam.width / (2 * zoomLevel);
-    const targetY = centerY - cam.height / (2 * zoomLevel);
-
-    const proxy = { z: cam.zoom, sx: cam.scrollX, sy: cam.scrollY };
+    // Tween only zoom; recalculate scroll each frame to keep (centerX,centerY)
+    // perfectly centered at every intermediate zoom level.
+    const proxy = { z: cam.zoom };
     this.tweens.add({
       targets: proxy,
       z: zoomLevel,
-      sx: targetX,
-      sy: targetY,
       duration: 400,
       ease: 'Power2',
-      onUpdate: () => { cam.setZoom(proxy.z); cam.setScroll(proxy.sx, proxy.sy); },
+      onUpdate: () => {
+        cam.setZoom(proxy.z);
+        cam.setScroll(
+          centerX - cam.width / (2 * proxy.z),
+          centerY - cam.height / (2 * proxy.z),
+        );
+      },
     });
 
-    // "Back" button — scrollFactor 0 keeps it fixed on screen
     this.zoomBackBtn = this.add.text(cam.width - 10, 10, '✕ Vista completa', {
       fontSize: '13px',
       fontFamily: 'Arial',
@@ -732,17 +731,26 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.isZoomed = false;
 
     const cam = this.cameras.main;
-    const proxy = { z: cam.zoom, sx: cam.scrollX, sy: cam.scrollY };
+    // Capture current center to maintain focus during zoom-out
+    const focusX = cam.scrollX + cam.width / (2 * cam.zoom);
+    const focusY = cam.scrollY + cam.height / (2 * cam.zoom);
+
+    const proxy = { z: cam.zoom };
     this.tweens.add({
       targets: proxy,
       z: 1,
-      sx: 0,
-      sy: 0,
       duration: 400,
       ease: 'Power2',
-      onUpdate: () => { cam.setZoom(proxy.z); cam.setScroll(proxy.sx, proxy.sy); },
+      onUpdate: () => {
+        cam.setZoom(proxy.z);
+        cam.setScroll(
+          focusX - cam.width / (2 * proxy.z),
+          focusY - cam.height / (2 * proxy.z),
+        );
+      },
       onComplete: () => {
-        // Restore bounds after zoom-out completes
+        cam.setZoom(1);
+        cam.setScroll(0, 0);
         cam.setBounds(0, 0, cam.width, cam.height);
       },
     });

@@ -2,6 +2,7 @@
 
 import Phaser from 'phaser';
 import type { IAgentScene } from '../types/IAgentScene';
+import { findPath } from '../utils/pathfinder';
 
 export interface AgentConfig {
   role: string;
@@ -308,17 +309,32 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Sposta l'agente in un punto casuale della mappa
    */
   private moveToRandomPoint(): void {
-    // Ottieni le dimensioni dell'area di gioco in modo sicuro
     const s = this.scene as unknown as Phaser.Scene;
     const width = s?.cameras?.main?.width || 800;
     const height = s?.cameras?.main?.height || 600;
-    
-    // Genera coordinate casuali all'interno dell'area visibile
+
+    const sceneGrid = (this.scene as unknown as IAgentScene).grid;
+    if (sceneGrid && sceneGrid.length > 0) {
+      // Pick a random walkable tile
+      const walkable: { x: number; y: number }[] = [];
+      for (let r = 1; r < sceneGrid.length - 1; r++) {
+        for (let c = 1; c < sceneGrid[r].length - 1; c++) {
+          if (sceneGrid[r][c] === 0) walkable.push({ x: c * 32 + 16, y: r * 32 + 16 });
+        }
+      }
+      if (walkable.length > 0) {
+        const target = walkable[Phaser.Math.Between(0, walkable.length - 1)];
+        this.moveTo(target.x, target.y);
+        return;
+      }
+    }
+
+    // Fallback: random pixel position
     const margin = 50;
-    const targetX = Phaser.Math.Between(margin, width - margin);
-    const targetY = Phaser.Math.Between(margin, height - margin);
-    
-    this.moveTo(targetX, targetY);
+    this.moveTo(
+      Phaser.Math.Between(margin, width - margin),
+      Phaser.Math.Between(margin, height - margin),
+    );
   }
   
   /**
@@ -517,15 +533,15 @@ export class Agent extends Phaser.GameObjects.Sprite {
   public moveTo(x: number, y: number): void {
     this.targetX = x;
     this.targetY = y;
-    
-    // In una implementazione completa, qui andrebbe calcolato un percorso
-    // usando l'algoritmo A* e la griglia di navigazione
-    // Per ora, usiamo un percorso diretto
-    this.path = [
-      { x: this.x, y: this.y },
-      { x, y }
-    ];
-    
+
+    // Use A* pathfinding if a navigation grid is available
+    const sceneGrid = (this.scene as unknown as IAgentScene).grid;
+    if (sceneGrid && sceneGrid.length > 0) {
+      this.path = findPath(sceneGrid, this.x, this.y, x, y);
+    } else {
+      this.path = [{ x: this.x, y: this.y }, { x, y }];
+    }
+
     this.currentPathIndex = 0;
     this.changeState(AgentState.WALKING);
   }
