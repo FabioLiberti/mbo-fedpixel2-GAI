@@ -148,6 +148,7 @@ export class DialogRenderer {
           width: 130, padding: 6,
           targetPos: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
           isLLMDialog: dialog.isLLMDialog || false,
+          isResponse: dialog.isResponse || false,
         },
       );
 

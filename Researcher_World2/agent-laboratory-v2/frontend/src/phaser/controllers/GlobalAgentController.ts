@@ -165,66 +165,31 @@ export class GlobalAgentController {
    * Gestisce l'interazione tra agenti
    */
   private handleAgentInteraction(data: any): void {
-    if (this.isWorldMapScene || !this.dialogController) return;
-    
-    console.log('[GlobalAgentController] Handling agent interaction:', data);
-    
+    if (this.isWorldMapScene) return;
+
     if (!data || !data.agentId1 || !data.agentId2) {
       console.warn('[GlobalAgentController] Invalid interaction data');
       return;
     }
 
-    // Ottiene il tipo di dialogo, con fallback a GENERAL
+    // Dialog creation is handled entirely by DialogEventHandler.
+    // Here we only emit FL-specific side-effect events.
     let dialogType = FLDialogType.GENERAL;
-    
-    // Mappa il tipo test-dialog a un tipo reale
     if (data.type === 'test-dialog') {
-      // Scegli un tipo casuale per i test
-      const types = [
-        FLDialogType.GENERAL,
-        FLDialogType.MODEL,
-        FLDialogType.DATA,
-        FLDialogType.PRIVACY,
-        FLDialogType.RESEARCH
-      ];
+      const types = [FLDialogType.GENERAL, FLDialogType.MODEL, FLDialogType.DATA, FLDialogType.PRIVACY, FLDialogType.RESEARCH];
       dialogType = types[Math.floor(Math.random() * types.length)];
-      console.log(`[GlobalAgentController] Selected random dialog type: ${dialogType}`);
     } else if (Object.values(FLDialogType).includes(data.type)) {
       dialogType = data.type as FLDialogType;
     }
-    
-    // Genera un testo di dialogo di test
-    const text = this.getRandomDialogText(dialogType);
-    
-    // Crea il dialogo utilizzando DialogController
-    this.dialogController.createDialog({
-      sourceId: data.agentId1,
-      targetId: data.agentId2,
-      type: dialogType,
-      text,
-      showEffect: true,
-      duration: 5000 // Durata più lunga per i dialoghi di test
-    });
-    
-    // Emetti un evento FL per dimostrare l'integrazione (solo per dialoghi di tipo appropriate)
+
     if (dialogType === FLDialogType.MODEL) {
-      this.scene.game.events.emit('fl-model-update', {
-        agentId: data.agentId1,
-        accuracy: Math.random() * 10 + 90 // 90-100% accuracy
-      });
+      this.scene.game.events.emit('fl-model-update', { agentId: data.agentId1, accuracy: Math.random() * 10 + 90 });
     } else if (dialogType === FLDialogType.DATA) {
-      this.scene.game.events.emit('fl-data-sharing', {
-        sourceAgentId: data.agentId1,
-        targetAgentId: data.agentId2
-      });
+      this.scene.game.events.emit('fl-data-sharing', { sourceAgentId: data.agentId1, targetAgentId: data.agentId2 });
     } else if (dialogType === FLDialogType.PRIVACY) {
-      this.scene.game.events.emit('fl-privacy-check', {
-        agentId: data.agentId1
-      });
+      this.scene.game.events.emit('fl-privacy-check', { agentId: data.agentId1 });
     } else if (dialogType === FLDialogType.RESEARCH) {
-      this.scene.game.events.emit('fl-research-progress', {
-        agentId: data.agentId1
-      });
+      this.scene.game.events.emit('fl-research-progress', { agentId: data.agentId1 });
     }
   }
   

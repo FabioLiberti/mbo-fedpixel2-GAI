@@ -253,7 +253,7 @@ export class DialogEventHandler {
               this.creator.createDialog({
                 sourceId: agent2.id, targetId: agent1.id,
                 type: s.getDialogTypeForRole(agent2.role), text: d2.dialog,
-                isLLMDialog: true, showEffect: false, priority: 7,
+                isLLMDialog: true, showEffect: false, priority: 7, isResponse: true,
               });
               this.bridgeToPanel(agent2.id, d2.dialog, true, 'dialog');
             }, 3000);
@@ -277,7 +277,7 @@ export class DialogEventHandler {
           sourceId: agent2.id, targetId: agent1.id,
           type: s.getDialogTypeForRole(agent2.role),
           text: this.renderer.getPresetDialog(agent2.role, data.type),
-          showEffect: false, priority: 5,
+          showEffect: false, priority: 5, isResponse: true,
         });
       }, 4000);
       s.scene.game.events.emit('dialog-created', { type: 'standard' });

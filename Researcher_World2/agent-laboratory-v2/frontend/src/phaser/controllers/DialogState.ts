@@ -27,6 +27,7 @@ export interface DialogConfig {
   cognitiveType?: CognitiveProcessType;
   metadata?: any;
   priority?: number;
+  isResponse?: boolean;
 }
 
 export interface DialogResponse {

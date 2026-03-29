@@ -33,6 +33,8 @@ export class SpeechBubble {
   private isDestroyed: boolean = false;
   private isHidden: boolean = false;
 
+  private isResponse: boolean;
+
   constructor(
     scene: Phaser.Scene,
     x: number,
@@ -44,6 +46,7 @@ export class SpeechBubble {
       padding?: number;
       targetPos?: { x: number; y: number };
       isLLMDialog?: boolean;
+      isResponse?: boolean;
     }
   ) {
     this.scene = scene;
@@ -54,6 +57,7 @@ export class SpeechBubble {
       : message;
     this.type = type;
     this.isLLMDialog = options?.isLLMDialog || false;
+    this.isResponse = options?.isResponse || false;
 
     this.container = this.scene.add.container(x, y);
     this.container.setDepth(1000);
@@ -75,7 +79,10 @@ export class SpeechBubble {
     const bubbleWidth = Math.min(requestedW, maxW);
 
     // --- Colors ---
-    const { fill, border } = getTypeColor(this.type);
+    // Response bubbles get a distinct teal tint; questions keep the type color
+    const { fill, border } = this.isResponse
+      ? { fill: 0x1a4a4a, border: 0x22aa88 }
+      : getTypeColor(this.type);
     let fillColor = fill;
     if (this.isLLMDialog) {
       fillColor = Phaser.Display.Color.ValueToColor(fill).lighten(10).desaturate(10).color;
