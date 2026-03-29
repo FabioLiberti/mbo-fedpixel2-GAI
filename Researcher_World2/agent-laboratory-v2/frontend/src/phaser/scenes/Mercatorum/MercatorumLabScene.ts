@@ -305,8 +305,18 @@ export class MercatorumLabScene extends BaseLabScene {
 
       // Top-left: Ufficio Prof.
       addZone(roomCX(1, c1), roomCY(1, midY), roomW(1, c1), roomH(1, midY), 'professor_office', 'Ufficio Prof.');
-      // Top-center: Meeting Room
-      addZone(roomCX(c1 + 1, c2), roomCY(1, midY), roomW(c1 + 1, c2), roomH(1, midY), 'meeting_room', 'Meeting Room');
+      // Top-center: Meeting Room (label top-right to avoid overlap with scene title)
+      {
+        const mx = roomCX(c1 + 1, c2), my = roomCY(1, midY);
+        const mw = roomW(c1 + 1, c2), mh = roomH(1, midY);
+        const z = this.add.zone(mx, my, mw, mh);
+        z.setName('meeting_room'); z.setInteractive();
+        this.add.text(mx + mw / 2 - 6, my - mh / 2 + 6, 'Meeting Room', {
+          fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
+          padding: { left: 4, right: 4, top: 2, bottom: 2 }
+        }).setOrigin(1, 0).setDepth(5);
+        this.interactionZones.push(z);
+      }
       // Top-right: Privacy Lab
       addZone(roomCX(c2 + 1, cols - 1), roomCY(1, midY), roomW(c2 + 1, cols - 1), roomH(1, midY), 'privacy_lab', 'Privacy Lab');
       // Bottom-left: Break Room
