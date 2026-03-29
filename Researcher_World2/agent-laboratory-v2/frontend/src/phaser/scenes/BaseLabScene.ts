@@ -17,6 +17,7 @@ import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
 import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
 import { generateTilesetCanvas, TilesetTheme, TILE } from '../utils/tilesetGenerator';
+import { DialogAnalytics } from '../controllers/DialogAnalytics';
 
 /**
  * Interfaccia per i dati di interazione tra agenti
@@ -113,6 +114,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   public agentsLegend: AgentsLegend | null = null;
   public agentController: GlobalAgentController | null = null;
   public dialogEventTracker: DialogEventTracker | null = null;
+  public dialogAnalytics: DialogAnalytics | null = null;
 
   // Tilemap (when using tilemap-based layout instead of procedural)
   protected labTilemap: Phaser.Tilemaps.Tilemap | null = null;
@@ -446,6 +448,14 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         }
       }
     });
+  }
+
+  /** Initialize dialog analytics system and expose on window for console access. */
+  protected enableAnalytics(): void {
+    this.dialogAnalytics = new DialogAnalytics(this);
+    // Expose globally for console: window.dialogAnalytics.printReport()
+    (window as any).dialogAnalytics = this.dialogAnalytics;
+    console.log('[BaseLabScene] DialogAnalytics enabled — use window.dialogAnalytics.printReport() in console');
   }
 
   /** Listen for coffee-break events and move agents to break_room zone. */

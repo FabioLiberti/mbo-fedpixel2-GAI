@@ -193,6 +193,7 @@ export class MercatorumLabScene extends BaseLabScene {
       this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
       this.enableStateIcons();
       this.enableCoffeeBreak();
+      this.enableAnalytics();
 
       // Camera
       this.setupCamera();

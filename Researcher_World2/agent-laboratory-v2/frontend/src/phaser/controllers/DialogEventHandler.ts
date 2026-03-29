@@ -224,6 +224,10 @@ export class DialogEventHandler {
               isLLMDialog: true, showEffect: true, priority: 7,
             });
             this.bridgeToPanel(agent1.id, d1.dialog, true, 'dialog');
+            s.scene.game.events.emit('analytics-dialog', {
+              speakerId: agent1.id, targetId: agent2.id,
+              text: d1.dialog, category: 'llm', isResponse: false, isLLM: true,
+            });
           }, 3000);
 
           // Agent 2 thinking + dialog (after longer delay)
@@ -256,6 +260,10 @@ export class DialogEventHandler {
                 isLLMDialog: true, showEffect: false, priority: 7, isResponse: true,
               });
               this.bridgeToPanel(agent2.id, d2.dialog, true, 'dialog');
+              s.scene.game.events.emit('analytics-dialog', {
+                speakerId: agent2.id, targetId: agent1.id,
+                text: d2.dialog, category: 'llm', isResponse: true, isLLM: true,
+              });
             }, 3000);
           }, 6000);
 
@@ -275,7 +283,7 @@ export class DialogEventHandler {
         // Role-pair dialog: speaker order determined by role match
         const speaker = rolePair.speakerFirst === 0 ? agent1 : agent2;
         const responder = rolePair.speakerFirst === 0 ? agent2 : agent1;
-        this.emitDialogPair(speaker, responder, s, rolePair.opener, rolePair.reply);
+        this.emitDialogPair(speaker, responder, s, rolePair.opener, rolePair.reply, 'role_pair', rolePair.room);
         if (rolePair.room) {
           setTimeout(() => {
             s.scene.game.events.emit('go-to-room', {
@@ -286,11 +294,11 @@ export class DialogEventHandler {
       } else if (roll < 0.45) {
         // Greeting
         const { opener, reply } = this.renderer.getGreetingPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        this.emitDialogPair(agent1, agent2, s, opener, reply, 'greeting');
       } else if (roll < 0.55) {
         // Coffee break — dialog then both agents move to break room
         const { opener, reply } = this.renderer.getCoffeeBreakPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        this.emitDialogPair(agent1, agent2, s, opener, reply, 'coffee_break', 'break_room');
         setTimeout(() => {
           s.scene.game.events.emit('coffee-break', {
             agentIds: [data.agentId1, data.agentId2],
@@ -299,7 +307,7 @@ export class DialogEventHandler {
       } else if (roll < 0.65) {
         // Meeting room — present results
         const { opener, reply } = this.renderer.getMeetingRoomPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        this.emitDialogPair(agent1, agent2, s, opener, reply, 'meeting_room', 'meeting_room');
         setTimeout(() => {
           s.scene.game.events.emit('go-to-room', {
             agentIds: [data.agentId1, data.agentId2], room: 'meeting_room',
@@ -308,7 +316,7 @@ export class DialogEventHandler {
       } else if (roll < 0.75) {
         // Server room — check processing
         const { opener, reply } = this.renderer.getServerRoomPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply);
+        this.emitDialogPair(agent1, agent2, s, opener, reply, 'server_room', 'server_room');
         setTimeout(() => {
           s.scene.game.events.emit('go-to-room', {
             agentIds: [data.agentId1, data.agentId2], room: 'server_room',
@@ -316,18 +324,26 @@ export class DialogEventHandler {
         }, 12000);
       } else {
         // Topical dialog (role-individual)
+        const text1 = this.renderer.getPresetDialog(agent1.role, data.type);
+        const text2 = this.renderer.getPresetDialog(agent2.role, data.type);
         this.creator.createDialog({
           sourceId: agent1.id, targetId: agent2.id,
           type: s.getDialogTypeForRole(agent1.role),
-          text: this.renderer.getPresetDialog(agent1.role, data.type),
-          showEffect: true, priority: 5,
+          text: text1, showEffect: true, priority: 5,
+        });
+        s.scene.game.events.emit('analytics-dialog', {
+          speakerId: agent1.id, targetId: agent2.id,
+          text: text1, category: 'topical', isResponse: false, isLLM: false,
         });
         setTimeout(() => {
           this.creator.createDialog({
             sourceId: agent2.id, targetId: agent1.id,
             type: s.getDialogTypeForRole(agent2.role),
-            text: this.renderer.getPresetDialog(agent2.role, data.type),
-            showEffect: false, priority: 5, isResponse: true,
+            text: text2, showEffect: false, priority: 5, isResponse: true,
+          });
+          s.scene.game.events.emit('analytics-dialog', {
+            speakerId: agent2.id, targetId: agent1.id,
+            text: text2, category: 'topical', isResponse: true, isLLM: false,
           });
         }, 5000);
       }
@@ -338,24 +354,38 @@ export class DialogEventHandler {
     }
   }
 
-  /** Emit a dialog pair (opener + reply after 5s). */
+  /** Emit a dialog pair (opener + reply after 5s) with analytics tracking. */
   private emitDialogPair(
     speaker: { id: string; role: string },
     responder: { id: string; role: string },
     s: DialogState,
     opener: string,
     reply: string,
+    category: string = 'unknown',
+    destinationRoom?: string,
   ): void {
     this.creator.createDialog({
       sourceId: speaker.id, targetId: responder.id,
       type: s.getDialogTypeForRole(speaker.role),
       text: opener, showEffect: true, priority: 5,
     });
+    // Analytics: track opener
+    s.scene.game.events.emit('analytics-dialog', {
+      speakerId: speaker.id, targetId: responder.id,
+      text: opener, category, isResponse: false, isLLM: false,
+      destinationRoom,
+    });
     setTimeout(() => {
       this.creator.createDialog({
         sourceId: responder.id, targetId: speaker.id,
         type: s.getDialogTypeForRole(responder.role),
         text: reply, showEffect: false, priority: 5, isResponse: true,
+      });
+      // Analytics: track reply
+      s.scene.game.events.emit('analytics-dialog', {
+        speakerId: responder.id, targetId: speaker.id,
+        text: reply, category, isResponse: true, isLLM: false,
+        destinationRoom,
       });
     }, 5000);
   }
