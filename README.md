@@ -16,6 +16,27 @@
 
 ---
 
+## Indice
+
+1. [Panoramica scientifica](#panoramica-scientifica)
+2. [Architettura](#architettura)
+3. [Architettura cognitiva](#architettura-cognitiva)
+4. [Agenti e ruoli](#agenti-e-ruoli)
+5. [Federated Learning](#federated-learning)
+6. [Ambienti di laboratorio](#ambienti-di-laboratorio)
+7. [Sistema di dialoghi](#sistema-di-dialoghi)
+8. [Dialog Analytics](#dialog-analytics)
+9. [Navigazione A*](#navigazione-a)
+10. [API Reference](#api-reference)
+11. [Quick Start](#quick-start)
+12. [Struttura del progetto](#struttura-del-progetto)
+13. [Relazione con Stanford Generative Agents](#relazione-con-stanford-generative-agents)
+14. [Stato di sviluppo](#stato-di-sviluppo)
+15. [Roadmap scientifica](#roadmap-scientifica)
+16. [Riferimenti](#riferimenti)
+
+---
+
 ## Panoramica scientifica
 
 Federated Generative Agents (FGA) esplora l'intersezione tra **Federated Learning** (McMahan et al., AISTATS 2017), **agenti generativi believable** (Park et al., ACM UIST 2023) e **Privacy-Preserving Machine Learning** (Dwork & Roth, 2014). Il sistema simula un ecosistema di ricerca distribuito in cui agenti autonomi, dotati di ruoli professionali distinti e di una architettura cognitiva completa, collaborano alla costruzione di modelli federati rispettando vincoli di privacy differenziale.
