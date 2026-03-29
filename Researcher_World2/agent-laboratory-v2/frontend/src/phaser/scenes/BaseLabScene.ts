@@ -431,6 +431,11 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
           this.statePhrasesIndexes.set(phraseKey, idx + 1);
 
           this.time.delayedCall(1200, () => {
+            // Track state phrase in analytics
+            this.game.events.emit('analytics-dialog', {
+              speakerId: agent.getId(), text: phrase,
+              category: 'state_phrase', isLLM: false,
+            });
             const bubble = this.add.text(agent.x, agent.y - 52, phrase, {
               fontSize: '8px', fontFamily: 'Arial',
               color: '#ffffff', backgroundColor: '#000000aa',

@@ -415,6 +415,9 @@ export class DialogEventHandler {
           cognitiveType: processType || CognitiveProcessType.THINKING, isLLMDialog: true, priority: 6,
         });
         this.bridgeToPanel(agent.id, processedText, true, 'thinking');
+        s.scene.game.events.emit('analytics-dialog', {
+          speakerId: agent.id, text: processedText, category: 'thinking', isLLM: true,
+        });
       }
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentThinking error:', e);
@@ -462,6 +465,9 @@ export class DialogEventHandler {
           });
           this.bridgeToPanel(agent.id, cleaned, true, 'decision');
         }
+        s.scene.game.events.emit('analytics-dialog', {
+          speakerId: agent.id, text: cleaned, category: 'thinking', isLLM: true,
+        });
       }
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentDecision error:', e);
@@ -509,6 +515,9 @@ export class DialogEventHandler {
           });
           this.bridgeToPanel(agent.id, cleaned, true, 'planning');
         }
+        s.scene.game.events.emit('analytics-dialog', {
+          speakerId: agent.id, text: cleaned, category: 'thinking', isLLM: true,
+        });
       }
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentPlanning error:', e);
@@ -556,6 +565,9 @@ export class DialogEventHandler {
           });
           this.bridgeToPanel(agent.id, cleaned, true, 'dialog');
         }
+        s.scene.game.events.emit('analytics-dialog', {
+          speakerId: agent.id, text: cleaned, category: 'llm', isLLM: true,
+        });
       }
     } catch (e) {
       console.error('[DialogEventHandler] handleAgentReaction error:', e);
