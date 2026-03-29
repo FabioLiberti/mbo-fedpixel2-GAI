@@ -15,10 +15,10 @@ import { THEME_MERCATORUM, TILE } from '../../utils/tilesetGenerator';
 // Agent config — aligned with backend PERSONA_REGISTRY["mercatorum"]
 // ---------------------------------------------------------------------------
 const MERCATORUM_AGENTS: AgentConfigEntry[] = [
-  { type: 'professor_portrait',          name: 'Elena Conti',   position: { x: 150, y: 200 }, specialization: 'privacy_economics' },
-  { type: 'privacy_specialist_portrait', name: 'Luca Bianchi',  position: { x: 300, y: 250 }, specialization: 'compliance_verification' },
-  { type: 'student',                     name: 'Marco Rossi',   position: { x: 200, y: 150 }, specialization: 'data_science' },
-  { type: 'researcher',                  name: 'Sofia Greco',   position: { x: 350, y: 180 }, specialization: 'privacy_engineering' },
+  { type: 'professor_portrait',          name: 'Elena Conti',   position: { x: 120, y: 180 }, specialization: 'privacy_economics' },
+  { type: 'privacy_specialist_portrait', name: 'Luca Bianchi',  position: { x: 600, y: 180 }, specialization: 'compliance_verification' },
+  { type: 'student',                     name: 'Marco Rossi',   position: { x: 250, y: 400 }, specialization: 'data_science' },
+  { type: 'researcher',                  name: 'Sofia Greco',   position: { x: 500, y: 400 }, specialization: 'privacy_engineering' },
 ];
 
 // Portrait types use high-res images (unique keys to avoid conflict with WorldMapScene spritesheets)
@@ -123,12 +123,16 @@ export class MercatorumLabScene extends BaseLabScene {
       });
       this.createArenaZones();
       this.createInteractionZones();
+      this.enableZoneZoom();
 
-      // Agents (portrait types get 0.15 scale, spritesheets get 5.0)
+      // Agents (scale computed dynamically from AGENT_TARGET_HEIGHT)
       this.createAgentsFromConfig(MERCATORUM_AGENTS, PORTRAIT_TYPES);
 
       // Camera
       this.setupCamera();
+
+      // LLM status indicator (bottom-left)
+      this.createLLMStatusIndicator();
 
       // Controllers
       this.dialogEventTracker = new DialogEventTracker(this);
@@ -229,19 +233,35 @@ export class MercatorumLabScene extends BaseLabScene {
   protected createInteractionZones(): void {
     try {
       const gs = 32;
+      const cam = this.cameras.main;
       const zoneGraphics = this.add.graphics();
-      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      zoneGraphics.lineStyle(1, 0x00ff00, 0.25);
+      zoneGraphics.setDepth(-3);
 
-      const addZone = (x: number, y: number, w: number, h: number, name: string) => {
+      const addZone = (x: number, y: number, w: number, h: number, name: string, label: string) => {
         const z = this.add.zone(x, y, w, h);
         z.setName(name); z.setInteractive();
         zoneGraphics.strokeRect(x - w / 2, y - h / 2, w, h);
+        // Label della zona
+        const t = this.add.text(x, y - h / 2 + 8, label, {
+          fontSize: '8px', color: '#ffffff', backgroundColor: '#00000066',
+          padding: { left: 3, right: 3, top: 1, bottom: 1 }
+        }).setOrigin(0.5, 0).setDepth(-2);
         this.interactionZones.push(z);
       };
 
-      addZone(this.cameras.main.width / 2, this.cameras.main.height / 2, gs * 4, gs * 3, 'meeting_table');
-      addZone(this.cameras.main.width / 2, gs, this.cameras.main.width - 100, gs * 2, 'library');
-      addZone(100, 300, gs * 4, gs * 4, 'financial_data');
+      // Zona meeting (centro)
+      addZone(cam.width / 2, cam.height / 2, gs * 6, gs * 4, 'meeting_table', 'Meeting');
+      // Libreria (alto, tutta la larghezza)
+      addZone(cam.width / 2, gs * 2, cam.width - gs * 4, gs * 3, 'library', 'Libreria');
+      // Ufficio professore (alto-sx)
+      addZone(120, 180, gs * 4, gs * 4, 'professor_office', 'Ufficio Prof.');
+      // Ufficio privacy (alto-dx)
+      addZone(600, 180, gs * 4, gs * 4, 'privacy_office', 'Privacy Lab');
+      // Area studenti (basso-sx)
+      addZone(250, 400, gs * 5, gs * 4, 'student_area', 'Area Studenti');
+      // Area ricerca (basso-dx)
+      addZone(500, 400, gs * 5, gs * 4, 'research_area', 'Area Ricerca');
     } catch (error) {
       console.error('Error in createInteractionZones:', error);
     }

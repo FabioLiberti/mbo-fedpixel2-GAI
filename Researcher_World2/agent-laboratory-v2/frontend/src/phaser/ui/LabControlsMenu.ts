@@ -2,6 +2,7 @@
 //
 // Pannello condiviso "Controlli Lab" — unico per tutte e tre le scene.
 // Contiene: Navigazione, Agenti, LLM, Test/Debug, Info Laboratorio.
+// Responsive: larghezza e altezza cappate alla dimensione del canvas.
 
 import * as Phaser from 'phaser';
 import { SimpleLLMPanel } from './simple/SimpleLLMPanel';
@@ -28,6 +29,12 @@ export interface LabControlConfig {
   navigation: Array<{ label: string; sceneKey: string }>;
 }
 
+// ── Size limits (fraction of camera) ────────────────────────────────
+const MAX_PANEL_W_RATIO = 0.35;   // max 35% of canvas width
+const MAX_PANEL_H_RATIO = 0.85;   // max 85% of canvas height
+const MIN_PANEL_W = 180;
+const MAX_PANEL_W = 240;
+
 // ── LabControlsMenu ──────────────────────────────────────────────────
 
 export class LabControlsMenu {
@@ -44,9 +51,13 @@ export class LabControlsMenu {
   private llmControlPanel: LLMControlPanel | null = null;
   private dialogController: DialogController | null = null;
 
-  // Panel geometry
-  private readonly panelW = 240;
-  private panelH = 0; // computed in build
+  // Canvas diagnostic
+  private diagDiv: HTMLDivElement | null = null;
+  private diagTimer: Phaser.Time.TimerEvent | null = null;
+
+  // Panel geometry (computed in build)
+  private panelW = 0;
+  private panelH = 0;
 
   constructor(scene: ILabControlScene & Phaser.Scene, config: LabControlConfig) {
     this.scene = scene;
@@ -67,6 +78,8 @@ export class LabControlsMenu {
   destroy(): void {
     this.simpleLLMPanel?.destroy(); this.simpleLLMPanel = null;
     this.llmControlPanel?.destroy(); this.llmControlPanel = null;
+    if (this.diagDiv) { this.diagDiv.remove(); this.diagDiv = null; }
+    if (this.diagTimer) { this.diagTimer.remove(); this.diagTimer = null; }
     this.panel?.destroy(); this.panel = null;
     this.toggleBtn?.destroy(); this.toggleBtn = null;
   }
@@ -75,14 +88,23 @@ export class LabControlsMenu {
 
   private build(): void {
     const { primary, secondary, accent } = this.config.theme;
-    const W = this.panelW;
     const cam = this.scene.cameras.main;
 
-    // --- Collect sections to compute total height ---
+    // Responsive panel width
+    const maxW = Math.floor(cam.width * MAX_PANEL_W_RATIO);
+    this.panelW = Phaser.Math.Clamp(maxW, MIN_PANEL_W, MAX_PANEL_W);
+    const W = this.panelW;
+
+    // Button dimensions scaled to panel
+    const btnW = W - 30;
+    const btnH = 26;
+    const btnStep = 30;   // vertical step between buttons
+    const sectionGap = 6;
+    const sectionTitleH = 22;
+
+    // --- Collect sections ---
     interface Section { title: string; buttons: { label: string; cb: () => void }[] }
     const sections: Section[] = [];
-
-    // Navigazione rimossa — si usa la sidebar
 
     // 1. Agenti
     sections.push({
@@ -117,6 +139,7 @@ export class LabControlsMenu {
         { label: 'Test Dialogo', cb: () => this.testDialog() },
         { label: 'Debug Dialoghi (D)', cb: () => this.toggleDebugDialogs() },
         { label: 'Assets Debug', cb: () => this.toggleAssetsDebug() },
+        { label: 'Diagnostica Canvas', cb: () => this.toggleCanvasDiagnostic() },
       ],
     });
 
@@ -128,15 +151,18 @@ export class LabControlsMenu {
       ],
     });
 
-    // Calculate panel height: title(40) + per-section(sectionTitle 30 + buttons * 40 + gap 10)
-    let totalH = 50; // title bar + separator
+    // --- Compute total height (compact) ---
+    let totalH = 40; // title bar + separator
     for (const s of sections) {
-      totalH += 30; // section title
-      totalH += s.buttons.length * 40; // buttons
-      totalH += 10; // gap
+      totalH += sectionTitleH;
+      totalH += s.buttons.length * btnStep;
+      totalH += sectionGap;
     }
-    totalH += 10; // bottom padding
-    this.panelH = totalH;
+    totalH += 8; // bottom padding
+
+    // Cap height to canvas
+    const maxH = Math.floor(cam.height * MAX_PANEL_H_RATIO);
+    this.panelH = Math.min(totalH, maxH);
 
     // --- Panel container ---
     const panelX = cam.width - 40;
@@ -147,70 +173,75 @@ export class LabControlsMenu {
     p.setDepth(1000);
     p.setScrollFactor(0);
 
+    // IMPORTANT: start invisible — avoid dark-rectangle flash
+    p.setVisible(false);
+    p.setAlpha(0);
+
     // Background
     const bg = this.scene.add.graphics();
     bg.fillStyle(secondary, 0.92);
-    bg.fillRoundedRect(-W, -this.panelH, W, this.panelH, 10);
+    bg.fillRoundedRect(-W, -this.panelH, W, this.panelH, 8);
     bg.lineStyle(2, primary, 1);
-    bg.strokeRoundedRect(-W, -this.panelH, W, this.panelH, 10);
+    bg.strokeRoundedRect(-W, -this.panelH, W, this.panelH, 8);
     p.add(bg);
 
     // Title
-    const title = this.scene.add.text(-W / 2, -this.panelH + 20, 'Controlli Lab', {
-      fontSize: '18px', color: this.hexStr(accent), fontStyle: 'bold',
+    const title = this.scene.add.text(-W / 2, -this.panelH + 16, 'Controlli Lab', {
+      fontSize: '15px', color: this.hexStr(accent), fontStyle: 'bold',
     }).setOrigin(0.5);
     p.add(title);
 
     // Separator
     const sep = this.scene.add.graphics();
-    sep.lineStyle(2, primary, 0.8);
-    sep.lineBetween(-W + 20, -this.panelH + 40, -20, -this.panelH + 40);
+    sep.lineStyle(1.5, primary, 0.8);
+    sep.lineBetween(-W + 12, -this.panelH + 34, -12, -this.panelH + 34);
     p.add(sep);
 
     // --- Render sections ---
-    let curY = -this.panelH + 55;
+    let curY = -this.panelH + 42;
 
     for (const section of sections) {
       // Section title
-      const sTitle = this.scene.add.text(-W + 20, curY, section.title, {
-        fontSize: '15px', color: this.hexStr(accent), fontStyle: 'bold',
+      const sTitle = this.scene.add.text(-W + 14, curY, section.title, {
+        fontSize: '12px', color: this.hexStr(accent), fontStyle: 'bold',
       });
       p.add(sTitle);
-      curY += 28;
+      curY += sectionTitleH;
 
       // Buttons
       for (const btn of section.buttons) {
-        this.addButton(-W / 2, curY, btn.label, btn.cb, primary, accent);
-        curY += 40;
+        this.addButton(-W / 2, curY, btn.label, btn.cb, primary, accent, btnW, btnH);
+        curY += btnStep;
       }
-      curY += 10; // section gap
+      curY += sectionGap;
     }
 
     // --- Toggle button (circle, bottom-right) ---
     this.createToggleButton(primary, accent);
 
-    // Start closed
-    this.setOpen(false);
+    // Panel stays invisible — only shown on toggle click
   }
 
   // ── Button factory ───────────────────────────────────────────────
 
-  private addButton(x: number, y: number, label: string, cb: () => void, primary: number, accent: number): void {
-    const bw = 200, bh = 30;
+  private addButton(
+    x: number, y: number, label: string, cb: () => void,
+    primary: number, accent: number, bw: number, bh: number,
+  ): void {
     const container = this.scene.add.container(x, y);
 
     const bg = this.scene.add.graphics();
     const drawBg = (alpha: number, borderAlpha: number) => {
       bg.clear();
       bg.fillStyle(primary, alpha);
-      bg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 5);
+      bg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 4);
       bg.lineStyle(1, accent, borderAlpha);
-      bg.strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 5);
+      bg.strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 4);
     };
     drawBg(0.7, 0.5);
 
     const txt = this.scene.add.text(0, 0, label, {
-      fontSize: '14px', color: this.hexStr(accent), align: 'center',
+      fontSize: '12px', color: this.hexStr(accent), align: 'center',
     }).setOrigin(0.5);
 
     container.add([bg, txt]);
@@ -227,7 +258,7 @@ export class LabControlsMenu {
 
   private createToggleButton(primary: number, accent: number): void {
     const cam = this.scene.cameras.main;
-    const tb = this.scene.add.container(cam.width - 30, cam.height - 30);
+    const tb = this.scene.add.container(cam.width - 24, cam.height - 24);
     this.toggleBtn = tb;
     tb.setDepth(1001);
     tb.setScrollFactor(0);
@@ -240,14 +271,14 @@ export class LabControlsMenu {
       circle.lineStyle(2, accent, 1);
       circle.strokeCircle(0, 0, r);
     };
-    drawCircle(primary, 20);
+    drawCircle(primary, 16);
 
-    const icon = this.scene.add.text(0, 0, '≡', { fontSize: '24px', color: this.hexStr(accent) }).setOrigin(0.5);
+    const icon = this.scene.add.text(0, 0, '≡', { fontSize: '20px', color: this.hexStr(accent) }).setOrigin(0.5);
     tb.add([circle, icon]);
 
-    tb.setInteractive(new Phaser.Geom.Rectangle(-20, -20, 40, 40), Phaser.Geom.Rectangle.Contains);
-    tb.on('pointerover', () => drawCircle(primary, 22));
-    tb.on('pointerout', () => drawCircle(primary, 20));
+    tb.setInteractive(new Phaser.Geom.Rectangle(-16, -16, 32, 32), Phaser.Geom.Rectangle.Contains);
+    tb.on('pointerover', () => drawCircle(primary, 18));
+    tb.on('pointerout', () => drawCircle(primary, 16));
     tb.on('pointerup', () => {
       this.isOpen = !this.isOpen;
       this.setOpen(this.isOpen);
@@ -261,12 +292,21 @@ export class LabControlsMenu {
     const targetX = cam.width - 40;
 
     if (open) {
+      // Show then slide in
       this.panel.setVisible(true);
-      this.scene.tweens.add({ targets: this.panel, x: targetX, duration: 300, ease: 'Power2' });
+      this.panel.setAlpha(1);
+      this.panel.x = targetX + this.panelW + 20; // start off-screen
+      this.scene.tweens.add({ targets: this.panel, x: targetX, duration: 250, ease: 'Power2' });
     } else {
+      // Slide out then hide
       this.scene.tweens.add({
-        targets: this.panel, x: targetX + 250, duration: 300, ease: 'Power2',
-        onComplete: () => { this.panel?.setVisible(false); },
+        targets: this.panel, x: targetX + this.panelW + 20, duration: 250, ease: 'Power2',
+        onComplete: () => {
+          if (this.panel) {
+            this.panel.setVisible(false);
+            this.panel.setAlpha(0);
+          }
+        },
       });
     }
   }
@@ -283,7 +323,6 @@ export class LabControlsMenu {
         this.closeAllSubPanels();
         this.closePanel();
         integrateAgentsLegend(this.scene);
-        // Legend is created asynchronously inside integrateAgentsLegend
       }
     } catch (err) { console.error('[LabControlsMenu] toggleAgentsLegend:', err); }
   }
@@ -405,30 +444,159 @@ export class LabControlsMenu {
   private showLabInfo(): void {
     const { primary, secondary, accent } = this.config.theme;
     const cam = this.scene.cameras.main;
+
+    // Cap info panel to canvas size
+    const infoW = Math.min(500, cam.width - 40);
+    const infoH = Math.min(400, cam.height - 40);
+
     const info = this.scene.add.container(cam.centerX, cam.centerY).setDepth(1000);
 
     const bg = this.scene.add.graphics();
     bg.fillStyle(secondary, 0.95);
-    bg.fillRoundedRect(-250, -200, 500, 400, 10);
+    bg.fillRoundedRect(-infoW / 2, -infoH / 2, infoW, infoH, 10);
     bg.lineStyle(3, primary, 1);
-    bg.strokeRoundedRect(-250, -200, 500, 400, 10);
+    bg.strokeRoundedRect(-infoW / 2, -infoH / 2, infoW, infoH, 10);
     info.add(bg);
 
-    info.add(this.scene.add.text(0, -170, this.config.labName, {
-      fontSize: '24px', color: this.hexStr(accent), fontStyle: 'bold', align: 'center',
+    info.add(this.scene.add.text(0, -infoH / 2 + 30, this.config.labName, {
+      fontSize: '20px', color: this.hexStr(accent), fontStyle: 'bold', align: 'center',
     }).setOrigin(0.5));
 
-    info.add(this.scene.add.text(0, -80, this.config.labDescription, {
-      fontSize: '15px', color: '#ffffff', align: 'center', wordWrap: { width: 450 },
+    info.add(this.scene.add.text(0, -infoH / 2 + 70, this.config.labDescription, {
+      fontSize: '13px', color: '#ffffff', align: 'center',
+      wordWrap: { width: infoW - 40 },
     }).setOrigin(0.5, 0));
 
-    const close = this.scene.add.text(230, -180, 'X', {
-      fontSize: '20px', color: '#ffffff', backgroundColor: '#aa0000',
-      padding: { left: 8, right: 8, top: 5, bottom: 5 },
+    const close = this.scene.add.text(infoW / 2 - 20, -infoH / 2 + 10, 'X', {
+      fontSize: '18px', color: '#ffffff', backgroundColor: '#aa0000',
+      padding: { left: 6, right: 6, top: 4, bottom: 4 },
     });
     close.setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => info.destroy());
     info.add(close);
+  }
+
+  // ── Canvas diagnostic ───────────────────────────────────────────
+
+  private toggleCanvasDiagnostic(): void {
+    // Toggle off if already active
+    if (this.diagDiv) {
+      this.diagDiv.remove();
+      this.diagDiv = null;
+      if (this.diagTimer) { this.diagTimer.remove(); this.diagTimer = null; }
+      return;
+    }
+
+    const scene = this.scene;
+    const children = scene.children.getAll();
+    const lines: string[] = [];
+
+    let idx = 0;
+    for (const child of children) {
+      const go = child as Phaser.GameObjects.GameObject & {
+        x?: number; y?: number; width?: number; height?: number;
+        displayWidth?: number; displayHeight?: number;
+        scaleX?: number; scaleY?: number;
+        depth?: number; alpha?: number; visible?: boolean;
+        type?: string; texture?: { key?: string };
+        list?: Phaser.GameObjects.GameObject[];
+        commandBuffer?: number[];
+      };
+
+      const type = go.type ?? go.constructor?.name ?? '?';
+      const depth = go.depth ?? 0;
+      const alpha = go.alpha ?? 1;
+      const visible = go.visible ?? true;
+
+      const isGraphics = type === 'Graphics';
+      const isContainer = type === 'Container';
+      const childCount = isContainer && go.list ? go.list.length : 0;
+      const cmdLen = isGraphics && go.commandBuffer ? go.commandBuffer.length : 0;
+
+      const dw = go.displayWidth ?? (go.width ?? 0) * (go.scaleX ?? 1);
+      const dh = go.displayHeight ?? (go.height ?? 0) * (go.scaleY ?? 1);
+
+      if (isGraphics || isContainer || dw > 150 || dh > 150) {
+        const texKey = go.texture?.key ?? '';
+        const extra = isGraphics ? ` cmds=${cmdLen}` : isContainer ? ` kids=${childCount}` : '';
+        lines.push(
+          `#${idx} ${type} tex=${texKey} (${Math.round(go.x ?? 0)},${Math.round(go.y ?? 0)}) ` +
+          `${Math.round(dw)}x${Math.round(dh)} d=${depth} a=${alpha.toFixed(1)} v=${visible}${extra}`
+        );
+      }
+      idx++;
+    }
+
+    // DOM overlays scan
+    const domLines: string[] = [];
+    const gameDiv = document.getElementById('phaser-game');
+    if (gameDiv) {
+      const rect = gameDiv.getBoundingClientRect();
+      document.querySelectorAll('*').forEach(el => {
+        const style = window.getComputedStyle(el);
+        const pos = style.position;
+        if (pos === 'absolute' || pos === 'fixed') {
+          const elRect = el.getBoundingClientRect();
+          if (elRect.width > 50 && elRect.height > 50 &&
+              elRect.right > rect.left && elRect.left < rect.right &&
+              elRect.bottom > rect.top && elRect.top < rect.bottom &&
+              style.display !== 'none' && style.visibility !== 'hidden' &&
+              parseFloat(style.opacity) > 0) {
+            const tag = el.tagName.toLowerCase();
+            const cls = typeof el.className === 'string' ? el.className.slice(0, 40) : '';
+            domLines.push(
+              `DOM <${tag}> cls="${cls}" ${Math.round(elRect.width)}x${Math.round(elRect.height)} ` +
+              `at(${Math.round(elRect.left)},${Math.round(elRect.top)}) bg=${style.backgroundColor} z=${style.zIndex}`
+            );
+          }
+        }
+      });
+    }
+
+    // DOM overlay for results
+    const div = document.createElement('div');
+    div.id = 'phaser-diag';
+    div.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;background:#000c;color:#ff0;' +
+      'font:12px/1.4 monospace;padding:8px;max-height:50vh;overflow:auto;white-space:pre;pointer-events:auto;';
+    div.textContent =
+      `PHASER: ${lines.length} objects (${children.length} total)\n` + lines.join('\n') +
+      `\n\nDOM OVERLAYS: ${domLines.length}\n` + domLines.join('\n');
+    document.body.appendChild(div);
+    this.diagDiv = div;
+
+    // Repeat scan every 5s (6 times) to catch transient elements
+    let repeatCount = 0;
+    this.diagTimer = scene.time.addEvent({
+      delay: 5000,
+      repeat: 5,
+      callback: () => {
+        if (!this.diagDiv) return;
+        repeatCount++;
+        const now = scene.children.getAll();
+        const containers = now.filter((c: any) => c.type === 'Container');
+        const graphics = now.filter((c: any) => c.type === 'Graphics');
+        const large = now.filter((c: any) => ((c as any).displayWidth ?? 0) > 100 || ((c as any).displayHeight ?? 0) > 100);
+        const info = `\n--- REPEAT #${repeatCount} (t+${repeatCount * 5}s) total=${now.length} containers=${containers.length} graphics=${graphics.length} large=${large.length}`;
+        const details = containers.map((c: any) => {
+          const kids = (c.list || []).map((k: any, i: number) => {
+            const kType = k.type ?? k.constructor?.name ?? '?';
+            const kw = k.displayWidth ?? k.width ?? 0;
+            const kh = k.displayHeight ?? k.height ?? 0;
+            const tex = k.texture?.key ?? '';
+            const text = k.text ? k.text.slice(0, 30) : '';
+            return `    kid#${i} ${kType} ${Math.round(kw)}x${Math.round(kh)} tex=${tex} ${text ? `"${text}"` : ''}`;
+          }).join('\n');
+          return `  Container (${Math.round(c.x)},${Math.round(c.y)}) kids=${c.list?.length ?? 0} d=${c.depth} v=${c.visible} a=${c.alpha?.toFixed(1)}\n${kids}`;
+        }).join('\n');
+        this.diagDiv.textContent += info + (details ? '\n' + details : '');
+      },
+    });
+
+    // Auto-close after 40s
+    scene.time.delayedCall(40000, () => {
+      if (this.diagDiv) { this.diagDiv.remove(); this.diagDiv = null; }
+      if (this.diagTimer) { this.diagTimer.remove(); this.diagTimer = null; }
+    });
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

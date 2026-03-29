@@ -122,6 +122,7 @@ export class BlekingeLabScene extends BaseLabScene {
       });
       this.createArenaZones();
       this.createInteractionZones();
+      this.enableZoneZoom();
 
       // Agents
       this.createAgentsFromConfig(BLEKINGE_AGENTS);

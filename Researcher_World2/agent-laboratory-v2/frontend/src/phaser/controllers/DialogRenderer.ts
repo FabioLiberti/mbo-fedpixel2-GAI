@@ -98,7 +98,7 @@ export class DialogRenderer {
 
     try {
       let bubble;
-      const baseOpts = { width: 180, padding: 8, isLLMGenerated: dialog.isLLMDialog || false };
+      const baseOpts = { width: 140, padding: 6, isLLMGenerated: dialog.isLLMDialog || false };
 
       switch (dialog.cognitiveType) {
         case CognitiveProcessType.THINKING:
@@ -109,12 +109,12 @@ export class DialogRenderer {
           break;
         case CognitiveProcessType.PLANNING:
           bubble = new DecisionBubble(this.scene, sourcePos.x, sourcePos.y - 40, dialog.text, dialog.type, {
-            width: 200, padding: 10, isLLMGenerated: dialog.isLLMDialog || false, isPlan: true,
+            width: 160, padding: 8, isLLMGenerated: dialog.isLLMDialog || false, isPlan: true,
           });
           break;
         default:
           bubble = new ThoughtBubble(this.scene, sourcePos.x, sourcePos.y - 40, dialog.text, dialog.type, {
-            width: 160, padding: 8, isLLMGenerated: dialog.isLLMDialog || false,
+            width: 140, padding: 6, isLLMGenerated: dialog.isLLMDialog || false,
           });
       }
 
@@ -144,7 +144,7 @@ export class DialogRenderer {
     try {
       const bubble = new SpeechBubble(
         this.scene, sourcePos.x, sourcePos.y - 40, dialog.text, dialog.type, {
-          width: 160, padding: 8,
+          width: 130, padding: 6,
           targetPos: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
           isLLMDialog: dialog.isLLMDialog || false,
         },
@@ -293,6 +293,16 @@ export class DialogRenderer {
         "Cosa ne pensi della privacy differenziale?",
         "Hai visto l'ultimo paper sul federated learning?",
         "Questo algoritmo mostra proprietà di convergenza promettenti.",
+        "Dobbiamo confrontare FedAvg con FedProx sui nostri dati.",
+        "La distribuzione non-IID è il vero problema qui.",
+        "Ho rivisto i risultati: il modello converge dopo 15 round.",
+        "Propongo di aggiungere un vincolo di regolarizzazione.",
+        "I risultati del team di Blekinge confermano la nostra ipotesi.",
+        "Serve più ricerca sull'aggregazione robusta.",
+        "La letteratura recente suggerisce un approccio diverso.",
+        "Organizziamo un seminario sui risultati ottenuti.",
+        "Il budget computazionale è un vincolo da considerare.",
+        "Confrontiamo i nostri risultati con il benchmark LEAF.",
       ],
       researcher: [
         "Sto ottimizzando la selezione dei client.",
@@ -300,6 +310,16 @@ export class DialogRenderer {
         "Collaboriamo sulle tecniche di compressione del modello.",
         "L'efficienza della comunicazione è la sfida principale.",
         "Ho trovato un modo per ridurre il budget di privacy.",
+        "Il gradient clipping migliora la stabilità del training.",
+        "Sto testando diverse strategie di partizionamento dati.",
+        "I client con pochi dati rallentano la convergenza.",
+        "Ho implementato la quantizzazione dei gradienti.",
+        "L'accuracy locale è buona ma quella globale cala.",
+        "Serve un meccanismo di selezione client più intelligente.",
+        "I risultati preliminari sono promettenti, servono più round.",
+        "Sto documentando l'impatto dell'eterogeneità sui risultati.",
+        "La comunicazione tra nodi è il collo di bottiglia.",
+        "Ho trovato un bug nel calcolo della media pesata.",
       ],
       student_postdoc: [
         "Sto implementando un nuovo metodo di aggregazione.",
@@ -307,6 +327,11 @@ export class DialogRenderer {
         "L'eterogeneità dei dati sta causando problemi.",
         "La mia revisione della letteratura ha trovato alcune lacune.",
         "Sto cercando di riprodurre quei risultati benchmark.",
+        "Il dataset che uso ha una distribuzione molto sbilanciata.",
+        "Ho preparato i grafici per la presentazione.",
+        "La loss non scende dopo il round 20, possibile overfitting.",
+        "Sto scrivendo la sezione metodologica del paper.",
+        "I test statistici confermano la significatività dei risultati.",
       ],
       student: [
         "Sto implementando un nuovo metodo di aggregazione.",
@@ -314,6 +339,16 @@ export class DialogRenderer {
         "L'eterogeneità dei dati sta causando problemi.",
         "La mia revisione della letteratura ha trovato alcune lacune.",
         "Sto cercando di riprodurre quei risultati benchmark.",
+        "Il dataset che uso ha una distribuzione molto sbilanciata.",
+        "Ho preparato i grafici per la presentazione.",
+        "La loss non scende dopo il round 20, possibile overfitting.",
+        "Sto scrivendo la sezione metodologica del paper.",
+        "I test statistici confermano la significatività dei risultati.",
+        "Posso occuparmi dell'implementazione del client sampling.",
+        "Ho bisogno di chiarimenti sul protocollo di aggregazione.",
+        "Il codice di training è pronto per i test su larga scala.",
+        "Sto studiando le tecniche di differential privacy.",
+        "Il mio primo esperimento FL è andato bene!",
       ],
       doctor: [
         "La privacy dei pazienti deve essere la nostra priorità.",
@@ -321,6 +356,16 @@ export class DialogRenderer {
         "Abbiamo bisogno di dati medici più diversificati.",
         "Le implicazioni etiche sono significative.",
         "Il federated learning potrebbe trasformare la ricerca clinica.",
+        "I dati ospedalieri non possono lasciare la struttura.",
+        "Il modello federato rispetta le normative GDPR.",
+        "Servono più ospedali nel consorzio per migliorare l'accuracy.",
+        "L'anonimizzazione deve essere verificata prima del training.",
+        "I risultati clinici sono coerenti con la letteratura.",
+        "Il comitato etico ha approvato il protocollo federato.",
+        "La sensibilità del modello diagnostico è al 94%.",
+        "Dobbiamo validare su una coorte esterna.",
+        "I dati pediatrici richiedono un trattamento speciale.",
+        "Il consenso informato copre anche l'uso federato dei dati.",
       ],
       engineer: [
         "Ho ottimizzato il throughput del sistema.",
@@ -328,6 +373,16 @@ export class DialogRenderer {
         "Facciamo un benchmark rispetto alla baseline.",
         "Servono risorse allocate in modo più efficiente.",
         "Ho implementato l'algoritmo di compressione.",
+        "Il server di aggregazione regge 50 client simultanei.",
+        "La latenza media per round è scesa a 3 secondi.",
+        "Ho configurato il monitoraggio delle metriche.",
+        "Il sistema di logging cattura ogni step del training.",
+        "L'infrastruttura è pronta per scalare a 100 nodi.",
+        "Ho implementato il checkpointing automatico.",
+        "La containerizzazione facilita il deployment.",
+        "Il load balancer distribuisce bene i carichi.",
+        "Serve un meccanismo di fault tolerance più robusto.",
+        "Ho aggiunto il supporto per GPU multi-nodo.",
       ],
       privacy_specialist: [
         "Questo approccio perde troppe informazioni.",
@@ -335,6 +390,16 @@ export class DialogRenderer {
         "Dobbiamo aumentare il parametro di rumore.",
         "La superficie di attacco può essere ridotta.",
         "Ho sviluppato un nuovo protocollo di aggregazione sicura.",
+        "Il budget epsilon è quasi esaurito per questo round.",
+        "L'attacco di membership inference è stato mitigato.",
+        "La composizione del rumore segue il teorema di Dwork.",
+        "Ho verificato la conformità con il framework NIST.",
+        "Il meccanismo di clipping protegge dai contributi anomali.",
+        "Serve un audit formale della pipeline di aggregazione.",
+        "Il secure aggregation cifra i gradienti prima dell'invio.",
+        "La differential privacy locale offre garanzie più forti.",
+        "Ho simulato un attacco di model inversion: siamo protetti.",
+        "Il rapporto tra privacy e utilità è accettabile con epsilon 1.0.",
       ],
     };
     const roleDialogs = dialogs[role.toLowerCase()] || dialogs.researcher;

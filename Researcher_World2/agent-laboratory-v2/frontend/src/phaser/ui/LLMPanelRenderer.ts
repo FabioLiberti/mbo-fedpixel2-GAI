@@ -37,11 +37,11 @@ export class LLMPanelRenderer {
   
   // Dimensioni
   private width: number = 300;
-  private height: number = 420;
-  private padding: number = 15;
-  
-  // Area log migliorata
-  private logAreaHeight: number = 230; // Aumentato lo spazio per i log
+  private height: number = 560;
+  private padding: number = 12;
+
+  // Area log
+  private logAreaHeight: number = 110;
   
   constructor(
     scene: Phaser.Scene,
@@ -79,7 +79,7 @@ export class LLMPanelRenderer {
       this.padding,
       'LLM Control Panel',
       {
-        fontSize: '20px',
+        fontSize: '16px',
         color: '#ffffff',
         fontStyle: 'bold'
       }
@@ -143,10 +143,10 @@ export class LLMPanelRenderer {
   ): void {
     const sectionTitle = this.scene.add.text(
       this.padding,
-      this.padding + 40,
+      this.padding + 35,
       'Controls',
       {
-        fontSize: '18px',
+        fontSize: '14px',
         color: '#ffffff',
         fontStyle: 'bold'
       }
@@ -160,16 +160,16 @@ export class LLMPanelRenderer {
     this.container.add(separator);
     
     // Toggle LLM
-    this.createLLMToggle(this.padding, sectionTitle.y + 50, isLLMEnabled, onToggleChange);
-    
+    this.createLLMToggle(this.padding, sectionTitle.y + 40, isLLMEnabled, onToggleChange);
+
     // Slider frequenza messaggi
-    this.createFrequencySlider(this.padding, sectionTitle.y + 90, messageFrequency, onFrequencyChange);
-    
+    this.createFrequencySlider(this.padding, sectionTitle.y + 75, messageFrequency, onFrequencyChange);
+
     // Selettore tipo messaggio
-    this.createMessageTypeSelector(this.padding, sectionTitle.y + 140, selectedMessageType, onTypeChange);
-    
+    this.createMessageTypeSelector(this.padding, sectionTitle.y + 125, selectedMessageType, onTypeChange);
+
     // Pulsante genera messaggio
-    this.createGenerateButton(this.padding, sectionTitle.y + 190, onGenerateClick);
+    this.createGenerateButton(this.padding, sectionTitle.y + 175, onGenerateClick);
   }
   
   /**
@@ -515,61 +515,63 @@ export class LLMPanelRenderer {
     this.generateButton = this.scene.add.container(x, y);
     
     // Sfondo pulsante
+    const btnW = this.width - this.padding * 2;
+    const btnH = 34;
     const buttonBg = this.scene.add.graphics();
     buttonBg.fillStyle(0x2196f3, 1);
-    buttonBg.fillRoundedRect(0, 0, 330, 40, 8);
+    buttonBg.fillRoundedRect(0, 0, btnW, btnH, 6);
     buttonBg.lineStyle(2, 0x64b5f6, 1);
-    buttonBg.strokeRoundedRect(0, 0, 330, 40, 8);
+    buttonBg.strokeRoundedRect(0, 0, btnW, btnH, 6);
     this.generateButton.add(buttonBg);
-    
+
     // Icona AI
     const aiIcon = this.scene.add.text(
-      20,
-      20,
+      16,
+      btnH / 2,
       'AI',
       {
-        fontSize: '14px',
+        fontSize: '11px',
         color: '#ffffff',
         backgroundColor: '#1976d2',
-        padding: { left: 6, right: 6, top: 3, bottom: 3 }
+        padding: { left: 4, right: 4, top: 2, bottom: 2 }
       }
     );
     aiIcon.setOrigin(0.5);
     this.generateButton.add(aiIcon);
-    
+
     // Testo pulsante
     const buttonText = this.scene.add.text(
-      165,
-      20,
+      btnW / 2 + 10,
+      btnH / 2,
       'Generate LLM Message',
       {
-        fontSize: '16px',
+        fontSize: '13px',
         color: '#ffffff',
         fontStyle: 'bold'
       }
     );
     buttonText.setOrigin(0.5);
     this.generateButton.add(buttonText);
-    
+
     // Interattività
-    buttonBg.setInteractive(new Phaser.Geom.Rectangle(0, 0, 330, 40), Phaser.Geom.Rectangle.Contains);
+    buttonBg.setInteractive(new Phaser.Geom.Rectangle(0, 0, btnW, btnH), Phaser.Geom.Rectangle.Contains);
     buttonBg.on('pointerdown', onClick);
-    
+
     // Effetti hover
     buttonBg.on('pointerover', () => {
       buttonBg.clear();
       buttonBg.fillStyle(0x42a5f5, 1);
-      buttonBg.fillRoundedRect(0, 0, 330, 40, 8);
+      buttonBg.fillRoundedRect(0, 0, btnW, btnH, 6);
       buttonBg.lineStyle(2, 0x90caf9, 1);
-      buttonBg.strokeRoundedRect(0, 0, 330, 40, 8);
+      buttonBg.strokeRoundedRect(0, 0, btnW, btnH, 6);
     });
-    
+
     buttonBg.on('pointerout', () => {
       buttonBg.clear();
       buttonBg.fillStyle(0x2196f3, 1);
-      buttonBg.fillRoundedRect(0, 0, 330, 40, 8);
+      buttonBg.fillRoundedRect(0, 0, btnW, btnH, 6);
       buttonBg.lineStyle(2, 0x64b5f6, 1);
-      buttonBg.strokeRoundedRect(0, 0, 330, 40, 8);
+      buttonBg.strokeRoundedRect(0, 0, btnW, btnH, 6);
     });
     
     // Aggiungi al container principale
@@ -591,15 +593,15 @@ export class LLMPanelRenderer {
   /**
    * Crea la sezione delle statistiche
    */
-  public createStatsSection(stats: { 
-    llm: number, 
-    standard: number, 
+  public createStatsSection(stats: {
+    llm: number,
+    standard: number,
     simulated: number,
     frequency: string,
     llmStatus: string
   }): void {
-    // Y base per questa sezione (dopo i controlli)
-    const sectionY = 280;
+    // Y base per questa sezione (dopo i controlli + generate button)
+    const sectionY = 300;
     
     // Titolo sezione
     const sectionTitle = this.scene.add.text(
@@ -607,7 +609,7 @@ export class LLMPanelRenderer {
       sectionY,
       'Statistics',
       {
-        fontSize: '18px',
+        fontSize: '14px',
         color: '#ffffff',
         fontStyle: 'bold'
       }
@@ -634,52 +636,34 @@ export class LLMPanelRenderer {
     
     // Crea testi per ogni statistica
     statsItems.forEach((stat, index) => {
-      // Etichetta
-      const label = this.scene.add.text(
-        0,
-        index * 25,
-        stat.label,
-        {
-          fontSize: '14px',
-          color: '#bbbbbb'
-        }
-      );
+      const label = this.scene.add.text(0, index * 22, stat.label, {
+        fontSize: '12px', color: '#bbbbbb'
+      });
       this.statsDisplay.add(label);
-      
-      // Valore
-      const value = this.scene.add.text(
-        180,
-        index * 25,
-        stat.value,
-        {
-          fontSize: '14px',
-          color: '#ffffff',
-          fontStyle: 'bold'
-        }
-      );
+
+      const value = this.scene.add.text(160, index * 22, stat.value, {
+        fontSize: '12px', color: '#ffffff', fontStyle: 'bold'
+      });
       value.setOrigin(0, 0);
       this.statsDisplay.add(value);
     });
-    
-    // Aggiungi al container principale
+
     this.container.add(this.statsDisplay);
   }
-  
+
   /**
    * Aggiorna le statistiche visualizzate
    */
-  public updateStats(stats: { 
-    llm: number, 
-    standard: number, 
+  public updateStats(stats: {
+    llm: number,
+    standard: number,
     simulated: number,
     frequency: string,
     llmStatus: string
   }): void {
     try {
-      // Pulisci il container delle statistiche
       this.statsDisplay.removeAll(true);
-      
-      // Struttura dati per le statistiche
+
       const statsItems = [
         { label: 'LLM Dialogs:', value: `${stats.llm}` },
         { label: 'Simulated Dialogs:', value: `${stats.simulated}` },
@@ -687,32 +671,16 @@ export class LLMPanelRenderer {
         { label: 'Message Frequency:', value: stats.frequency },
         { label: 'LLM Status:', value: stats.llmStatus }
       ];
-      
-      // Crea testi per ogni statistica
+
       statsItems.forEach((stat, index) => {
-        // Etichetta
-        const label = this.scene.add.text(
-          0,
-          index * 25,
-          stat.label,
-          {
-            fontSize: '14px',
-            color: '#bbbbbb'
-          }
-        );
+        const label = this.scene.add.text(0, index * 22, stat.label, {
+          fontSize: '12px', color: '#bbbbbb'
+        });
         this.statsDisplay.add(label);
-        
-        // Valore
-        const value = this.scene.add.text(
-          180,
-          index * 25,
-          stat.value,
-          {
-            fontSize: '14px',
-            color: '#ffffff',
-            fontStyle: 'bold'
-          }
-        );
+
+        const value = this.scene.add.text(160, index * 22, stat.value, {
+          fontSize: '12px', color: '#ffffff', fontStyle: 'bold'
+        });
         value.setOrigin(0, 0);
         this.statsDisplay.add(value);
       });
@@ -727,7 +695,7 @@ export class LLMPanelRenderer {
   public createLogSection(messageLog: LLMLogEntry[], getColorForType: (type: string, isSimulated: boolean) => string): void {
     try {
       // Y base per questa sezione (dopo le statistiche)
-      const sectionY = 400; // Spostato più in basso per dare più spazio
+      const sectionY = 450;
       
       // Titolo sezione
       const sectionTitle = this.scene.add.text(
@@ -735,7 +703,7 @@ export class LLMPanelRenderer {
         sectionY,
         'LLM Messages Log',
         {
-          fontSize: '18px',
+          fontSize: '14px',
           color: '#ffffff',
           fontStyle: 'bold'
         }
@@ -865,7 +833,7 @@ export class LLMPanelRenderer {
     let newY = this.logContent.y - deltaY;
     
     // Usa valori assoluti per la posizione invece di relativi
-    const baseY = 400 + 40; // la Y iniziale del container
+    const baseY = 450 + 40; // la Y iniziale del container
     const limitMinY = baseY - (contentHeight - this.logAreaHeight);
     const limitMaxY = baseY;
     
@@ -898,7 +866,7 @@ export class LLMPanelRenderer {
     // Calcola posizione dello thumb
     const scrollRange = viewportHeight - thumbHeight;
     const scrollMax = contentHeight - viewportHeight;
-    const baseY = 400 + 40; // La Y iniziale del container
+    const baseY = 450 + 40; // La Y iniziale del container
     const normalizedPosition = (baseY - this.logContent.y) / scrollMax;
     const thumbY = normalizedPosition * scrollRange;
     

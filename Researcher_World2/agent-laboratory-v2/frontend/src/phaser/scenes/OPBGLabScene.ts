@@ -125,6 +125,7 @@ export class OPBGLabScene extends BaseLabScene {
       });
       this.createArenaZones();
       this.createInteractionZones();
+      this.enableZoneZoom();
 
       // Agents
       this.createAgentsFromConfig(OPBG_AGENTS);

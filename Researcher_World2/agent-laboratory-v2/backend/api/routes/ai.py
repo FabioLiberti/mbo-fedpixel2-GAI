@@ -157,6 +157,182 @@ async def generate_dialog(request: DialogGenerationRequest, connector: LLMConnec
         }
 
 
+# ---------------------------------------------------------------------------
+# Modelli Pydantic per i nuovi endpoint
+# ---------------------------------------------------------------------------
+
+class ThinkingRequest(BaseModel):
+    agentId: str
+    agentName: str
+    agentRole: str
+    agentSpecialization: str
+    targetAgentId: Optional[str] = None
+    targetAgentName: Optional[str] = None
+    targetAgentRole: Optional[str] = None
+    interactionType: str
+    labType: str
+    context: Optional[str] = None
+    flState: Optional[Dict[str, Any]] = None
+
+
+class DecisionRequest(BaseModel):
+    agentId: str
+    agentName: str
+    agentRole: str
+    agentSpecialization: str
+    decisionType: str
+    labType: str
+    context: Optional[str] = None
+    flState: Optional[Dict[str, Any]] = None
+
+
+class PlanRequest(BaseModel):
+    agentId: str
+    agentName: str
+    agentRole: str
+    agentSpecialization: str
+    planningType: str
+    labType: str
+    context: Optional[str] = None
+    flState: Optional[Dict[str, Any]] = None
+
+
+class ReactionRequest(BaseModel):
+    agentId: str
+    agentName: str
+    agentRole: str
+    agentSpecialization: str
+    eventType: str
+    labType: str
+    context: Optional[str] = None
+    flState: Optional[Dict[str, Any]] = None
+
+
+# ---------------------------------------------------------------------------
+# Endpoint: /ai/thinking
+# ---------------------------------------------------------------------------
+
+@router.post("/thinking")
+async def generate_thinking(request: ThinkingRequest, connector: LLMConnector = Depends(get_llm_connector)):
+    """Genera un pensiero per un agente utilizzando il LLM."""
+    try:
+        target = f"{request.targetAgentName} ({request.targetAgentRole})" if request.targetAgentName else "la ricerca"
+        situation = request.context or f"Stai riflettendo sulla collaborazione con {target}."
+        context = {
+            "lab_state": request.labType,
+            "nearby_agents": [request.targetAgentRole or "Nessuno"],
+            "fl_progress": "in corso",
+            "knowledge_base": f"Expertise in {request.agentSpecialization}"
+        }
+        dialog = await connector.generate_researcher_dialog(
+            agent_id=request.agentId,
+            researcher_type=request.agentRole,
+            specialization=request.agentSpecialization,
+            context=context,
+            current_situation=situation
+        )
+        return {"thinking": dialog, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+    except Exception as e:
+        logger.error(f"Error generating thinking: {e}")
+        return {
+            "thinking": f"Devo riflettere sulle implicazioni per {request.agentSpecialization}...",
+            "isLLMGenerated": False, "source": "fallback"
+        }
+
+
+# ---------------------------------------------------------------------------
+# Endpoint: /ai/decision
+# ---------------------------------------------------------------------------
+
+@router.post("/decision")
+async def generate_decision(request: DecisionRequest, connector: LLMConnector = Depends(get_llm_connector)):
+    """Genera una decisione FL per un agente utilizzando il LLM."""
+    try:
+        fl_state = request.flState or {"round": 0, "accuracy": 0.0, "status": "idle"}
+        result = await connector.generate_fl_decision(
+            agent_id=request.agentId,
+            researcher_type=request.agentRole,
+            specialization=request.agentSpecialization,
+            fl_state=fl_state,
+            decision_type=request.decisionType or "algorithm_selection",
+            available_options=["FedAvg", "FedProx", "FedSGD"]
+        )
+        decision_text = result.get("decision", str(result)) if isinstance(result, dict) else str(result)
+        return {"decision": decision_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+    except Exception as e:
+        logger.error(f"Error generating decision: {e}")
+        return {
+            "decision": f"In base ai dati disponibili, procediamo con l'approccio standard per {request.agentSpecialization}.",
+            "isLLMGenerated": False, "source": "fallback"
+        }
+
+
+# ---------------------------------------------------------------------------
+# Endpoint: /ai/plan
+# ---------------------------------------------------------------------------
+
+@router.post("/plan")
+async def generate_plan(request: PlanRequest, connector: LLMConnector = Depends(get_llm_connector)):
+    """Genera un piano d'azione per un agente utilizzando il LLM."""
+    try:
+        context = {
+            "lab_state": request.labType,
+            "fl_progress": "in corso",
+            "knowledge_base": f"Expertise in {request.agentSpecialization}"
+        }
+        goal = request.context or f"Ottimizzare il processo di {request.planningType} nel federated learning"
+        result = await connector.generate_action_plan(
+            agent_id=request.agentId,
+            researcher_type=request.agentRole,
+            specialization=request.agentSpecialization,
+            context=context,
+            goal=goal
+        )
+        plan_text = result.get("plan", str(result)) if isinstance(result, dict) else str(result)
+        return {"plan": plan_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+    except Exception as e:
+        logger.error(f"Error generating plan: {e}")
+        return {
+            "plan": f"Raccogliere più dati e analizzare le prestazioni attuali in {request.agentSpecialization}.",
+            "isLLMGenerated": False, "source": "fallback"
+        }
+
+
+# ---------------------------------------------------------------------------
+# Endpoint: /ai/reaction
+# ---------------------------------------------------------------------------
+
+@router.post("/reaction")
+async def generate_reaction(request: ReactionRequest, connector: LLMConnector = Depends(get_llm_connector)):
+    """Genera una reazione a un evento per un agente utilizzando il LLM."""
+    try:
+        context = {
+            "lab_state": request.labType,
+            "fl_progress": "in corso",
+            "knowledge_base": f"Expertise in {request.agentSpecialization}"
+        }
+        event_desc = request.context or f"Evento di tipo {request.eventType} nel laboratorio"
+        result = await connector.generate_event_reaction(
+            agent_id=request.agentId,
+            researcher_type=request.agentRole,
+            specialization=request.agentSpecialization,
+            context=context,
+            event_description=event_desc
+        )
+        reaction_text = result.get("reaction", str(result)) if isinstance(result, dict) else str(result)
+        return {"reaction": reaction_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+    except Exception as e:
+        logger.error(f"Error generating reaction: {e}")
+        return {
+            "reaction": f"Sviluppo interessante per {request.agentSpecialization}. Adattiamo l'approccio.",
+            "isLLMGenerated": False, "source": "fallback"
+        }
+
+
+# ---------------------------------------------------------------------------
+# Utility
+# ---------------------------------------------------------------------------
+
 def get_situation_from_interaction(interaction_type: str, target_name: Optional[str], target_role: Optional[str]) -> str:
     """
     Determina la situazione di dialogo in base al tipo di interazione.

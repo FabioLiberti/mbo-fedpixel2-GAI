@@ -117,6 +117,10 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Tilemap (when using tilemap-based layout instead of procedural)
   protected labTilemap: Phaser.Tilemaps.Tilemap | null = null;
 
+  // Zoom state
+  private isZoomed: boolean = false;
+  private zoomBackBtn: Phaser.GameObjects.Text | null = null;
+
   constructor(key: string) {
     super(key);
     console.log(`BaseLabScene constructor called with key: ${key}`);
@@ -543,36 +547,54 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Shared utility: Agent creation from config
   // ------------------------------------------------------------------
 
+  /** Target height in pixels for all agents — change this to resize uniformly */
+  protected static readonly AGENT_TARGET_HEIGHT = 80;
+
   protected createAgentsFromConfig(
     agents: AgentConfigEntry[],
     portraitTypes: string[] = []
   ): void {
     try {
+      const targetH = (this.constructor as typeof BaseLabScene).AGENT_TARGET_HEIGHT;
+
       agents.forEach(agentConfig => {
         try {
           if (!this.textures.exists(agentConfig.type)) {
             this.createDirectPlaceholderTexture(agentConfig.type, 32, 48);
           }
 
+          // Compute scale dynamically so every agent is targetH pixels tall
           const isPortrait = portraitTypes.includes(agentConfig.type);
+          let sourceHeight: number;
+          if (isPortrait) {
+            const tex = this.textures.get(agentConfig.type);
+            sourceHeight = tex?.getSourceImage()?.height ?? 1024;
+          } else {
+            // Spritesheet frame height (set in preload frameHeight)
+            const tex = this.textures.get(agentConfig.type);
+            const frame = tex?.get(0);
+            sourceHeight = frame?.height ?? 48;
+          }
+          const scale = targetH / sourceHeight;
+
           const agent = createAgent(this, {
             type: agentConfig.type,
             name: agentConfig.name,
             position: agentConfig.position,
             role: agentConfig.type,
-            scale: isPortrait ? 0.15 : 5.0,
+            scale,
             speed: 25
           });
 
           this.add.existing(agent);
           this.agents.push(agent);
           agent.changeState(AgentState.IDLE);
-          console.log(`Agent ${agentConfig.name} created`);
+          console.log(`Agent ${agentConfig.name} created (h=${sourceHeight} scale=${scale.toFixed(3)})`);
         } catch (error) {
           console.error(`Error creating agent ${agentConfig.name}:`, error);
         }
       });
-      console.log(`Created ${this.agents.length} agents`);
+      console.log(`Created ${this.agents.length} agents (target height: ${targetH}px)`);
     } catch (error) {
       console.error('Error in createAgentsFromConfig:', error);
     }
@@ -589,6 +611,131 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       this.cameras.main.centerOn(this.cameras.main.width / 2, this.cameras.main.height / 2);
     } catch (error) {
       console.error('Error in setupCamera:', error);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Camera zoom into zone / reset
+  // ------------------------------------------------------------------
+
+  /**
+   * Zooms the camera to a specific area of the lab.
+   * @param centerX  World X to center on
+   * @param centerY  World Y to center on
+   * @param zoomLevel  Zoom multiplier (default 2.0)
+   */
+  protected zoomToZone(centerX: number, centerY: number, zoomLevel: number = 2.0): void {
+    if (this.isZoomed) return;
+    this.isZoomed = true;
+
+    const cam = this.cameras.main;
+
+    // Expand camera bounds so the zoomed view can scroll
+    cam.setBounds(0, 0, cam.width, cam.height);
+
+    // Tween zoom + scroll
+    this.tweens.add({
+      targets: cam,
+      scrollX: centerX - cam.width / (2 * zoomLevel),
+      scrollY: centerY - cam.height / (2 * zoomLevel),
+      zoom: zoomLevel,
+      duration: 400,
+      ease: 'Power2',
+    });
+
+    // "Back" button (fixed to camera via scrollFactor 0)
+    this.zoomBackBtn = this.add.text(cam.width - 10, 10, '✕ Vista completa', {
+      fontSize: '13px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      backgroundColor: '#333333cc',
+      padding: { left: 8, right: 8, top: 4, bottom: 4 },
+    })
+      .setOrigin(1, 0)
+      .setDepth(1000)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+
+    this.zoomBackBtn!.on('pointerdown', () => this.resetZoom());
+  }
+
+  /** Resets camera zoom back to 1.0 and removes the back button. */
+  protected resetZoom(): void {
+    if (!this.isZoomed) return;
+    this.isZoomed = false;
+
+    const cam = this.cameras.main;
+    this.tweens.add({
+      targets: cam,
+      scrollX: 0,
+      scrollY: 0,
+      zoom: 1,
+      duration: 400,
+      ease: 'Power2',
+    });
+
+    if (this.zoomBackBtn) {
+      this.zoomBackBtn.destroy();
+      this.zoomBackBtn = null;
+    }
+  }
+
+  /** Wires interaction zones so clicking on them triggers zoom. */
+  protected enableZoneZoom(): void {
+    for (const zone of this.interactionZones) {
+      zone.on('pointerdown', () => {
+        if (this.isZoomed) {
+          this.resetZoom();
+        } else {
+          this.zoomToZone(zone.x, zone.y);
+        }
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared utility: LLM status indicator
+  // ------------------------------------------------------------------
+
+  protected createLLMStatusIndicator(): void {
+    try {
+      const cam = this.cameras.main;
+      const indicator = this.add.container(70, cam.height - 16);
+      indicator.setDepth(999);
+      indicator.setScrollFactor(0);
+
+      const dot = this.add.graphics();
+      const label = this.add.text(10, 0, 'LLM: ...', {
+        fontSize: '10px', color: '#aaaaaa', fontFamily: 'Arial'
+      }).setOrigin(0, 0.5);
+      indicator.add([dot, label]);
+
+      const drawDot = (color: number) => { dot.clear(); dot.fillStyle(color, 1); dot.fillCircle(0, 0, 5); };
+      drawDot(0x888888);
+
+      // Periodic check every 15s
+      const check = async () => {
+        try {
+          const resp = await fetch('http://localhost:8091/ai/status', { signal: AbortSignal.timeout(3000) });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.available) {
+              drawDot(0x44cc44); label.setText('LLM attivo'); label.setColor('#44cc44');
+            } else {
+              drawDot(0xcccc00); label.setText('Preset'); label.setColor('#cccc00');
+            }
+          } else {
+            drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');
+          }
+        } catch {
+          drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');
+        }
+      };
+
+      check();
+      this.time.addEvent({ delay: 15000, callback: check, loop: true });
+    } catch (error) {
+      console.error('Error creating LLM status indicator:', error);
     }
   }
 
