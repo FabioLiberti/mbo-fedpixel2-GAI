@@ -96,6 +96,43 @@ class SimulationController:
             logger.info(f"Registered lab {lab_id} as FL client")
 
     # =========================================================================
+    # Agent Memory Checkpointing
+    # =========================================================================
+
+    def _checkpoint_agent_memories(self, step_count: int):
+        """Save all agent cognitive memories to disk for crash recovery."""
+        if not self.model:
+            return
+        checkpoint_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "checkpoints", "agent_memories"
+        )
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        saved = 0
+        for agent in self.model.schedule.agents:
+            try:
+                agent_dir = os.path.join(checkpoint_dir, str(agent.unique_id))
+                os.makedirs(agent_dir, exist_ok=True)
+
+                # Save associative memory (events, thoughts, chats)
+                if hasattr(agent, 'a_mem') and agent.a_mem:
+                    a_mem_dir = os.path.join(agent_dir, "associative_memory")
+                    os.makedirs(a_mem_dir, exist_ok=True)
+                    agent.a_mem.save(a_mem_dir)
+
+                # Save scratch (working memory)
+                if hasattr(agent, 'scratch') and agent.scratch:
+                    scratch_path = os.path.join(agent_dir, "scratch.json")
+                    agent.scratch.save(scratch_path)
+
+                saved += 1
+            except Exception as e:
+                logger.warning(f"Failed to checkpoint agent {agent.unique_id}: {e}")
+
+        logger.info(f"Agent memory checkpoint: {saved} agents saved at step {step_count}")
+
+    # =========================================================================
     # FL Event Injection into Agent Memory
     # =========================================================================
 
@@ -473,6 +510,19 @@ class SimulationController:
         if not self.fl_system:
             return
 
+        # --- DP budget enforcement: skip round if privacy budget exhausted ---
+        convergence = self.fl_system.check_convergence()
+        if convergence.get("budget_exhausted", False):
+            logger.warning(
+                f"FL round skipped: privacy budget exhausted "
+                f"(ε_spent={self.fl_system.dp_epsilon_spent:.2f}"
+                f"/ε_total={self.fl_system.dp_epsilon_total:.2f})"
+            )
+            return
+        if convergence.get("converged", False):
+            logger.info("FL round skipped: model has converged")
+            return
+
         selected_labs = self.fl_system.select_clients()
         if not selected_labs:
             logger.warning("No labs selected for FL round")
@@ -622,6 +672,10 @@ class SimulationController:
                     remaining = step_time - elapsed
                     if remaining > 0:
                         time.sleep(remaining)
+
+                    # Checkpoint agent cognitive memories every 500 steps
+                    if step_count % 500 == 0:
+                        self._checkpoint_agent_memories(step_count)
 
                     if step_count % 100 == 0:
                         logger.info(

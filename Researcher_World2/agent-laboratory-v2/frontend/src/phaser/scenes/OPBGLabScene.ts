@@ -1,6 +1,7 @@
 // frontend/src/phaser/scenes/OPBGLabScene.ts
 //
 // Scene del laboratorio OPBG — estende BaseLabScene con tema ospedaliero pediatrico.
+// 6-room layout: Ufficio Medico, Data Room, Sala Consulto, Area Relax, Lab Analisi, Server Clinico.
 
 import Phaser from 'phaser';
 import { BaseLabScene, LabTheme, AgentConfigEntry } from './BaseLabScene';
@@ -12,12 +13,13 @@ import { THEME_OPBG, TILE } from '../utils/tilesetGenerator';
 
 // ---------------------------------------------------------------------------
 // Agent config — aligned with backend PERSONA_REGISTRY["opbg"]
+// Positions placed inside their thematic rooms
 // ---------------------------------------------------------------------------
 const OPBG_AGENTS: AgentConfigEntry[] = [
-  { type: 'doctor',         name: 'Matteo Ferri',     position: { x: 300, y: 250 }, specialization: 'clinical_data' },
-  { type: 'student_postdoc', name: 'Marco Romano',    position: { x: 150, y: 200 }, specialization: 'data_science' },
-  { type: 'engineer',       name: 'Lorenzo Mancini',  position: { x: 200, y: 150 }, specialization: 'model_optimization' },
-  { type: 'researcher',     name: 'Giulia Conti',     position: { x: 250, y: 180 }, specialization: 'privacy_engineering' },
+  { type: 'doctor',         name: 'Matteo Ferri',     position: { x: 130, y: 140 }, specialization: 'clinical_data' },
+  { type: 'student_postdoc', name: 'Marco Romano',    position: { x: 400, y: 420 }, specialization: 'data_science' },
+  { type: 'engineer',       name: 'Lorenzo Mancini',  position: { x: 660, y: 140 }, specialization: 'model_optimization' },
+  { type: 'researcher',     name: 'Giulia Conti',     position: { x: 400, y: 140 }, specialization: 'privacy_engineering' },
 ];
 
 const CHARACTER_TYPES = ['doctor', 'student_postdoc', 'engineer', 'researcher'];
@@ -88,47 +90,116 @@ export class OPBGLabScene extends BaseLabScene {
       this.createMissingTextures(CHARACTER_TYPES);
       this.createAllCharacterAnimations(CHARACTER_TYPES);
 
-      // Scene layout: background + tilemap
+      // Scene layout: background + tilemap with 6-room grid
       this.createHospitalBackground();
       this.createLabTilemap(THEME_OPBG, (floor, furn, cols, rows) => {
-        // Walls — hospital corridor style
+        const midY = Math.floor(rows / 2);
+        const c1 = Math.floor(cols / 3);
+        const c2 = Math.floor(2 * cols / 3);
+
+        // --- Perimeter walls ---
         for (let x = 0; x < cols; x++) { furn.putTileAt(TILE.WALL_H, x, 0); furn.putTileAt(TILE.WALL_H, x, rows - 1); }
         for (let y = 1; y < rows - 1; y++) { furn.putTileAt(TILE.WALL, 0, y); furn.putTileAt(TILE.WALL, cols - 1, y); }
         furn.putTileAt(TILE.WALL_CORNER, 0, 0); furn.putTileAt(TILE.WALL_CORNER, cols - 1, 0);
         furn.putTileAt(TILE.WALL_CORNER, 0, rows - 1); furn.putTileAt(TILE.WALL_CORNER, cols - 1, rows - 1);
-        // Doors
-        furn.putTileAt(TILE.DOOR, 1, rows - 1); furn.putTileAt(TILE.DOOR, cols - 2, rows - 1);
-        // Windows along top
+
+        // --- Internal dividers ---
+        for (let x = 1; x < cols - 1; x++) furn.putTileAt(TILE.WALL_INTERNAL, x, midY);
+        for (let y = 1; y < rows - 1; y++) {
+          if (y !== midY) {
+            furn.putTileAt(TILE.WALL_INTERNAL, c1, y);
+            furn.putTileAt(TILE.WALL_INTERNAL, c2, y);
+          }
+        }
+
+        // --- Doors ---
+        furn.putTileAt(TILE.DOOR, c1, Math.floor(midY / 2) + 1);
+        furn.putTileAt(TILE.DOOR, c2, Math.floor(midY / 2) + 1);
+        furn.putTileAt(TILE.DOOR, c1, midY + Math.floor((rows - midY) / 2));
+        furn.putTileAt(TILE.DOOR, c2, midY + Math.floor((rows - midY) / 2));
+        furn.putTileAt(TILE.DOOR, Math.floor(c1 / 2) + 1, midY);
+        furn.putTileAt(TILE.DOOR, Math.floor((c1 + c2) / 2), midY);
+        furn.putTileAt(TILE.DOOR, Math.floor((c2 + cols) / 2), midY);
+
+        // --- Windows along top ---
         for (let x = 2; x < cols - 2; x += 2) furn.putTileAt(TILE.WINDOW, x, 0);
-        // Central server room (data sensibili)
-        const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
-        for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) {
-          if (Math.abs(dx) === 2 || Math.abs(dy) === 1) furn.putTileAt(TILE.CABINET, cx + dx, cy + dy);
-          else furn.putTileAt(TILE.SERVER, cx + dx, cy + dy);
-        }
-        // Workstations (left side)
-        for (let y = 3; y < rows - 3; y += 3) {
-          furn.putTileAt(TILE.DESK, 1, y); furn.putTileAt(TILE.MONITOR, 2, y);
-          furn.putTileAt(TILE.CHAIR, 2, y + 1);
-        }
-        // Clinical area (right side) — equipment + cabinets
-        furn.putTileAt(TILE.EQUIPMENT, cols - 3, 2); furn.putTileAt(TILE.EQUIPMENT, cols - 2, 2);
-        furn.putTileAt(TILE.EQUIPMENT, cols - 3, 3); furn.putTileAt(TILE.CABINET, cols - 2, 3);
-        furn.putTileAt(TILE.CABINET, cols - 3, 5); furn.putTileAt(TILE.CABINET, cols - 2, 5);
-        // Meeting area (bottom center)
-        for (let dx = -1; dx <= 1; dx++) furn.putTileAt(TILE.TABLE, cx + dx, rows - 3);
-        furn.putTileAt(TILE.CHAIR, cx - 2, rows - 3); furn.putTileAt(TILE.CHAIR, cx + 2, rows - 3);
-        // Plants for pediatric atmosphere
-        furn.putTileAt(TILE.PLANT, 1, 1); furn.putTileAt(TILE.PLANT, cols - 2, 1);
-        furn.putTileAt(TILE.PLANT, 1, rows - 2); furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
+
+        // --- Paint room floors ---
+        // Top-left: Ufficio Medico (mint green)
+        for (let y = 1; y < midY; y++) for (let x = 1; x < c1; x++) floor.putTileAt(TILE.FLOOR_PROF, x, y);
+        // Top-center: Data Room (teal)
+        for (let y = 1; y < midY; y++) for (let x = c1 + 1; x < c2; x++) floor.putTileAt(TILE.FLOOR_PRIVACY, x, y);
+        // Top-right: Sala Consulto (meeting)
+        for (let y = 1; y < midY; y++) for (let x = c2 + 1; x < cols - 1; x++) floor.putTileAt(TILE.FLOOR_MEETING, x, y);
+        // Bottom-left: Area Relax (warm)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = 1; x < c1; x++) floor.putTileAt(TILE.FLOOR_BREAK, x, y);
+        // Bottom-center: Lab Analisi (research)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = c1 + 1; x < c2; x++) floor.putTileAt(TILE.FLOOR_RESEARCH, x, y);
+        // Bottom-right: Server Clinico (server)
+        for (let y = midY + 1; y < rows - 1; y++) for (let x = c2 + 1; x < cols - 1; x++) floor.putTileAt(TILE.FLOOR_SERVER, x, y);
+
+        // --- Furniture per room ---
+
+        // Ufficio Medico: desk, bookshelf, cabinet, lamp, plant, painting
+        furn.putTileAt(TILE.DESK, 2, 2); furn.putTileAt(TILE.CHAIR, 3, 2);
+        furn.putTileAt(TILE.BOOKSHELF, 1, 1);
+        furn.putTileAt(TILE.CABINET, 2, 1);
+        furn.putTileAt(TILE.LAMP, c1 - 1, 1);
+        furn.putTileAt(TILE.PAINTING, c1 - 1, 2);
+        furn.putTileAt(TILE.PLANT, 1, midY - 1);
+        furn.putTileAt(TILE.RUG, 3, 3);
+
+        // Data Room: desks, monitors, server, equipment, printer
+        furn.putTileAt(TILE.DESK, c1 + 2, 2); furn.putTileAt(TILE.MONITOR, c1 + 3, 2);
+        furn.putTileAt(TILE.DESK, c1 + 2, 4); furn.putTileAt(TILE.MONITOR, c1 + 3, 4);
+        furn.putTileAt(TILE.SERVER, c2 - 1, 1);
+        furn.putTileAt(TILE.EQUIPMENT, c2 - 1, 2);
+        furn.putTileAt(TILE.PRINTER, c1 + 1, 1);
+
+        // Sala Consulto: table, chairs, whiteboard, projector, plant
+        const mx2 = Math.floor((c2 + cols - 1) / 2);
+        const my = Math.floor(midY / 2);
+        for (let dx = -1; dx <= 1; dx++) furn.putTileAt(TILE.TABLE, mx2 + dx, my);
+        furn.putTileAt(TILE.CHAIR, mx2 - 2, my); furn.putTileAt(TILE.CHAIR, mx2 + 2, my);
+        furn.putTileAt(TILE.CHAIR, mx2 - 1, my + 1); furn.putTileAt(TILE.CHAIR, mx2 + 1, my + 1);
+        furn.putTileAt(TILE.WHITEBOARD, mx2, 1);
+        furn.putTileAt(TILE.PROJECTOR, mx2, my - 2);
+        furn.putTileAt(TILE.PLANT, cols - 2, 1);
+
+        // Area Relax: couches, coffee table, fridge, vending, plants
+        furn.putTileAt(TILE.COUCH, 2, midY + 2); furn.putTileAt(TILE.COUCH, 3, midY + 2);
+        furn.putTileAt(TILE.COFFEE_TABLE, 2, midY + 3);
+        furn.putTileAt(TILE.FRIDGE, 1, midY + 1);
+        furn.putTileAt(TILE.VENDING, c1 - 1, midY + 1);
+        furn.putTileAt(TILE.PLANT, 1, rows - 2);
+        furn.putTileAt(TILE.PLANT, c1 - 1, rows - 2);
+        furn.putTileAt(TILE.RUG, 2, midY + 4); furn.putTileAt(TILE.RUG, 3, midY + 4);
+
+        // Lab Analisi: desks, equipment, cabinet, bookshelf, lamp
+        const mx = Math.floor((c1 + c2) / 2);
+        furn.putTileAt(TILE.DESK, mx - 1, midY + 2); furn.putTileAt(TILE.CHAIR, mx, midY + 2);
+        furn.putTileAt(TILE.DESK, mx - 1, midY + 4); furn.putTileAt(TILE.CHAIR, mx, midY + 4);
+        furn.putTileAt(TILE.EQUIPMENT, mx + 1, midY + 1);
+        furn.putTileAt(TILE.CABINET, c2 - 1, midY + 1);
+        furn.putTileAt(TILE.BOOKSHELF, c1 + 1, midY + 1);
+        furn.putTileAt(TILE.LAMP, c1 + 1, rows - 2);
+
+        // Server Clinico: servers, UPS, equipment, monitor
+        furn.putTileAt(TILE.SERVER, c2 + 2, midY + 1); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 1);
+        furn.putTileAt(TILE.SERVER, c2 + 2, midY + 2); furn.putTileAt(TILE.SERVER, c2 + 3, midY + 2);
+        furn.putTileAt(TILE.UPS, cols - 2, midY + 1); furn.putTileAt(TILE.UPS, cols - 2, midY + 2);
+        furn.putTileAt(TILE.EQUIPMENT, cols - 2, midY + 3);
+        furn.putTileAt(TILE.MONITOR, c2 + 1, midY + 3);
+        furn.putTileAt(TILE.PLANT, cols - 2, rows - 2);
       });
-      this.createArenaZones();
       this.createInteractionZones();
       this.enableZoneZoom();
 
       // Agents
       this.createAgentsFromConfig(OPBG_AGENTS);
       this.enableStateIcons();
+      this.enableCoffeeBreak();
+      this.enableAnalytics();
 
       // Camera
       this.setupCamera();
@@ -149,7 +220,7 @@ export class OPBGLabScene extends BaseLabScene {
           'Specializzazione in:\n' +
           '• Privacy engineering per dati sanitari sensibili\n' +
           '• Medical imaging con federated learning\n' +
-          '• Equità e bias nei modelli clinici\n' +
+          '• Equita e bias nei modelli clinici\n' +
           '• Compliance normativa per dati pediatrici',
         theme: { primary: this.theme.colorPalette.primary, secondary: 0x1a1a2e, accent: 0xf5f5dc },
         navigation: [
@@ -225,28 +296,55 @@ export class OPBGLabScene extends BaseLabScene {
     }
   }
 
-  // ---- Scene-specific: Hospital temporary map ---------------------------
-
-  // createHospitalTemporaryMap removed — replaced by tilemap in create()
-
-  // ---- Scene-specific: Interaction zones --------------------------------
+  // ---- Scene-specific: 6-room interaction zones -------------------------
 
   protected createInteractionZones(): void {
     try {
       const gs = 32;
-      const zoneGraphics = this.add.graphics();
-      zoneGraphics.lineStyle(2, 0x00ff00, 0.5);
+      const cam = this.cameras.main;
+      const cols = Math.floor(cam.width / gs);
+      const rows = Math.floor(cam.height / gs);
+      const midY = Math.floor(rows / 2);
+      const c1 = Math.floor(cols / 3);
+      const c2 = Math.floor(2 * cols / 3);
 
-      const addZone = (x: number, y: number, w: number, h: number, name: string) => {
+      const addZone = (x: number, y: number, w: number, h: number, name: string, label: string) => {
         const z = this.add.zone(x, y, w, h);
         z.setName(name); z.setInteractive();
-        zoneGraphics.strokeRect(x - w / 2, y - h / 2, w, h);
+        this.add.text(x, y - h / 2 + 6, label, {
+          fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
+          padding: { left: 4, right: 4, top: 2, bottom: 2 }
+        }).setOrigin(0.5, 0).setDepth(5);
         this.interactionZones.push(z);
       };
 
-      addZone(100, 200, gs * 4, gs * 4, 'meeting_room');
-      addZone(this.cameras.main.width / 2, gs / 2, this.cameras.main.width - 100, gs * 2, 'data_center');
-      addZone(this.cameras.main.width - 100, this.cameras.main.height - 100, gs * 5, gs * 3, 'clinical_area');
+      const addZoneBottom = (x: number, y: number, w: number, h: number, name: string, label: string) => {
+        const z = this.add.zone(x, y, w, h);
+        z.setName(name); z.setInteractive();
+        this.add.text(x, y + h / 2 - 6, label, {
+          fontSize: '9px', color: '#ffffff', backgroundColor: '#00000088',
+          padding: { left: 4, right: 4, top: 2, bottom: 2 }
+        }).setOrigin(0.5, 1).setDepth(5);
+        this.interactionZones.push(z);
+      };
+
+      const roomCX = (x0: number, x1: number) => ((x0 + x1) / 2) * gs;
+      const roomCY = (y0: number, y1: number) => ((y0 + y1) / 2) * gs;
+      const roomW = (x0: number, x1: number) => (x1 - x0) * gs;
+      const roomH = (y0: number, y1: number) => (y1 - y0) * gs;
+
+      // Top-left: Ufficio Medico
+      addZoneBottom(roomCX(1, c1), roomCY(1, midY), roomW(1, c1), roomH(1, midY), 'medical_office', 'Ufficio Medico');
+      // Top-center: Data Room
+      addZoneBottom(roomCX(c1 + 1, c2), roomCY(1, midY), roomW(c1 + 1, c2), roomH(1, midY), 'data_room', 'Data Room');
+      // Top-right: Sala Consulto
+      addZoneBottom(roomCX(c2 + 1, cols - 1), roomCY(1, midY), roomW(c2 + 1, cols - 1), roomH(1, midY), 'consultation_room', 'Sala Consulto');
+      // Bottom-left: Area Relax
+      addZone(roomCX(1, c1), roomCY(midY + 1, rows - 1), roomW(1, c1), roomH(midY + 1, rows - 1), 'break_room', 'Area Relax');
+      // Bottom-center: Lab Analisi
+      addZone(roomCX(c1 + 1, c2), roomCY(midY + 1, rows - 1), roomW(c1 + 1, c2), roomH(midY + 1, rows - 1), 'analysis_lab', 'Lab Analisi');
+      // Bottom-right: Server Clinico
+      addZone(roomCX(c2 + 1, cols - 1), roomCY(midY + 1, rows - 1), roomW(c2 + 1, cols - 1), roomH(midY + 1, rows - 1), 'clinical_server', 'Server Clinico');
     } catch (error) {
       console.error('Error in createInteractionZones:', error);
     }

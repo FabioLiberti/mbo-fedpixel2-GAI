@@ -541,6 +541,9 @@ class FederatedLearningSystem:
         if self.algorithm == "fedavg":
             avg_weights = self._weighted_average(weights, normalized_weights)
         elif self.algorithm == "fedprox":
+            # FedProx (Li et al., MLSys 2020): the proximal term μ/2·‖w-w_global‖²
+            # is applied during LOCAL training (see numpy_train), NOT at aggregation.
+            # Aggregation is identical to FedAvg by design.
             avg_weights = self._weighted_average(weights, normalized_weights)
         else:
             logger.warning(f"Unknown algorithm '{self.algorithm}', falling back to fedavg")
