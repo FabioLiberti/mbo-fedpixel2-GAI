@@ -36,7 +36,7 @@ export class LLMPanelRenderer {
   private scrollStartY: number = 0;
   
   // Dimensioni
-  private width: number = 300;
+  private width: number = 420;
   private height: number = 560;
   private padding: number = 12;
 
@@ -50,7 +50,12 @@ export class LLMPanelRenderer {
   ) {
     this.scene = scene;
     this.container = container;
-    
+
+    // Adapt height to camera (leave 40px margin top+bottom)
+    const camH = this.scene.cameras.main.height;
+    this.height = Math.max(560, camH - 80);
+    this.logAreaHeight = Math.max(110, this.height - 460);
+
     // Inizializza grafica di base
     this.initializeGraphics();
     
@@ -168,8 +173,8 @@ export class LLMPanelRenderer {
     // Selettore tipo messaggio
     this.createMessageTypeSelector(this.padding, sectionTitle.y + 125, selectedMessageType, onTypeChange);
 
-    // Pulsante genera messaggio
-    this.createGenerateButton(this.padding, sectionTitle.y + 175, onGenerateClick);
+    // Pulsante genera messaggio (extra spacing per separazione visiva)
+    this.createGenerateButton(this.padding, sectionTitle.y + 215, onGenerateClick);
   }
   
   /**

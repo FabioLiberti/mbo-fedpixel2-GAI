@@ -3,8 +3,8 @@
   border-radius: 6px;
   color: #eee;
   font-family: monospace;
-  width: 320px;
-  max-height: 340px;
+  width: 420px;
+  max-height: calc(100vh - 60px);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   position: absolute;
   top: 12px;
@@ -100,7 +100,6 @@
   padding: 6px;
   flex: 1;
   min-height: 60px;
-  max-height: 260px;
 }
 
 .llm-dialog-empty {
