@@ -10,11 +10,12 @@ interface DialogEntry {
   labId: string;
   dialog: string;
   isLlm: boolean;
-  source: 'backend' | 'phaser' | 'fl-convo';
+  source: 'backend' | 'phaser' | 'fl-convo' | 'generated';
   cognitiveType?: string;
   state: string;
   chattingWith: string | null;
   flRound?: number;
+  isSimulated?: boolean;
 }
 
 interface LLMDialogPanelProps {
@@ -51,6 +52,18 @@ const COGNITIVE_LABELS: Record<string, string> = {
   dialog: 'dialogo',
 };
 
+const MSG_TYPES = [
+  { id: 'dialog', label: 'Dialogo' },
+  { id: 'thinking', label: 'Pensiero' },
+  { id: 'decision', label: 'Decisione' },
+];
+
+function getApiBaseUrl(): string {
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  return `${protocol}//${hostname}:8091`;
+}
+
 const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   backendSimData,
   selectedLab,
@@ -64,28 +77,29 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   const recentTextsRef = useRef<{ text: string; ts: number }[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const DEDUP_WINDOW_MS = 60_000; // skip identical text within 60s
+  // Controls state
+  const [llmEnabled, setLlmEnabled] = useState<boolean>(true);
+  const [msgFrequency, setMsgFrequency] = useState<number>(50);
+  const [msgType, setMsgType] = useState<string>('dialog');
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [generating, setGenerating] = useState<boolean>(false);
+  const [controlsOpen, setControlsOpen] = useState<boolean>(false);
 
-  /** Normalize text for dedup comparison */
+  const DEDUP_WINDOW_MS = 60_000;
+
   const normalize = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
 
-  /** Returns true if this text already appeared recently (global, cross-agent) */
   const isDuplicate = useCallback((text: string): boolean => {
     const now = Date.now();
     const norm = normalize(text);
-    // Prune old entries
     recentTextsRef.current = recentTextsRef.current.filter(e => now - e.ts < DEDUP_WINDOW_MS);
-    // Check
     if (recentTextsRef.current.some(e => e.text === norm)) return true;
-    // Register
     recentTextsRef.current.push({ text: norm, ts: now });
     return false;
   }, []);
 
-  // Append helper (deduplicates and caps at 500)
   const appendEntries = useCallback((entries: DialogEntry[]) => {
     if (entries.length === 0) return;
-    // Filter out global duplicates (same text within 60s window)
     const unique = entries.filter(e => !isDuplicate(e.dialog));
     if (unique.length === 0) return;
     setDialogLog(prev => {
@@ -93,6 +107,25 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
       return updated.length > 500 ? updated.slice(-500) : updated;
     });
   }, [isDuplicate]);
+
+  // Backend status check
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch(`${getApiBaseUrl()}/ai/status`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!cancelled) setBackendStatus(r.ok ? 'connected' : 'disconnected');
+      } catch {
+        if (!cancelled) setBackendStatus('disconnected');
+      }
+    };
+    check();
+    const interval = setInterval(check, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [visible]);
 
   // 1) Backend broadcast dialogs
   useEffect(() => {
@@ -125,7 +158,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     appendEntries(newEntries);
   }, [backendSimData, appendEntries]);
 
-  // 2) Phaser-side LLM dialogs (via DOM CustomEvent bridge)
+  // 2) Phaser-side LLM dialogs
   useEffect(() => {
     const cleanup = addPhaserDialogListener((detail: PhaserDialogDetail) => {
       const entry: DialogEntry = {
@@ -145,7 +178,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     return cleanup;
   }, [appendEntries]);
 
-  // 3) FL post-round conversations (from backend fl.conversations)
+  // 3) FL post-round conversations
   const lastFlRoundRef = useRef<number>(-1);
   useEffect(() => {
     const convos = backendSimData?.fl?.conversations;
@@ -158,7 +191,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     const simTime = backendSimData.sim_time || new Date().toISOString();
     const newEntries: DialogEntry[] = [];
 
-    // Process all conversations from this round
     for (const convo of convos.filter((c: any) => c.round === latest.round)) {
       const dialog = convo.dialog as [string, string][];
       const roles = convo.roles as string[];
@@ -184,7 +216,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
     appendEntries(newEntries);
 
-    // Emit to Phaser DialogAnalytics for aggregate stats
     const gameInstance = getGameInstance();
     if (gameInstance) {
       for (const convo of convos.filter((c: any) => c.round === latest.round)) {
@@ -200,6 +231,106 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
   }, [dialogLog, collapsed]);
 
+  // Generate message handler
+  const handleGenerate = useCallback(async () => {
+    if (generating) return;
+    setGenerating(true);
+    try {
+      const agents = backendSimData?.agent_states as any[] | undefined;
+      const agent = agents && agents.length > 0
+        ? agents[Math.floor(Math.random() * agents.length)]
+        : { id: 'system', name: 'System Agent', role: 'researcher' };
+
+      const isConnected = backendStatus === 'connected';
+      let messageText = '';
+      let isSimulated = !isConnected;
+
+      if (isConnected) {
+        try {
+          const r = await fetch(`${getApiBaseUrl()}/ai/generate-dialog`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: agent.id,
+              agentName: agent.name || `Agent ${agent.id}`,
+              agentRole: agent.role || 'researcher',
+              agentSpecialization: 'Federated Learning',
+              interactionType: msgType === 'dialog' ? 'working' : msgType,
+              labType: agent.lab_id || 'mercatorum',
+            }),
+            signal: AbortSignal.timeout(8000),
+          });
+          if (r.ok) {
+            const data = await r.json();
+            messageText = data.dialog || data.message || 'No response from LLM';
+          } else {
+            isSimulated = true;
+          }
+        } catch {
+          isSimulated = true;
+        }
+      }
+
+      if (isSimulated || !messageText) {
+        const simulated: Record<string, string[]> = {
+          dialog: [
+            "Let's analyze this federated learning approach in more detail.",
+            "Have you considered the impact of non-IID data distribution?",
+            "We should implement differential privacy techniques.",
+          ],
+          thinking: [
+            "The current aggregation method might be introducing bias...",
+            "If we implement quantization, we could reduce bandwidth by 70%...",
+            "The privacy-utility tradeoff is crucial here...",
+          ],
+          decision: [
+            "Decision: Implement FedProx instead of FedAvg for non-IID data.",
+            "Decision: Adopt adaptive learning rates based on local data distributions.",
+            "Decision: Apply differential privacy with decreasing epsilon.",
+          ],
+        };
+        const pool = simulated[msgType] || simulated.dialog;
+        messageText = pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      const entry: DialogEntry = {
+        timestamp: new Date().toISOString(),
+        agentName: agent.name || `Agent ${agent.id}`,
+        agentRole: agent.role || 'researcher',
+        labId: agent.lab_id || 'unknown',
+        dialog: messageText,
+        isLlm: !isSimulated,
+        source: 'generated',
+        cognitiveType: msgType,
+        state: 'active',
+        chattingWith: null,
+        isSimulated,
+      };
+      appendEntries([entry]);
+
+      // Emit to Phaser game events
+      const gameInstance = getGameInstance();
+      if (gameInstance) {
+        gameInstance.events.emit('dialog-created', {
+          type: isSimulated ? 'simulated' : 'llm',
+          isSimulated,
+        });
+      }
+    } catch (err) {
+      console.error('[LLMDialogPanel] Generate error:', err);
+    } finally {
+      setGenerating(false);
+    }
+  }, [backendSimData, backendStatus, msgType, generating, appendEntries]);
+
+  // Toggle LLM on Phaser side
+  useEffect(() => {
+    const gameInstance = getGameInstance();
+    if (gameInstance) {
+      gameInstance.events.emit('llm-toggle', { enabled: llmEnabled });
+    }
+  }, [llmEnabled]);
+
   if (!visible) return null;
 
   const isWorldMap = !selectedLab || selectedLab === 'WorldMapScene';
@@ -207,8 +338,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
   const filteredLog = dialogLog.filter(entry => {
     if (!isWorldMap && labFilter) {
-      // Show cross-lab conversations if this lab is one of the two participants
-      const isCrossLab = entry.labId.includes('↔');
+      const isCrossLab = entry.labId.includes('\u2194');
       if (isCrossLab ? !entry.labId.includes(labFilter) : entry.labId !== labFilter) return false;
     }
     if (filterLlmOnly && !entry.isLlm) return false;
@@ -216,6 +346,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   });
 
   const llmCount = filteredLog.filter(e => e.isLlm).length;
+  const simCount = filteredLog.filter(e => e.isSimulated).length;
 
   const formatTime = (iso: string) => {
     try {
@@ -226,23 +357,24 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
   };
 
+  const statusColor = backendStatus === 'connected' ? '#4caf50'
+    : backendStatus === 'disconnected' ? '#f44336' : '#bbbbbb';
+  const statusLabel = backendStatus === 'connected' ? 'Connesso'
+    : backendStatus === 'disconnected' ? 'Disconnesso' : 'Verifica...';
+
   return (
     <div className={`llm-dialog-panel ${collapsed ? 'llm-collapsed' : ''}`}>
+      {/* Header */}
       <div className="llm-dialog-header" onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer' }}>
         <h3>
-          LLM Dialoghi
+          Pannello LLM
           <span className="llm-dialog-count">{filteredLog.length}</span>
           {llmCount > 0 && <span className="llm-badge" style={{ marginLeft: 4 }}>AI {llmCount}</span>}
         </h3>
         <div className="llm-dialog-controls" onClick={e => e.stopPropagation()}>
-          <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
-            <input
-              type="checkbox"
-              checked={filterLlmOnly}
-              onChange={(e) => setFilterLlmOnly(e.target.checked)}
-            />
-            Solo LLM
-          </label>
+          <span className="llm-backend-status" style={{ color: statusColor }} title={`Backend: ${statusLabel}`}>
+            &#x25CF; {statusLabel}
+          </span>
           <button className="llm-dialog-clear" onClick={() => {
             setDialogLog([]);
             lastDialogsRef.current = {};
@@ -255,10 +387,89 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
       {!collapsed && (
         <>
+          {/* Context bar */}
           <div className="llm-dialog-context">
             {isWorldMap ? 'Tutte le scene' : `${LAB_DISPLAY[labFilter || ''] || selectedLab}`}
+            {' | '}
+            <span style={{ color: '#aaa' }}>LLM: {llmCount} | Sim: {simCount} | Tot: {filteredLog.length}</span>
           </div>
 
+          {/* Controls section (collapsible) */}
+          <div className="llm-controls-section">
+            <div className="llm-controls-header" onClick={() => setControlsOpen(c => !c)}>
+              <span>{controlsOpen ? '\u25BC' : '\u25B6'} Controlli</span>
+            </div>
+            {controlsOpen && (
+              <div className="llm-controls-body">
+                {/* Toggle LLM */}
+                <div className="llm-control-row">
+                  <span>Messaggi LLM</span>
+                  <label className="llm-switch">
+                    <input type="checkbox" checked={llmEnabled} onChange={e => setLlmEnabled(e.target.checked)} />
+                    <span className="llm-switch-slider" />
+                  </label>
+                  <span className={`llm-switch-label ${llmEnabled ? 'on' : 'off'}`}>
+                    {llmEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+
+                {/* Frequency */}
+                <div className="llm-control-row">
+                  <span>Frequenza</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={msgFrequency}
+                    onChange={e => setMsgFrequency(Number(e.target.value))}
+                    className="llm-slider"
+                  />
+                  <span className="llm-slider-value">{msgFrequency}%</span>
+                </div>
+
+                {/* Message type */}
+                <div className="llm-control-row">
+                  <span>Tipo</span>
+                  <div className="llm-type-buttons">
+                    {MSG_TYPES.map(t => (
+                      <button
+                        key={t.id}
+                        className={`llm-type-btn ${msgType === t.id ? 'active' : ''}`}
+                        onClick={() => setMsgType(t.id)}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Generate button */}
+                <button
+                  className="llm-generate-btn"
+                  onClick={handleGenerate}
+                  disabled={generating}
+                >
+                  {generating ? 'Generazione...' : (
+                    backendStatus === 'connected' ? 'Genera Messaggio LLM' : 'Genera Messaggio Simulato'
+                  )}
+                </button>
+
+                {/* Filter */}
+                <div className="llm-control-row">
+                  <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
+                    <input
+                      type="checkbox"
+                      checked={filterLlmOnly}
+                      onChange={(e) => setFilterLlmOnly(e.target.checked)}
+                    />
+                    Mostra solo LLM
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dialog log */}
           <div className="llm-dialog-log">
             {filteredLog.length === 0 ? (
               <p className="llm-dialog-empty">
@@ -270,7 +481,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
               filteredLog.map((entry, i) => (
                 <div
                   key={i}
-                  className={`llm-dialog-entry ${entry.isLlm ? 'llm-generated' : 'stub-generated'} ${entry.source === 'phaser' ? 'phaser-source' : ''} ${entry.source === 'fl-convo' ? 'fl-convo-source' : ''}`}
+                  className={`llm-dialog-entry ${entry.isLlm ? 'llm-generated' : 'stub-generated'} ${entry.source === 'phaser' ? 'phaser-source' : ''} ${entry.source === 'fl-convo' ? 'fl-convo-source' : ''} ${entry.source === 'generated' ? 'generated-source' : ''}`}
                 >
                   <div className="llm-dialog-meta">
                     <span className="llm-dialog-time">{formatTime(entry.timestamp)}</span>
@@ -281,14 +492,16 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                       {entry.agentName}
                     </span>
                     <span className="llm-dialog-lab">
-                      {entry.labId.includes('↔')
-                        ? entry.labId.split('↔').map(l => LAB_DISPLAY[l] || l).join(' ↔ ')
+                      {entry.labId.includes('\u2194')
+                        ? entry.labId.split('\u2194').map(l => LAB_DISPLAY[l] || l).join(' \u2194 ')
                         : (LAB_DISPLAY[entry.labId] || entry.labId)}
                     </span>
-                    {entry.labId.includes('↔') && <span className="cross-lab-badge">Cross-Lab</span>}
+                    {entry.labId.includes('\u2194') && <span className="cross-lab-badge">Cross-Lab</span>}
                     {entry.isLlm && <span className="llm-badge">LLM</span>}
+                    {entry.isSimulated && <span className="sim-badge">SIM</span>}
                     {entry.source === 'fl-convo' && <span className="fl-convo-badge">FL R{entry.flRound}</span>}
                     {entry.source === 'phaser' && <span className="phaser-badge">AI</span>}
+                    {entry.source === 'generated' && <span className="gen-badge">GEN</span>}
                     {entry.cognitiveType && (
                       <span className="cognitive-badge">{COGNITIVE_LABELS[entry.cognitiveType] || entry.cognitiveType}</span>
                     )}

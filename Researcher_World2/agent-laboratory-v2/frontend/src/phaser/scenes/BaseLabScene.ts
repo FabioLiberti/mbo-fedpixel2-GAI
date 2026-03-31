@@ -11,7 +11,6 @@ import { FLDialogIntegrator } from '../fl/FLDialogIntegrator';
 import { loadDialogAssets } from '../loader';
 import { DialogDebugger } from '../utils/dialogDebugger';
 import { LabControlsMenu, type LabControlConfig, type ILabControlScene } from '../ui/LabControlsMenu';
-import { SimpleLLMPanel } from '../ui/simple/SimpleLLMPanel';
 import { AgentsLegend } from '../ui/AgentsLegend';
 import { GlobalAgentController } from '../controllers/GlobalAgentController';
 import { DialogEventTracker } from '../controllers/DialogEventTracker';
@@ -99,9 +98,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
   // Menu dei controlli del laboratorio
   protected labControlsMenu: LabControlsMenu | null = null;
-
-  // Pannello LLM semplificato
-  protected simpleLLMPanel: SimpleLLMPanel | null = null;
 
   // Debug elements
   public debugGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -223,7 +219,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       if (this.flDialogIntegrator) this.flDialogIntegrator.destroy();
       if (this.dialogDebugger) { this.dialogDebugger.destroy(); this.dialogDebugger = null; }
       if (this.labControlsMenu) { this.labControlsMenu.destroy(); this.labControlsMenu = null; }
-      if (this.simpleLLMPanel) { this.simpleLLMPanel.destroy(); this.simpleLLMPanel = null; }
       this.game.events.off('agent-interaction');
     });
   }
@@ -239,10 +234,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         theme: { primary: 0x3f51b5, secondary: 0x1a1a2e, accent: 0xf5f5dc },
         navigation: [],
       });
-      this.simpleLLMPanel = new SimpleLLMPanel(this, 20, 60);
-      if (this.simpleLLMPanel && this.dialogController) {
-        this.simpleLLMPanel.setDialogController(this.dialogController);
-      }
       console.log('Controls menu initialized successfully');
     } catch (error) {
       console.error('Error initializing controls menu:', error);
@@ -250,7 +241,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   public getControlsMenu(): LabControlsMenu | null { return this.labControlsMenu; }
-  public getLLMPanel(): SimpleLLMPanel | null { return this.simpleLLMPanel; }
 
   protected registerAgentsWithDialogController(): void {
     this.agents.forEach(agent => {

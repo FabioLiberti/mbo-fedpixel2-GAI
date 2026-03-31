@@ -5,8 +5,6 @@
 // Responsive: larghezza e altezza cappate alla dimensione del canvas.
 
 import * as Phaser from 'phaser';
-import { SimpleLLMPanel } from './simple/SimpleLLMPanel';
-import { LLMControlPanel } from './LLMControlPanel';
 import { DialogController } from '../controllers/DialogController';
 import { integrateAgentsLegend } from '../examples/AgentsLegendIntegration';
 import type { IAgentScene as ILabControlScene } from '../types/IAgentScene';
@@ -47,8 +45,6 @@ export class LabControlsMenu {
   private isOpen = false;
 
   // Sub-panels
-  private simpleLLMPanel: SimpleLLMPanel | null = null;
-  private llmControlPanel: LLMControlPanel | null = null;
   private dialogController: DialogController | null = null;
 
   // Canvas diagnostic
@@ -71,13 +67,9 @@ export class LabControlsMenu {
 
   setDialogController(controller: DialogController): void {
     this.dialogController = controller;
-    if (this.simpleLLMPanel) this.simpleLLMPanel.setDialogController(controller);
-    if (this.llmControlPanel) this.llmControlPanel.setDialogController(controller);
   }
 
   destroy(): void {
-    this.simpleLLMPanel?.destroy(); this.simpleLLMPanel = null;
-    this.llmControlPanel?.destroy(); this.llmControlPanel = null;
     if (this.diagDiv) { this.diagDiv.remove(); this.diagDiv = null; }
     if (this.diagTimer) { this.diagTimer.remove(); this.diagTimer = null; }
     this.panel?.destroy(); this.panel = null;
@@ -115,20 +107,11 @@ export class LabControlsMenu {
       ],
     });
 
-    // 2. LLM Dialoghi (pannello React)
+    // 2. Pannello LLM (pannello React unificato — dialoghi + controlli)
     sections.push({
-      title: 'LLM Dialoghi',
+      title: 'Pannello LLM',
       buttons: [
-        { label: 'Apri/Chiudi Dialoghi', cb: () => this.toggleLLMDialogPanel() },
-      ],
-    });
-
-    // 3. LLM Strumenti
-    sections.push({
-      title: 'LLM Strumenti',
-      buttons: [
-        { label: 'LLM Dashboard', cb: () => this.toggleLLMPanel() },
-        { label: 'LLM Simple', cb: () => this.toggleSimpleLLMPanel() },
+        { label: 'Apri/Chiudi Pannello', cb: () => this.toggleLLMDialogPanel() },
       ],
     });
 
@@ -370,55 +353,8 @@ export class LabControlsMenu {
       this.scene.agentsLegend.getContainer().destroy();
       this.scene.agentsLegend = null;
     }
-    // Chiudi LLM Dashboard
-    if (this.llmControlPanel) {
-      this.llmControlPanel.hide();
-      this.llmControlPanel.destroy();
-      this.llmControlPanel = null;
-    }
-    // Chiudi SimpleLLMPanel
-    if (this.simpleLLMPanel) {
-      this.simpleLLMPanel.destroy();
-      this.simpleLLMPanel = null;
-    }
-    // Chiudi LLM Dialog Panel (React) — forza chiusura esplicita
+    // Chiudi Pannello LLM React — forza chiusura esplicita
     document.dispatchEvent(new CustomEvent('llm-panel-toggle', { detail: { visible: false } }));
-  }
-
-  private toggleLLMPanel(): void {
-    try {
-      if (this.llmControlPanel) {
-        this.llmControlPanel.hide();
-        this.llmControlPanel.destroy();
-        this.llmControlPanel = null;
-        return;
-      }
-      this.closeAllSubPanels();
-      this.closePanel();
-      const x = 20;
-      this.llmControlPanel = new LLMControlPanel(this.scene, x, 50, () => {
-        this.llmControlPanel?.hide();
-        this.llmControlPanel?.destroy();
-        this.llmControlPanel = null;
-      });
-      if (this.dialogController) this.llmControlPanel.setDialogController(this.dialogController);
-    } catch (err) { console.error('[LabControlsMenu] toggleLLMPanel:', err); }
-  }
-
-  private toggleSimpleLLMPanel(): void {
-    try {
-      if (this.simpleLLMPanel) {
-        this.simpleLLMPanel.destroy();
-        this.simpleLLMPanel = null;
-        return;
-      }
-      this.closeAllSubPanels();
-      this.closePanel();
-      const x = 20;
-      this.simpleLLMPanel = new SimpleLLMPanel(this.scene, x, 120);
-      if (this.dialogController) this.simpleLLMPanel.setDialogController(this.dialogController);
-      this.simpleLLMPanel.show();
-    } catch (err) { console.error('[LabControlsMenu] toggleSimpleLLMPanel:', err); }
   }
 
   private testDialog(): void {
