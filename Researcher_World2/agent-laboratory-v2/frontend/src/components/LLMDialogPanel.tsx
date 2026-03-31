@@ -197,7 +197,11 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   const labFilter = selectedLab ? SCENE_TO_LAB[selectedLab] : null;
 
   const filteredLog = dialogLog.filter(entry => {
-    if (!isWorldMap && labFilter && entry.labId !== labFilter) return false;
+    if (!isWorldMap && labFilter) {
+      // Show cross-lab conversations if this lab is one of the two participants
+      const isCrossLab = entry.labId.includes('↔');
+      if (isCrossLab ? !entry.labId.includes(labFilter) : entry.labId !== labFilter) return false;
+    }
     if (filterLlmOnly && !entry.isLlm) return false;
     return true;
   });
@@ -267,7 +271,12 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                     >
                       {entry.agentName}
                     </span>
-                    <span className="llm-dialog-lab">{LAB_DISPLAY[entry.labId] || entry.labId}</span>
+                    <span className="llm-dialog-lab">
+                      {entry.labId.includes('↔')
+                        ? entry.labId.split('↔').map(l => LAB_DISPLAY[l] || l).join(' ↔ ')
+                        : (LAB_DISPLAY[entry.labId] || entry.labId)}
+                    </span>
+                    {entry.labId.includes('↔') && <span className="cross-lab-badge">Cross-Lab</span>}
                     {entry.isLlm && <span className="llm-badge">LLM</span>}
                     {entry.source === 'fl-convo' && <span className="fl-convo-badge">FL R{entry.flRound}</span>}
                     {entry.source === 'phaser' && <span className="phaser-badge">AI</span>}

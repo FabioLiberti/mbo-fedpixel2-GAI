@@ -198,6 +198,16 @@
   font-weight: bold;
 }
 
+.cross-lab-badge {
+  font-size: 8px;
+  color: #e67e22;
+  background: rgba(230, 126, 34, 0.2);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-weight: bold;
+  border: 1px solid rgba(230, 126, 34, 0.4);
+}
+
 .llm-dialog-chat-with {
   font-size: 9px;
   color: #e67e22;
