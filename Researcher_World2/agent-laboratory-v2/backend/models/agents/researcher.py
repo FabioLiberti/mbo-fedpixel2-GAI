@@ -139,6 +139,7 @@ class ResearcherAgent(Agent):
 
         a_mem_dir = os.path.join(persona_dir, "associative_memory")
         self.a_mem = AssociativeMemory(f_saved=a_mem_dir)
+        self.a_mem.agent_role = role  # enable role-based keyword strength tracking
 
         # --- Name property (used by cognitive modules via persona.name) ---
         self.name = self.scratch.name or persona_name.replace("_", " ")

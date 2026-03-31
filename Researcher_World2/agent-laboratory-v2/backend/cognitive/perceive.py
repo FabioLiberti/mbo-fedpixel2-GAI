@@ -17,17 +17,74 @@ from .prompts.run_gpt_prompt import (
 logger = logging.getLogger(__name__)
 
 
+# Role-specific keyword boosts: if the event description contains keywords
+# relevant to the agent's role, multiply poignancy by the boost factor.
+# This makes agents "notice" role-relevant events more strongly.
+_ROLE_POIGNANCY_KEYWORDS = {
+    "professor": {
+        "keywords": ["architecture", "theory", "framework", "design", "convergence",
+                     "architettura", "teoria", "convergenza", "progettazione"],
+        "boost": 1.4,
+    },
+    "researcher": {
+        "keywords": ["experiment", "accuracy", "model", "aggregation", "non-iid",
+                     "esperimento", "accuratezza", "modello", "aggregazione"],
+        "boost": 1.3,
+    },
+    "student": {
+        "keywords": ["learning", "training", "gradient", "loss", "epoch",
+                     "apprendimento", "addestramento", "gradiente"],
+        "boost": 1.3,
+    },
+    "doctor": {
+        "keywords": ["patient", "clinical", "diagnosis", "health", "disease",
+                     "paziente", "clinico", "diagnosi", "salute", "malattia", "cardio"],
+        "boost": 1.5,
+    },
+    "privacy_specialist": {
+        "keywords": ["privacy", "differential", "epsilon", "noise", "budget", "dp-sgd",
+                     "gdpr", "compliance", "rumore", "protezione"],
+        "boost": 1.5,
+    },
+}
+
+
+def _apply_role_boost(persona, base_score, description):
+    """Apply role-based poignancy boost if description matches role keywords."""
+    role = getattr(persona, 'role', None)
+    if not role:
+        return base_score
+
+    role_info = _ROLE_POIGNANCY_KEYWORDS.get(role)
+    if not role_info:
+        return base_score
+
+    desc_lower = description.lower()
+    if any(kw in desc_lower for kw in role_info["keywords"]):
+        boosted = min(10, int(base_score * role_info["boost"]))
+        logger.debug(f"Role boost for {role}: {base_score} → {boosted} (desc: {description[:60]})")
+        return boosted
+
+    return base_score
+
+
 def generate_poig_score(persona, event_type, description):
-    """Generate poignancy (importance) score for an event."""
+    """Generate poignancy (importance) score for an event.
+
+    Applies role-based boost: agents rate role-relevant events higher.
+    """
     if "is idle" in description:
         return 1
 
     if event_type == "event":
-        return run_gpt_prompt_event_poignancy(persona, description)[0]
+        base = run_gpt_prompt_event_poignancy(persona, description)[0]
     elif event_type == "chat":
-        return run_gpt_prompt_chat_poignancy(
+        base = run_gpt_prompt_chat_poignancy(
             persona, persona.scratch.act_description)[0]
-    return 1
+    else:
+        return 1
+
+    return _apply_role_boost(persona, base, description)
 
 
 def perceive(persona, maze):

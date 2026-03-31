@@ -346,6 +346,53 @@ export class DialogAnalytics {
     console.log('[DialogAnalytics] Reset — all records cleared');
   }
 
+  // ── CSV Export ────────────────────────────────────────────────────
+
+  /** Export all records as CSV string for R/Python analysis. */
+  exportCSV(): string {
+    const headers = [
+      'id', 'timestamp', 'wallClock',
+      'speakerId', 'speakerName', 'speakerRole', 'speakerX', 'speakerY', 'speakerRoom',
+      'targetId', 'targetName', 'targetRole', 'targetX', 'targetY', 'targetRoom',
+      'text', 'dialogCategory', 'isResponse', 'isLLM',
+      'distance', 'sameRoom', 'destinationRoom',
+    ];
+
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      const s = String(v).replace(/"/g, '""');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+    };
+
+    const rows = this.records.map(r => [
+      r.id, r.timestamp, r.wallClock,
+      r.speakerId, r.speakerName, r.speakerRole,
+      r.speakerPos.x, r.speakerPos.y, r.speakerRoom,
+      r.targetId, r.targetName, r.targetRole,
+      r.targetPos?.x ?? '', r.targetPos?.y ?? '', r.targetRoom,
+      r.text, r.dialogCategory, r.isResponse, r.isLLM,
+      r.distance, r.sameRoom, r.destinationRoom,
+    ].map(escape).join(','));
+
+    return [headers.join(','), ...rows].join('\n');
+  }
+
+  /** Trigger browser download of CSV file. */
+  downloadCSV(filename = 'dialog_analytics.csv'): void {
+    const csv = this.exportCSV();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log(`[DialogAnalytics] CSV exported: ${this.records.length} records → ${filename}`);
+  }
+
   // ── Persistence ──────────────��─────────────────────────────────────
 
   private saveState(): void {

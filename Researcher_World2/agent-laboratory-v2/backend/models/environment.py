@@ -164,7 +164,7 @@ class LabEnvironment(Model):
         )
 
     def step(self):
-        """Execute one simulation step."""
+        """Execute one simulation step (sequential, via Mesa scheduler)."""
         # Advance simulation time (each step = 10 simulated minutes)
         self.sim_time += datetime.timedelta(minutes=10)
 
@@ -178,6 +178,46 @@ class LabEnvironment(Model):
 
         # Step all agents
         self.schedule.step()
+
+    def step_parallel(self, max_workers: int = 4):
+        """Execute one simulation step with parallel agent cognitive cycles.
+
+        Each agent's step() is independent (own memory, read-only maze access),
+        so they can safely run in parallel via ThreadPoolExecutor.
+        FL tasks and cognitive LLM calls benefit most from this.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # Advance simulation time
+        self.sim_time += datetime.timedelta(minutes=10)
+
+        # Update all agents' time
+        for agent in self.schedule.agents:
+            if hasattr(agent, 'set_curr_time'):
+                agent.set_curr_time(self.sim_time)
+
+        # Collect data
+        self.datacollector.collect(self)
+
+        # Step all agents in parallel
+        agents = list(self.schedule.agents)
+        if len(agents) <= 1:
+            self.schedule.step()
+            return
+
+        def _step_agent(agent):
+            try:
+                agent.step()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Agent {getattr(agent, 'name', agent.unique_id)} step failed: {e}"
+                )
+
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(agents))) as pool:
+            futures = [pool.submit(_step_agent, a) for a in agents]
+            for f in as_completed(futures):
+                f.result()  # propagate exceptions
 
     def get_agent_states(self) -> List[Dict[str, Any]]:
         """Return states of all agents for frontend."""

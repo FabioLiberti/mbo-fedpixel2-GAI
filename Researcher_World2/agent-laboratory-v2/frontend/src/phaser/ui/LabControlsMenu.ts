@@ -148,6 +148,7 @@ export class LabControlsMenu {
       title: 'Analytics',
       buttons: [
         { label: 'Report Dialoghi', cb: () => this.showAnalyticsReport() },
+        { label: 'Export CSV', cb: () => this.exportAnalyticsCSV() },
         { label: 'Reset Analytics', cb: () => this.resetAnalytics() },
       ],
     });
@@ -619,6 +620,15 @@ export class LabControlsMenu {
         this.analyticsOverlay = null;
       }
     }
+  }
+
+  private exportAnalyticsCSV(): void {
+    const analytics = this.scene.dialogAnalytics;
+    if (!analytics) {
+      console.warn('[LabControlsMenu] No DialogAnalytics available');
+      return;
+    }
+    analytics.downloadCSV();
   }
 
   // ── Canvas diagnostic ───────────────────────────────────────────

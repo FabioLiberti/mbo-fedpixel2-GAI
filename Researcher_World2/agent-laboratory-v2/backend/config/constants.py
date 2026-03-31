@@ -56,6 +56,25 @@ FL_PROGRESS_SEND = 0.2
 FL_PROGRESS_RECEIVE = 0.2
 
 # =========================================================================
+# Memory Temporal Decay (hours)
+# =========================================================================
+DECAY_BASE_HOURS_EVENT = 24              # routine events: ~1-2 sim days
+DECAY_BASE_HOURS_THOUGHT = 72           # reflections: ~3-6 sim days
+DECAY_BASE_HOURS_CHAT = 48              # conversations: ~2-4 sim days
+MEMORY_DECAY_INTERVAL = 100             # steps between memory decay runs
+
+# =========================================================================
+# Parallel Cognitive Cycles
+# =========================================================================
+PARALLEL_MAX_WORKERS = 4                 # max threads for agent step parallelism
+
+# =========================================================================
+# Cross-lab FL Conversations
+# =========================================================================
+CROSS_LAB_CONVOS_PER_ROUND = 2           # max cross-lab conversations per FL round
+CROSS_LAB_MEMORY_POIGNANCY = 8           # poignancy of cross-lab conversation memories
+
+# =========================================================================
 # LLM
 # =========================================================================
 LLM_MODEL = "qwen3.5:4b"

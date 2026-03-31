@@ -419,6 +419,131 @@ class SimulationController:
         self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
         logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
 
+    def _trigger_cross_lab_conversations(self):
+        """Generate cross-lab FL conversations after global aggregation.
+
+        Pairs agents from different labs (prioritizing different roles) to discuss
+        the federated results, bias differences across demographics, and
+        collaborative insights. This simulates inter-institutional collaboration.
+        """
+        if not self.model or not self.fl_system:
+            return
+
+        import random
+        from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+        from concurrent.futures import ThreadPoolExecutor
+
+        fl_state = self.fl_system.get_state()
+        fl_round = fl_state["round"]
+        metrics = fl_state["metrics"]
+        dp = fl_state.get("dp", {})
+
+        lvg_list = metrics.get("local_vs_global", [])
+        lvg = lvg_list[-1] if lvg_list else {}
+
+        use_llm = is_llm_enabled()
+
+        lab_ids = self.model.get_lab_ids()
+        if len(lab_ids) < 2:
+            return
+
+        # Build cross-lab pairs: one agent per lab, different roles preferred
+        # Generate up to 2 cross-lab conversations per round
+        cross_pairs = []
+        lab_agents = {lid: self.model.get_lab_agents(lid) for lid in lab_ids}
+
+        for i in range(len(lab_ids)):
+            for j in range(i + 1, len(lab_ids)):
+                lab_a, lab_b = lab_ids[i], lab_ids[j]
+                agents_a = lab_agents[lab_a]
+                agents_b = lab_agents[lab_b]
+                if not agents_a or not agents_b:
+                    continue
+
+                # Pick agents with different roles if possible
+                agent_a = random.choice(agents_a)
+                candidates_b = [a for a in agents_b
+                                if getattr(a, 'role', '') != getattr(agent_a, 'role', '')]
+                agent_b = random.choice(candidates_b) if candidates_b else random.choice(agents_b)
+                cross_pairs.append((agent_a, agent_b, lab_a, lab_b))
+
+        # Limit to 2 cross-lab conversations per round
+        if len(cross_pairs) > 2:
+            cross_pairs = random.sample(cross_pairs, 2)
+
+        tasks = []
+        for agent_a, agent_b, lab_a, lab_b in cross_pairs:
+            fl_context = {
+                "round": fl_round,
+                "accuracy": metrics.get("accuracy", [0])[-1] if metrics.get("accuracy") else 0,
+                "gain": lvg.get(lab_a, {}).get("gain", 0),
+                "dp_budget": dp.get("budget_fraction", 1.0),
+                "lab_id": f"{lab_a}↔{lab_b}",
+                "demo": (
+                    f"{self._LAB_DEMOGRAPHICS.get(lab_a, 'pazienti')} ({lab_a}) e "
+                    f"{self._LAB_DEMOGRAPHICS.get(lab_b, 'pazienti')} ({lab_b})"
+                ),
+                "cross_lab": True,
+                "lab_a": lab_a,
+                "lab_b": lab_b,
+            }
+            tasks.append(([agent_a, agent_b], fl_context))
+
+        from cognitive.converse import generate_fl_conversation
+
+        def _gen(args):
+            pair, ctx = args
+            try:
+                return pair, ctx, generate_fl_conversation(
+                    pair[0], pair[1], ctx, use_llm=use_llm
+                )
+            except Exception as e:
+                logger.warning(f"Cross-lab convo {ctx['lab_id']} failed: {e}")
+                return pair, ctx, None
+
+        if use_llm and len(tasks) > 1:
+            with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+                results = list(pool.map(_gen, tasks))
+        else:
+            results = [_gen(t) for t in tasks]
+
+        new_convos = []
+        for pair, ctx, convo in results:
+            if not convo:
+                continue
+
+            # Update agent dialog state
+            for name, utterance in convo[-2:]:
+                for agent in pair:
+                    if agent.name == name:
+                        agent.last_dialog = utterance
+                        agent.dialog_is_llm = use_llm
+            pair[0].scratch.chatting_with = pair[1].name
+            pair[1].scratch.chatting_with = pair[0].name
+
+            new_convos.append({
+                "lab_id": ctx["lab_id"],
+                "round": fl_round,
+                "agents": [pair[0].name, pair[1].name],
+                "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
+                "labs": [ctx["lab_a"], ctx["lab_b"]],
+                "cross_lab": True,
+                "dialog": convo,
+            })
+
+            # Inject cross-lab conversation as high-poignancy memory
+            full_text = " | ".join([f"{n}: {u}" for n, u in convo])
+            for agent in pair:
+                self._inject_fl_event(
+                    agent,
+                    f"Collaborazione inter-lab round {fl_round} "
+                    f"({ctx['lab_a']}↔{ctx['lab_b']}): {full_text[:200]}",
+                    poignancy=8,
+                )
+
+        self.fl_conversations = (self.fl_conversations + new_convos)[-12:]
+        logger.info(f"Generated {len(new_convos)} cross-lab FL conversations for round {fl_round}")
+
     # =========================================================================
     # Simulation Lifecycle
     # =========================================================================
@@ -601,11 +726,17 @@ class SimulationController:
             # Inject bias-aware insights per lab (uses local_vs_global + cross_eval)
             self._inject_fl_awareness_events()
 
-            # Generate FL conversations between agent pairs
+            # Generate FL conversations between agent pairs (intra-lab)
             try:
                 self._trigger_fl_conversations()
             except Exception as e:
                 logger.warning(f"FL conversations failed: {e}")
+
+            # Generate cross-lab FL conversations (inter-lab)
+            try:
+                self._trigger_cross_lab_conversations()
+            except Exception as e:
+                logger.warning(f"Cross-lab FL conversations failed: {e}")
 
             logger.info("FL round completed")
 
@@ -655,7 +786,7 @@ class SimulationController:
                     step_time = 1.0 / (self.model.tick_rate * self.speed)
 
                     start_time = time.time()
-                    self.model.step()
+                    self.model.step_parallel(max_workers=4)
                     step_count += 1
 
                     # Process FL logic
@@ -672,6 +803,12 @@ class SimulationController:
                     remaining = step_time - elapsed
                     if remaining > 0:
                         time.sleep(remaining)
+
+                    # Temporal decay: prune expired memories every 100 steps
+                    if step_count % 100 == 0:
+                        for agent in self.model.schedule.agents:
+                            if hasattr(agent, 'a_mem') and agent.a_mem:
+                                agent.a_mem.decay_memories()
 
                     # Checkpoint agent cognitive memories every 500 steps
                     if step_count % 500 == 0:

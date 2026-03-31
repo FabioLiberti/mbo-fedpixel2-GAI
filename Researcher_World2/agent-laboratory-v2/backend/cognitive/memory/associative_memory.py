@@ -7,6 +7,7 @@ Stores long-term memory as ConceptNode objects with:
   - Poignancy scores (importance)
   - Embedding keys for semantic retrieval
   - Keyword-based fast lookup
+  - Temporal decay: nodes auto-expire based on type and poignancy
 """
 import json
 import datetime
@@ -21,6 +22,15 @@ logger = logging.getLogger(__name__)
 MAX_SEQ_EVENT = 200
 MAX_SEQ_THOUGHT = 150
 MAX_SEQ_CHAT = 100
+
+# Temporal decay: base lifetime (hours) per node type.
+# High-poignancy nodes live longer: lifetime = base * (1 + poignancy/10).
+# E.g., an event with poignancy 8 lasts 24 * (1 + 0.8) = 43.2 hours.
+DECAY_BASE_HOURS = {
+    "event": 24,      # routine events: ~1-2 sim days
+    "thought": 72,    # reflections: ~3-6 sim days
+    "chat": 48,       # conversations: ~2-4 sim days
+}
 
 from cognitive import check_if_file_exists, create_folder_if_not_there
 
@@ -55,6 +65,33 @@ class ConceptNode:
         return (self.subject, self.predicate, self.object)
 
 
+def compute_expiration(created: datetime.datetime, node_type: str, poignancy: float):
+    """Compute expiration time based on node type and poignancy.
+
+    Higher poignancy = longer lifetime. Returns datetime or None if no decay.
+    """
+    base_hours = DECAY_BASE_HOURS.get(node_type, 48)
+    # Scale: poignancy 1 → 1.1x, poignancy 10 → 2.0x
+    lifetime_hours = base_hours * (1.0 + poignancy / 10.0)
+    return created + datetime.timedelta(hours=lifetime_hours)
+
+
+# Role-specific keywords: when an agent with this role adds a memory
+# containing these keywords, kw_strength gets a bonus (+2 instead of +1).
+_ROLE_KW_BOOST = {
+    "professor": {"architecture", "theory", "convergence", "framework", "design",
+                  "architettura", "teoria", "convergenza", "progettazione"},
+    "researcher": {"experiment", "accuracy", "model", "aggregation", "non-iid",
+                   "esperimento", "accuratezza", "modello", "aggregazione"},
+    "student": {"learning", "training", "gradient", "loss", "epoch",
+                "apprendimento", "addestramento", "gradiente"},
+    "doctor": {"patient", "clinical", "diagnosis", "health", "disease",
+               "paziente", "clinico", "diagnosi", "salute", "malattia"},
+    "privacy_specialist": {"privacy", "differential", "epsilon", "noise", "budget",
+                           "gdpr", "compliance", "rumore", "protezione"},
+}
+
+
 class AssociativeMemory:
     def __init__(self, f_saved=None):
         self.id_to_node = dict()
@@ -71,6 +108,9 @@ class AssociativeMemory:
         self.kw_strength_thought = dict()
 
         self.embeddings = dict()
+
+        # Role of the owning agent (set after construction)
+        self.agent_role = None
 
         if f_saved and os.path.isdir(f_saved):
             embeddings_path = os.path.join(f_saved, "embeddings.json")
@@ -228,9 +268,27 @@ class AssociativeMemory:
         with open(os.path.join(out_json, "embeddings.json"), "w") as outfile:
             json.dump(self.embeddings, outfile)
 
+    def _kw_strength_increment(self, kw: str) -> int:
+        """Return kw_strength increment: +2 if keyword matches agent role, else +1."""
+        if self.agent_role:
+            role_kws = _ROLE_KW_BOOST.get(self.agent_role, set())
+            if kw in role_kws:
+                return 2
+        return 1
+
+    def decay_memories(self):
+        """Run temporal decay: prune expired nodes from all sequences."""
+        self._prune("seq_event", MAX_SEQ_EVENT)
+        self._prune("seq_thought", MAX_SEQ_THOUGHT)
+        self._prune("seq_chat", MAX_SEQ_CHAT)
+
     def add_event(self, created, expiration, s, p, o,
                   description, keywords, poignancy,
                   embedding_pair, filling):
+        # Auto-set expiration via temporal decay if not provided
+        if expiration is None and created:
+            expiration = compute_expiration(created, "event", poignancy)
+
         node_count = len(self.id_to_node.keys()) + 1
         type_count = len(self.seq_event) + 1
         node_type = "event"
@@ -260,10 +318,11 @@ class AssociativeMemory:
 
         if f"{p} {o}" != "is idle":
             for kw in keywords_lower:
+                inc = self._kw_strength_increment(kw)
                 if kw in self.kw_strength_event:
-                    self.kw_strength_event[kw] += 1
+                    self.kw_strength_event[kw] += inc
                 else:
-                    self.kw_strength_event[kw] = 1
+                    self.kw_strength_event[kw] = inc
 
         self.embeddings[embedding_pair[0]] = embedding_pair[1]
         self._prune("seq_event", MAX_SEQ_EVENT)
@@ -272,6 +331,10 @@ class AssociativeMemory:
     def add_thought(self, created, expiration, s, p, o,
                     description, keywords, poignancy,
                     embedding_pair, filling):
+        # Auto-set expiration via temporal decay if not provided
+        if expiration is None and created:
+            expiration = compute_expiration(created, "thought", poignancy)
+
         node_count = len(self.id_to_node.keys()) + 1
         type_count = len(self.seq_thought) + 1
         node_type = "thought"
@@ -300,10 +363,11 @@ class AssociativeMemory:
 
         if f"{p} {o}" != "is idle":
             for kw in keywords_lower:
+                inc = self._kw_strength_increment(kw)
                 if kw in self.kw_strength_thought:
-                    self.kw_strength_thought[kw] += 1
+                    self.kw_strength_thought[kw] += inc
                 else:
-                    self.kw_strength_thought[kw] = 1
+                    self.kw_strength_thought[kw] = inc
 
         self.embeddings[embedding_pair[0]] = embedding_pair[1]
         self._prune("seq_thought", MAX_SEQ_THOUGHT)
@@ -312,6 +376,10 @@ class AssociativeMemory:
     def add_chat(self, created, expiration, s, p, o,
                  description, keywords, poignancy,
                  embedding_pair, filling):
+        # Auto-set expiration via temporal decay if not provided
+        if expiration is None and created:
+            expiration = compute_expiration(created, "chat", poignancy)
+
         node_count = len(self.id_to_node.keys()) + 1
         type_count = len(self.seq_chat) + 1
         node_type = "chat"
