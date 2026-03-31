@@ -876,10 +876,12 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const drawDot = (color: number) => { dot.clear(); dot.fillStyle(color, 1); dot.fillCircle(0, 0, 5); };
       drawDot(0x888888);
 
-      // Periodic check every 15s
+      // Periodic check every 15s (guard against destroyed scene)
       const check = async () => {
+        if (!label.scene) return; // scene was destroyed
         try {
           const resp = await fetch('http://localhost:8091/ai/status', { signal: AbortSignal.timeout(3000) });
+          if (!label.scene) return;
           if (resp.ok) {
             const data = await resp.json();
             if (data.available) {
@@ -891,6 +893,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
             drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');
           }
         } catch {
+          if (!label.scene) return;
           drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');
         }
       };

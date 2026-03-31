@@ -79,7 +79,7 @@ export class WorldMapScene extends BaseScene {
     this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
       frameWidth: 32, frameHeight: 48
     });
-    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', {
+    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png?v=2', {
       frameWidth: 32, frameHeight: 48
     });
     this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', {
@@ -97,7 +97,7 @@ export class WorldMapScene extends BaseScene {
     this.load.spritesheet('privacy_specialist', 'assets/characters/researcher_spritesheet.png', {
       frameWidth: 32, frameHeight: 48
     });
-    this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png', {
+    this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png?v=2', {
       frameWidth: 32, frameHeight: 48
     });
 

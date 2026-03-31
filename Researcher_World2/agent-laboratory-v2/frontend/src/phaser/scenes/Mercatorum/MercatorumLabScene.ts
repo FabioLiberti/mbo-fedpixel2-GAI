@@ -15,20 +15,21 @@ import { THEME_MERCATORUM, TILE } from '../../utils/tilesetGenerator';
 // Positions placed inside their thematic rooms
 // ---------------------------------------------------------------------------
 const MERCATORUM_AGENTS: AgentConfigEntry[] = [
-  { type: 'professor_portrait',          name: 'Elena Conti',   position: { x: 130, y: 140 }, specialization: 'privacy_economics' },
+  { type: 'professor6',                   name: 'Elena Conti',   position: { x: 130, y: 140 }, specialization: 'privacy_economics' },
   { type: 'privacy_specialist_portrait', name: 'Luca Bianchi',  position: { x: 660, y: 140 }, specialization: 'compliance_verification' },
   { type: 'student',                     name: 'Marco Rossi',   position: { x: 400, y: 420 }, specialization: 'data_science' },
   { type: 'researcher',                  name: 'Sofia Greco',   position: { x: 400, y: 140 }, specialization: 'privacy_engineering' },
 ];
 
 // Portrait types use high-res images (unique keys to avoid conflict with WorldMapScene spritesheets)
-const PORTRAIT_TYPES = ['professor_portrait', 'privacy_specialist_portrait'];
+const PORTRAIT_TYPES = ['privacy_specialist_portrait'];
 // Spritesheet types for animations/placeholders
-const SPRITESHEET_TYPES = ['student', 'researcher'];
+const SPRITESHEET_TYPES = ['student', 'researcher', 'professor6'];
 
 const TYPE_COLORS: Record<string, { main: string; accent: string }> = {
   student:    { main: '#FB8C00', accent: '#E65100' },
   researcher: { main: '#43A047', accent: '#2E7D32' },
+  professor6: { main: '#7B1FA2', accent: '#4A148C' },
 };
 
 // ---------------------------------------------------------------------------
@@ -54,12 +55,12 @@ export class MercatorumLabScene extends BaseLabScene {
     this.setLoadingListeners();
 
     // Portrait types: high-res images with unique keys (avoid conflict with WorldMapScene)
-    this.load.image('professor_portrait', 'assets/sprites/1024x1536/_Professor3.png');
     this.load.image('privacy_specialist_portrait', 'assets/sprites/1024x1536/_Manager.png');
 
     // Spritesheet types: pixel-art standard
-    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png?v=2', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('professor6', 'assets/characters/professor6_spritesheet_32x48.png', { frameWidth: 32, frameHeight: 48 });
 
     // Assets lab-specific
     this.load.image('mercatorum_background', 'assets/labs/mercatorum/background.png');

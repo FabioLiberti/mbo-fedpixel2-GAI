@@ -45,7 +45,7 @@ export class BaseScene extends Phaser.Scene {
     // Nota: Modifica qui per usare i file sprite corretti
     this.assetLoader.loadSpritesheet('professor', ASSETS.characters.professor.path, ASSETS.characters.professor.config);
     this.assetLoader.loadSpritesheet('researcher', ASSETS.characters.researcher.path, ASSETS.characters.researcher.config);
-    this.assetLoader.loadSpritesheet('student', '/assets/characters/student.png', { frameWidth: 32, frameHeight: 48 });
+    this.assetLoader.loadSpritesheet('student', '/assets/characters/student_spritesheet.png?v=2', { frameWidth: 32, frameHeight: 48 });
     this.assetLoader.loadSpritesheet('doctor', '/assets/characters/doctor.png', { frameWidth: 32, frameHeight: 48 });
     
     // Aggiunto debug per verificare i percorsi

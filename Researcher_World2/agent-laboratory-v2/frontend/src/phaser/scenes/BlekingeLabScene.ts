@@ -55,7 +55,7 @@ export class BlekingeLabScene extends BaseLabScene {
 
     // Spritesheets specifici Blekinge
     this.load.spritesheet('professor_senior', 'assets/characters/professor_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
-    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('student', 'assets/characters/student_spritesheet.png?v=2', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('sw_engineer', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
 

@@ -55,7 +55,7 @@ export class OPBGLabScene extends BaseLabScene {
 
     // Spritesheets specifici OPBG
     this.load.spritesheet('doctor', 'assets/characters/doctor_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
-    this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
+    this.load.spritesheet('student_postdoc', 'assets/characters/student_spritesheet.png?v=2', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
     this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', { frameWidth: 32, frameHeight: 48 });
 
