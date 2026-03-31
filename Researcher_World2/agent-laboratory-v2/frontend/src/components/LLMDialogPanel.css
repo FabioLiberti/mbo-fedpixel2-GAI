@@ -3,7 +3,7 @@
   border-radius: 6px;
   color: #eee;
   font-family: monospace;
-  width: 420px;
+  width: 480px;
   max-height: calc(100vh - 60px);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   position: absolute;
@@ -61,8 +61,7 @@
   font-weight: bold;
 }
 
-.llm-dialog-clear,
-.llm-dialog-close {
+.llm-dialog-clear {
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #aaa;
@@ -73,11 +72,27 @@
   line-height: 1;
 }
 
-.llm-dialog-clear:hover,
-.llm-dialog-close:hover {
+.llm-dialog-clear:hover {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.1);
+}
+
+.llm-dialog-close {
+  background: rgba(180, 30, 30, 0.7);
+  border: 1px solid #c0392b;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 3px;
+  line-height: 1;
+  font-weight: bold;
+}
+
+.llm-dialog-close:hover {
+  background: #c0392b;
+  border-color: #e74c3c;
 }
 
 /* ---- Context bar ---- */
@@ -248,6 +263,39 @@
 .llm-generate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Model info */
+.llm-model-info {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.llm-model-info-title {
+  font-size: 10px;
+  font-weight: bold;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.llm-model-info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  padding: 1px 0;
+}
+
+.llm-model-info-row > span:first-child {
+  color: #888;
+}
+
+.llm-model-info-row > span:last-child {
+  color: #ddd;
+  font-weight: bold;
 }
 
 /* Filter toggle */

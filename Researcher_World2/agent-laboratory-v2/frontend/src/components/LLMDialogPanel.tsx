@@ -454,6 +454,30 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                   )}
                 </button>
 
+                {/* Model info */}
+                <div className="llm-model-info">
+                  <div className="llm-model-info-title">Modello LLM</div>
+                  <div className="llm-model-info-row">
+                    <span>Modello</span><span>qwen3.5:4b</span>
+                  </div>
+                  <div className="llm-model-info-row">
+                    <span>Provider</span><span>Ollama (locale)</span>
+                  </div>
+                  <div className="llm-model-info-row">
+                    <span>Endpoint</span><span>localhost:11434</span>
+                  </div>
+                  <div className="llm-model-info-row">
+                    <span>Temperature</span><span>0.7</span>
+                  </div>
+                  <div className="llm-model-info-row">
+                    <span>Max Tokens</span><span>1024</span>
+                  </div>
+                  <div className="llm-model-info-row">
+                    <span>Stato</span>
+                    <span style={{ color: statusColor }}>{statusLabel}</span>
+                  </div>
+                </div>
+
                 {/* Filter */}
                 <div className="llm-control-row">
                   <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
