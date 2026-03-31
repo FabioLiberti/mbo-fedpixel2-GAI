@@ -20,6 +20,7 @@ export class LLMControlPanel {
   private isVisible: boolean = false;
   private updateTimer: Phaser.Time.TimerEvent | null = null;
   private backendCheckTimer: Phaser.Time.TimerEvent | null = null;
+  private firstBackendCheck: boolean = true;
   
   constructor(
     scene: Phaser.Scene,
@@ -184,19 +185,22 @@ export class LLMControlPanel {
   private async checkBackendStatus(): Promise<void> {
     try {
       const isConnected = await this.messagingService.checkBackendStatus();
-      
-      if (isConnected !== this.state.getIsBackendConnected()) {
+
+      // Always update on first check (so "Checking..." becomes "Connected"/"Disconnected")
+      if (this.firstBackendCheck || isConnected !== this.state.getIsBackendConnected()) {
+        this.firstBackendCheck = false;
         this.state.setIsBackendConnected(isConnected);
-        
+
         // Aggiorna l'indicatore di stato
         this.renderer.updateBackendStatusIndicator(isConnected);
-        
+
         // Aggiorna il testo del pulsante di generazione
         this.renderer.updateGenerateButtonText(isConnected);
       }
     } catch (error) {
       console.error('Error checking backend status:', error);
       // In caso di errore, imposta lo stato come disconnesso
+      this.firstBackendCheck = false;
       this.state.setIsBackendConnected(false);
       this.renderer.updateBackendStatusIndicator(false);
       this.renderer.updateGenerateButtonText(false);

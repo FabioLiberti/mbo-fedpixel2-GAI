@@ -34,7 +34,11 @@ export class LLMPanelRenderer {
   private scrollThumb!: Phaser.GameObjects.Graphics;
   private isScrolling: boolean = false;
   private scrollStartY: number = 0;
-  
+
+  // Whole-panel scroll state
+  private panelScrollY: number = 0;
+  private panelContentHeight: number = 600; // estimated total content height
+
   // Dimensioni
   private width: number = 420;
   private height: number = 560;
@@ -58,13 +62,45 @@ export class LLMPanelRenderer {
 
     // Inizializza grafica di base
     this.initializeGraphics();
-    
+
     // Gestisci l'evento di chiusura
     if (onClose) {
       this.closeButton.on('pointerdown', onClose);
     } else {
       this.closeButton.on('pointerdown', () => this.hide());
     }
+
+    // Whole-panel scroll: when content exceeds camera height, scroll with mouse wheel
+    this.setupPanelScroll();
+  }
+
+  /**
+   * Setup mouse wheel scrolling for the entire panel when it overflows the camera
+   */
+  private setupPanelScroll(): void {
+    this.scene.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: any, _deltaX: number, deltaY: number) => {
+      // Check if pointer is over the panel area (screen coordinates)
+      const px = _pointer.x;
+      const py = _pointer.y;
+      const cx = this.container.x;
+      const cy = this.container.y + this.panelScrollY;
+
+      // Hit test: pointer must be within the panel rectangle
+      if (px < cx || px > cx + this.width || py < cy || py > cy + this.height) {
+        return;
+      }
+
+      const camH = this.scene.cameras.main.height;
+      const totalH = this.panelContentHeight;
+      const visibleH = camH - 40; // margins
+
+      // Only scroll if content overflows
+      if (totalH <= visibleH) return;
+
+      const maxScroll = totalH - visibleH;
+      this.panelScrollY = Phaser.Math.Clamp(this.panelScrollY + deltaY * 0.5, 0, maxScroll);
+      this.container.y = 60 - this.panelScrollY; // 60 = default panel Y from repositionPanel
+    });
   }
   
   /**
@@ -817,6 +853,9 @@ export class LLMPanelRenderer {
       
       // Aggiorna la visualizzazione del log
       this.updateLogDisplay(messageLog, getColorForType);
+
+      // Update total panel content height for whole-panel scroll
+      this.panelContentHeight = sectionY + 40 + this.logAreaHeight + 20;
     } catch (error) {
       console.error('Error creating log section:', error);
     }
@@ -1396,9 +1435,17 @@ export class LLMPanelRenderer {
    * Gestisce il ridimensionamento della finestra
    */
   public handleResize(): void {
+    // Recalculate adaptive height
+    const camH = this.scene.cameras.main.height;
+    this.height = Math.max(560, camH - 80);
+    this.logAreaHeight = Math.max(110, this.height - 460);
+
+    // Reset panel scroll
+    this.panelScrollY = 0;
+
     // Ridisegna lo sfondo
     this.drawBackground();
-    
+
     // Aggiorna posizione per evitare sovrapposizioni
     this.repositionPanel(this.container.x, this.container.y);
   }
