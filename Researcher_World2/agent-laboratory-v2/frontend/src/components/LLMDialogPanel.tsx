@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './LLMDialogPanel.css';
 import { addPhaserDialogListener, PhaserDialogDetail } from '../utils/customEvents';
+import { getGameInstance } from '../utils/gameInstance';
 
 interface DialogEntry {
   timestamp: string;
@@ -182,6 +183,14 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
 
     appendEntries(newEntries);
+
+    // Emit to Phaser DialogAnalytics for aggregate stats
+    const gameInstance = getGameInstance();
+    if (gameInstance) {
+      for (const convo of convos.filter((c: any) => c.round === latest.round)) {
+        gameInstance.events.emit('analytics-fl-conversation', convo);
+      }
+    }
   }, [backendSimData?.fl?.conversations, appendEntries]);
 
   // Auto-scroll

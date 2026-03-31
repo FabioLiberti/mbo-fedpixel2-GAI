@@ -588,6 +588,34 @@ export class LabControlsMenu {
       html += '</table>';
     }
 
+    // FL & Cross-Lab stats
+    const cl = report.crossLabStats;
+    if (cl.totalCrossLab > 0 || cl.totalIntraLab > 0) {
+      html += `<h4 style="color:#e67e22;margin:12px 0 4px">FL & Cross-Lab</h4>`;
+      html += `<div>Intra-lab FL: <b>${cl.totalIntraLab}</b> | Cross-lab: <b style="color:#e67e22">${cl.totalCrossLab}</b></div>`;
+
+      if (Object.keys(cl.byLabPair).length > 0) {
+        html += '<table style="width:100%;border-collapse:collapse;margin-top:4px">';
+        html += '<tr style="color:#888"><td>Lab pair</td><td style="text-align:right">N</td></tr>';
+        for (const [pair, count] of Object.entries(cl.byLabPair).sort((a, b) => (b[1] as number) - (a[1] as number))) {
+          const label = pair.includes('↔') ? pair.split('↔').join(' ↔ ') : pair;
+          const isCross = pair.includes('↔');
+          html += `<tr><td style="padding:2px 4px${isCross ? ';color:#e67e22' : ''}">${label}${isCross ? ' <small>cross</small>' : ''}</td>` +
+            `<td style="text-align:right"><b>${count}</b></td></tr>`;
+        }
+        html += '</table>';
+      }
+
+      if (Object.keys(cl.byFlRound).length > 0) {
+        html += '<table style="width:100%;border-collapse:collapse;margin-top:4px">';
+        html += '<tr style="color:#888"><td>FL Round</td><td style="text-align:right">Dialoghi</td></tr>';
+        for (const [round, count] of Object.entries(cl.byFlRound).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+          html += `<tr><td style="padding:2px 4px">Round ${round}</td><td style="text-align:right"><b>${count}</b></td></tr>`;
+        }
+        html += '</table>';
+      }
+    }
+
     // Recent dialogs
     html += `<h4 style="color:#ffb74d;margin:12px 0 4px">Ultimi Dialoghi</h4>`;
     for (const d of report.recentDialogs.slice(-10)) {

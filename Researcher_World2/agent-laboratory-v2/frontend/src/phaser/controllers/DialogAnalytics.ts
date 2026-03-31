@@ -34,6 +34,10 @@ export interface DialogRecord {
   sameRoom: boolean;
   // Movement triggered
   destinationRoom: string | null;
+  // FL / cross-lab metadata
+  crossLab: boolean;
+  labId: string | null;
+  flRound: number | null;
 }
 
 export type DialogCategory =
@@ -47,7 +51,16 @@ export type DialogCategory =
   | 'thinking'
   | 'state_phrase'
   | 'llm'
+  | 'fl_conversation'
+  | 'cross_lab_conversation'
   | 'unknown';
+
+export interface CrossLabStats {
+  totalCrossLab: number;
+  totalIntraLab: number;
+  byLabPair: Record<string, number>;
+  byFlRound: Record<number, number>;
+}
 
 export interface AnalyticsReport {
   totalDialogs: number;
@@ -58,6 +71,7 @@ export interface AnalyticsReport {
   byRoom: Record<string, number>;
   proximityStats: { avgDistance: number; minDistance: number; maxDistance: number; medianDistance: number };
   movementTriggers: Record<string, number>;
+  crossLabStats: CrossLabStats;
   recentDialogs: DialogRecord[];
 }
 
@@ -85,6 +99,9 @@ export class DialogAnalytics {
     // Track dialogs created via DialogController → DialogRenderer pipeline
     ge.on('analytics-dialog', this.onDialog, this);
 
+    // Track FL conversations from backend (intra-lab and cross-lab)
+    ge.on('analytics-fl-conversation', this.onFLConversation, this);
+
     // Track room movements
     ge.on('coffee-break', this.onCoffeeBreak, this);
     ge.on('go-to-room', this.onGoToRoom, this);
@@ -93,6 +110,7 @@ export class DialogAnalytics {
   destroy(): void {
     const ge = this.scene.game.events;
     ge.off('analytics-dialog', this.onDialog, this);
+    ge.off('analytics-fl-conversation', this.onFLConversation, this);
     ge.off('coffee-break', this.onCoffeeBreak, this);
     ge.off('go-to-room', this.onGoToRoom, this);
     this.saveState();
@@ -143,6 +161,9 @@ export class DialogAnalytics {
       distance: distance !== null ? Math.round(distance) : null,
       sameRoom: speakerRoom !== null && speakerRoom === targetRoom,
       destinationRoom: data.destinationRoom ?? null,
+      crossLab: false,
+      labId: null,
+      flRound: null,
     };
 
     this.records.push(record);
@@ -154,6 +175,17 @@ export class DialogAnalytics {
 
     // Emit for any UI listener
     this.scene.game.events.emit('analytics-updated', record);
+  }
+
+  private onFLConversation(convo: {
+    agents: string[];
+    roles: string[];
+    lab_id: string;
+    cross_lab?: boolean;
+    round: number;
+    dialog: [string, string][];
+  }): void {
+    this.addFLConversation(convo);
   }
 
   private lastMovementAgents: string[] = [];
@@ -194,7 +226,59 @@ export class DialogAnalytics {
     return null;
   }
 
-  // ── Public API ──────────────────────���──────────────────────────────
+  // ── Public API ──────────────────────────────────────────────────────
+
+  /** Inject FL conversation records from backend (intra-lab or cross-lab). */
+  addFLConversation(convo: {
+    agents: string[];
+    roles: string[];
+    lab_id: string;
+    cross_lab?: boolean;
+    round: number;
+    dialog: [string, string][];
+  }): void {
+    const isCrossLab = convo.cross_lab === true || convo.lab_id.includes('↔');
+    const category: DialogCategory = isCrossLab ? 'cross_lab_conversation' : 'fl_conversation';
+
+    for (let i = 0; i < convo.dialog.length; i++) {
+      const [speakerName, text] = convo.dialog[i];
+      const speakerIdx = convo.agents.indexOf(speakerName);
+      const targetIdx = speakerIdx === 0 ? 1 : 0;
+
+      const record: DialogRecord = {
+        id: this.nextId++,
+        timestamp: this.scene.time.now,
+        wallClock: new Date().toISOString(),
+        speakerId: speakerName,
+        speakerName,
+        speakerRole: convo.roles[speakerIdx] ?? 'unknown',
+        speakerPos: { x: 0, y: 0 },
+        speakerRoom: isCrossLab ? convo.lab_id : null,
+        targetId: convo.agents[targetIdx],
+        targetName: convo.agents[targetIdx],
+        targetRole: convo.roles[targetIdx] ?? 'unknown',
+        targetPos: null,
+        targetRoom: null,
+        text,
+        dialogCategory: category,
+        isResponse: i > 0,
+        isLLM: true,
+        distance: null,
+        sameRoom: !isCrossLab,
+        destinationRoom: null,
+        crossLab: isCrossLab,
+        labId: convo.lab_id,
+        flRound: convo.round,
+      };
+
+      this.records.push(record);
+    }
+
+    if (this.records.length > this.maxRecords) {
+      this.records = this.records.slice(-this.maxRecords);
+    }
+    this.saveState();
+  }
 
   /** Get all raw records. */
   getRecords(): DialogRecord[] {
@@ -279,6 +363,26 @@ export class DialogAnalytics {
       }
     }
 
+    // Cross-lab / FL conversation stats
+    const crossLabRecs = recs.filter(r => r.crossLab);
+    const flRecs = recs.filter(r => r.dialogCategory === 'fl_conversation' || r.dialogCategory === 'cross_lab_conversation');
+    const byLabPair: Record<string, number> = {};
+    const byFlRound: Record<number, number> = {};
+    for (const r of flRecs) {
+      if (r.labId) {
+        byLabPair[r.labId] = (byLabPair[r.labId] || 0) + 1;
+      }
+      if (r.flRound !== null) {
+        byFlRound[r.flRound] = (byFlRound[r.flRound] || 0) + 1;
+      }
+    }
+    const crossLabStats: CrossLabStats = {
+      totalCrossLab: crossLabRecs.length,
+      totalIntraLab: flRecs.length - crossLabRecs.length,
+      byLabPair,
+      byFlRound,
+    };
+
     return {
       totalDialogs: total,
       timespan,
@@ -288,6 +392,7 @@ export class DialogAnalytics {
       byRoom,
       proximityStats,
       movementTriggers,
+      crossLabStats,
       recentDialogs: recs.slice(-20),
     };
   }
@@ -324,6 +429,13 @@ export class DialogAnalytics {
     console.table(r.movementTriggers);
     console.groupEnd();
 
+    console.group('FL & Cross-Lab');
+    console.log(`Intra-lab FL: ${r.crossLabStats.totalIntraLab}`);
+    console.log(`Cross-lab: ${r.crossLabStats.totalCrossLab}`);
+    console.table(r.crossLabStats.byLabPair);
+    console.table(r.crossLabStats.byFlRound);
+    console.groupEnd();
+
     console.group('Last 10 Dialogs');
     for (const d of r.recentDialogs.slice(-10)) {
       const dist = d.distance !== null ? `${d.distance}px` : '-';
@@ -356,6 +468,7 @@ export class DialogAnalytics {
       'targetId', 'targetName', 'targetRole', 'targetX', 'targetY', 'targetRoom',
       'text', 'dialogCategory', 'isResponse', 'isLLM',
       'distance', 'sameRoom', 'destinationRoom',
+      'crossLab', 'labId', 'flRound',
     ];
 
     const escape = (v: unknown): string => {
@@ -372,6 +485,7 @@ export class DialogAnalytics {
       r.targetPos?.x ?? '', r.targetPos?.y ?? '', r.targetRoom,
       r.text, r.dialogCategory, r.isResponse, r.isLLM,
       r.distance, r.sameRoom, r.destinationRoom,
+      r.crossLab, r.labId, r.flRound,
     ].map(escape).join(','));
 
     return [headers.join(','), ...rows].join('\n');
