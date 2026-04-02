@@ -536,16 +536,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                     backendStatus === 'connected' ? 'Genera Messaggio LLM' : 'Genera Messaggio Simulato'
                   )}
                 </button>
-                <div className="llm-model-info">
-                  <div className="llm-model-info-title">Modello LLM</div>
-                  <div className="llm-model-info-row"><span>Modello</span><span>qwen3.5:4b</span></div>
-                  <div className="llm-model-info-row"><span>Provider</span><span>Ollama (locale)</span></div>
-                  <div className="llm-model-info-row"><span>Endpoint</span><span>localhost:11434</span></div>
-                  <div className="llm-model-info-row">
-                    <span>Stato</span>
-                    <span style={{ color: statusColor }}>{statusLabel}</span>
-                  </div>
-                </div>
               </div>
             )}
           </div>
