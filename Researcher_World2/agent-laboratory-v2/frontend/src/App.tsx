@@ -548,7 +548,9 @@ function App() {
                   <div className="stats-container">
                     <div className="stat-item">
                       <span className="stat-label">Stato:</span>
-                      <span className={`stat-value fl-state-${flState}`}>{flState.toUpperCase()}</span>
+                      <span className={`stat-value fl-state-${flState}`}>{
+                        {idle:'In attesa',training:'Training',sending:'Invio pesi',aggregating:'Aggregazione',receiving:'Ricezione'}[flState] || flState.toUpperCase()
+                      }</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">Agenti totali:</span>

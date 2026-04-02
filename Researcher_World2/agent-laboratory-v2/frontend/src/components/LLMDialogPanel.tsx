@@ -423,19 +423,27 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
             </label>
             <button
               className="llm-quality-btn"
-              onClick={async () => {
-                setQualityOpen(q => !q);
-                if (!qualityOpen) {
+              onClick={async (e) => {
+                e.stopPropagation();
+                const opening = !qualityOpen;
+                setQualityOpen(opening);
+                if (opening) {
                   try {
                     const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
                       signal: AbortSignal.timeout(5000),
                     });
-                    if (r.ok) setQualityScores(await r.json());
-                  } catch { /* ignore */ }
+                    if (r.ok) {
+                      setQualityScores(await r.json());
+                    } else {
+                      setQualityScores({ total_evaluated: 0, average_scores: {}, error: 'Backend error' });
+                    }
+                  } catch {
+                    setQualityScores({ total_evaluated: 0, average_scores: {}, error: 'Connessione fallita' });
+                  }
                 }
               }}
             >
-              Qualita
+              {qualityOpen ? '[-]' : '[+]'} Qualita
             </button>
             <span style={{ fontSize: 10, color: '#888', marginLeft: 'auto' }}>
               LLM:{llmCount} Tot:{filteredLog.length}
