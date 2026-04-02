@@ -110,41 +110,34 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     });
   }, [isDuplicate]);
 
-  // Backend status check — tries /ai/status first, falls back to /simulation/state
+  // Backend status check — uses /simulation/state only (no Ollama dependency)
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     let consecutiveFails = 0;
     const check = async () => {
       try {
-        const r = await fetch(`${getApiBaseUrl()}/ai/status`, {
-          signal: AbortSignal.timeout(8000),
+        const r = await fetch(`${getApiBaseUrl()}/simulation/state`, {
+          signal: AbortSignal.timeout(5000),
         });
         if (!cancelled && r.ok) {
           setBackendStatus('connected');
           consecutiveFails = 0;
           return;
         }
-      } catch { /* try fallback */ }
-      // Fallback: if /ai/status fails (Ollama busy), check if backend itself is alive
-      try {
-        const r2 = await fetch(`${getApiBaseUrl()}/simulation/state`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!cancelled && r2.ok) {
-          setBackendStatus('connected');
-          consecutiveFails = 0;
-          return;
-        }
-      } catch { /* both failed */ }
+      } catch { /* failed */ }
       consecutiveFails++;
-      // Only mark disconnected after 2 consecutive failures
-      if (!cancelled && consecutiveFails >= 2) setBackendStatus('disconnected');
+      if (!cancelled && consecutiveFails >= 3) setBackendStatus('disconnected');
     };
     check();
-    const interval = setInterval(check, 8000);
+    const interval = setInterval(check, 10000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [visible]);
+
+  // Mark connected whenever we receive simulation data
+  useEffect(() => {
+    if (backendSimData) setBackendStatus('connected');
+  }, [backendSimData]);
 
   // 1) Backend broadcast dialogs
   useEffect(() => {
