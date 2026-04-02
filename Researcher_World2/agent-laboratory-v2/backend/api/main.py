@@ -271,6 +271,26 @@ async def get_fl_convergence():
     return controller.fl_system.check_convergence()
 
 
+# --- Dialog Quality Routes ---
+
+@app.get("/dialog-quality/summary")
+async def get_dialog_quality_summary():
+    """Return aggregate dialog quality scores across all evaluated dialogs."""
+    return controller.dialog_monitor.get_summary()
+
+
+@app.get("/dialog-quality/recent")
+async def get_dialog_quality_recent(limit: int = 10):
+    """Return the last N dialog quality evaluations with full details."""
+    return controller.dialog_monitor.get_recent(limit=min(limit, 50))
+
+
+@app.get("/dialog-quality/round/{fl_round}")
+async def get_dialog_quality_by_round(fl_round: int):
+    """Return all dialog quality evaluations for a specific FL round."""
+    return controller.dialog_monitor.get_round_scores(fl_round)
+
+
 # --- LLM Toggle Routes ---
 
 @app.post("/llm/toggle")

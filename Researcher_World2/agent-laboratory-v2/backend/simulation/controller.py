@@ -17,6 +17,7 @@ from models.environment import LabEnvironment
 from fl.federated import FederatedLearningSystem
 from cognitive.prompts.gpt_structure import get_embedding
 from cognitive.converse import generate_fl_conversation
+from cognitive.dialog_quality import DialogQualityMonitor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ class SimulationController:
         self.fl_steps_per_round = 50
         self.fl_current_phase = None
         self.fl_conversations: List[Dict[str, Any]] = []  # post-round FL dialogs
+
+        # Dialog quality monitor
+        self.dialog_monitor = DialogQualityMonitor()
 
         # Thread control
         self.simulation_thread = None
@@ -666,11 +670,14 @@ class SimulationController:
             pair[0].scratch.chatting_with = pair[1].name
             pair[1].scratch.chatting_with = pair[0].name
 
+            role_a = getattr(pair[0], 'role', 'researcher')
+            role_b = getattr(pair[1], 'role', 'researcher')
+
             new_convos.append({
                 "lab_id": ctx["lab_id"],
                 "round": fl_round,
                 "agents": [pair[0].name, pair[1].name],
-                "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
+                "roles": [role_a, role_b],
                 "dialog": convo,
             })
 
@@ -682,6 +689,31 @@ class SimulationController:
                     f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
                     poignancy=7,
                 )
+
+            # Evaluate dialog quality
+            try:
+                # Collect recent FL memories for memory_integration scoring
+                agent_memories = {}
+                for agent in pair:
+                    fl_thoughts = [
+                        n.embedding_key for n in agent.a_mem.seq_thought[:5]
+                        if any(kw in (n.embedding_key or "").lower()
+                               for kw in ["fl", "round", "accuracy", "federato"])
+                    ]
+                    if fl_thoughts:
+                        agent_memories[agent.name] = " ".join(fl_thoughts[:2])
+
+                self.dialog_monitor.evaluate(
+                    dialog=convo,
+                    fl_context=ctx,
+                    roles={pair[0].name: role_a, pair[1].name: role_b},
+                    memories=agent_memories,
+                    expected_speakers=[pair[0].name, pair[1].name],
+                    source="llm" if use_llm else "stub",
+                    lab_id=ctx["lab_id"],
+                )
+            except Exception as e:
+                logger.warning(f"Dialog quality eval failed for {ctx['lab_id']}: {e}")
 
         # Store for broadcast (keep last 3 rounds)
         self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
@@ -808,6 +840,21 @@ class SimulationController:
                     f"({ctx['lab_a']}↔{ctx['lab_b']}): {full_text[:200]}",
                     poignancy=8,
                 )
+
+            # Evaluate cross-lab dialog quality
+            role_a = getattr(pair[0], 'role', 'researcher')
+            role_b = getattr(pair[1], 'role', 'researcher')
+            try:
+                self.dialog_monitor.evaluate(
+                    dialog=convo,
+                    fl_context=ctx,
+                    roles={pair[0].name: role_a, pair[1].name: role_b},
+                    expected_speakers=[pair[0].name, pair[1].name],
+                    source="llm" if use_llm else "stub",
+                    lab_id=ctx["lab_id"],
+                )
+            except Exception as e:
+                logger.warning(f"Dialog quality eval failed for cross-lab {ctx['lab_id']}: {e}")
 
         self.fl_conversations = (self.fl_conversations + new_convos)[-12:]
         logger.info(f"Generated {len(new_convos)} cross-lab FL conversations for round {fl_round}")
