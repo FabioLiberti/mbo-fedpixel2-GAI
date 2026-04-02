@@ -400,21 +400,107 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
       {!collapsed && (
         <>
-          {/* Context bar */}
-          <div className="llm-dialog-context">
-            {isWorldMap ? 'Tutte le scene' : `${LAB_DISPLAY[labFilter || ''] || selectedLab}`}
-            {' | '}
-            <span style={{ color: '#aaa' }}>LLM: {llmCount} | Sim: {simCount} | Tot: {filteredLog.length}</span>
+          {/* Toolbar: filtri tipo + qualita + solo LLM — sempre visibile */}
+          <div className="llm-toolbar">
+            <div className="llm-type-buttons">
+              {MSG_TYPES.map(t => (
+                <button
+                  key={t.id}
+                  className={`llm-type-btn ${msgType === t.id ? 'active' : ''}`}
+                  onClick={() => setMsgType(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
+              <input
+                type="checkbox"
+                checked={filterLlmOnly}
+                onChange={(e) => setFilterLlmOnly(e.target.checked)}
+              />
+              Solo LLM
+            </label>
+            <button
+              className="llm-quality-btn"
+              onClick={async () => {
+                setQualityOpen(q => !q);
+                if (!qualityOpen) {
+                  try {
+                    const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
+                      signal: AbortSignal.timeout(5000),
+                    });
+                    if (r.ok) setQualityScores(await r.json());
+                  } catch { /* ignore */ }
+                }
+              }}
+            >
+              Qualita
+            </button>
+            <span style={{ fontSize: 10, color: '#888', marginLeft: 'auto' }}>
+              LLM:{llmCount} Tot:{filteredLog.length}
+            </span>
           </div>
 
-          {/* Controls section (collapsible) */}
+          {/* Quality scores expandable */}
+          {qualityOpen && qualityScores && (
+            <div className="llm-quality-body">
+              <div className="llm-quality-total">
+                Valutati: <strong>{qualityScores.total_evaluated || 0}</strong>
+              </div>
+              {qualityScores.average_scores && Object.keys(qualityScores.average_scores).length > 0 ? (
+                <>
+                  {[
+                    { key: 'overall_quality', label: 'Overall', icon: '*' },
+                    { key: 'data_grounding', label: 'Dati FL', icon: '#' },
+                    { key: 'role_differentiation', label: 'Ruoli', icon: 'R' },
+                    { key: 'memory_integration', label: 'Memoria', icon: 'M' },
+                    { key: 'repetition_score', label: 'Novita', icon: 'N' },
+                    { key: 'format_compliance', label: 'Formato', icon: 'F' },
+                  ].map(m => {
+                    const val = qualityScores.average_scores[m.key] || 0;
+                    const pct = Math.round(val * 100);
+                    const color = val >= 0.7 ? '#4caf50' : val >= 0.4 ? '#ff9800' : '#f44336';
+                    return (
+                      <div key={m.key} className="llm-quality-row">
+                        <span className="llm-quality-label">{m.icon} {m.label}</span>
+                        <div className="llm-quality-bar-bg">
+                          <div
+                            className="llm-quality-bar-fill"
+                            style={{ width: `${pct}%`, backgroundColor: color }}
+                          />
+                        </div>
+                        <span className="llm-quality-value" style={{ color }}>{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                <div className="llm-quality-empty">Nessun dialogo valutato</div>
+              )}
+              <button
+                className="llm-quality-refresh"
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
+                      signal: AbortSignal.timeout(5000),
+                    });
+                    if (r.ok) setQualityScores(await r.json());
+                  } catch { /* ignore */ }
+                }}
+              >
+                Aggiorna
+              </button>
+            </div>
+          )}
+
+          {/* Controls avanzati (collapsible) */}
           <div className="llm-controls-section">
             <div className="llm-controls-header" onClick={() => setControlsOpen(c => !c)}>
-              <span>{controlsOpen ? '\u25BC' : '\u25B6'} Controlli</span>
+              <span>{controlsOpen ? '\u25BC' : '\u25B6'} Controlli avanzati</span>
             </div>
             {controlsOpen && (
               <div className="llm-controls-body">
-                {/* Toggle LLM */}
                 <div className="llm-control-row">
                   <span>Messaggi LLM</span>
                   <label className="llm-switch">
@@ -425,152 +511,26 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                     {llmEnabled ? 'ON' : 'OFF'}
                   </span>
                 </div>
-
-                {/* Frequency */}
                 <div className="llm-control-row">
                   <span>Frequenza</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={msgFrequency}
-                    onChange={e => setMsgFrequency(Number(e.target.value))}
-                    className="llm-slider"
-                  />
+                  <input type="range" min={0} max={100} value={msgFrequency}
+                    onChange={e => setMsgFrequency(Number(e.target.value))} className="llm-slider" />
                   <span className="llm-slider-value">{msgFrequency}%</span>
                 </div>
-
-                {/* Message type */}
-                <div className="llm-control-row">
-                  <span>Tipo</span>
-                  <div className="llm-type-buttons">
-                    {MSG_TYPES.map(t => (
-                      <button
-                        key={t.id}
-                        className={`llm-type-btn ${msgType === t.id ? 'active' : ''}`}
-                        onClick={() => setMsgType(t.id)}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Generate button */}
-                <button
-                  className="llm-generate-btn"
-                  onClick={handleGenerate}
-                  disabled={generating}
-                >
+                <button className="llm-generate-btn" onClick={handleGenerate} disabled={generating}>
                   {generating ? 'Generazione...' : (
                     backendStatus === 'connected' ? 'Genera Messaggio LLM' : 'Genera Messaggio Simulato'
                   )}
                 </button>
-
-                {/* Model info */}
                 <div className="llm-model-info">
                   <div className="llm-model-info-title">Modello LLM</div>
-                  <div className="llm-model-info-row">
-                    <span>Modello</span><span>qwen3.5:4b</span>
-                  </div>
-                  <div className="llm-model-info-row">
-                    <span>Provider</span><span>Ollama (locale)</span>
-                  </div>
-                  <div className="llm-model-info-row">
-                    <span>Endpoint</span><span>localhost:11434</span>
-                  </div>
-                  <div className="llm-model-info-row">
-                    <span>Temperature</span><span>0.7</span>
-                  </div>
-                  <div className="llm-model-info-row">
-                    <span>Max Tokens</span><span>1024</span>
-                  </div>
+                  <div className="llm-model-info-row"><span>Modello</span><span>qwen3.5:4b</span></div>
+                  <div className="llm-model-info-row"><span>Provider</span><span>Ollama (locale)</span></div>
+                  <div className="llm-model-info-row"><span>Endpoint</span><span>localhost:11434</span></div>
                   <div className="llm-model-info-row">
                     <span>Stato</span>
                     <span style={{ color: statusColor }}>{statusLabel}</span>
                   </div>
-                </div>
-
-                {/* Filter */}
-                <div className="llm-control-row">
-                  <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
-                    <input
-                      type="checkbox"
-                      checked={filterLlmOnly}
-                      onChange={(e) => setFilterLlmOnly(e.target.checked)}
-                    />
-                    Mostra solo LLM
-                  </label>
-                </div>
-
-                {/* Dialog Quality */}
-                <div className="llm-quality-section">
-                  <button
-                    className="llm-quality-btn"
-                    onClick={async () => {
-                      setQualityOpen(q => !q);
-                      if (!qualityOpen) {
-                        try {
-                          const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
-                            signal: AbortSignal.timeout(5000),
-                          });
-                          if (r.ok) setQualityScores(await r.json());
-                        } catch { /* ignore */ }
-                      }
-                    }}
-                  >
-                    {qualityOpen ? '\u25BC' : '\u25B6'} Qualita Dialoghi
-                  </button>
-                  {qualityOpen && qualityScores && (
-                    <div className="llm-quality-body">
-                      <div className="llm-quality-total">
-                        Dialoghi valutati: <strong>{qualityScores.total_evaluated || 0}</strong>
-                      </div>
-                      {qualityScores.average_scores && Object.keys(qualityScores.average_scores).length > 0 ? (
-                        <>
-                          {[
-                            { key: 'overall_quality', label: 'Overall', icon: '*' },
-                            { key: 'data_grounding', label: 'Dati FL', icon: '#' },
-                            { key: 'role_differentiation', label: 'Ruoli', icon: 'R' },
-                            { key: 'memory_integration', label: 'Memoria', icon: 'M' },
-                            { key: 'repetition_score', label: 'Novita', icon: 'N' },
-                            { key: 'format_compliance', label: 'Formato', icon: 'F' },
-                          ].map(m => {
-                            const val = qualityScores.average_scores[m.key] || 0;
-                            const pct = Math.round(val * 100);
-                            const color = val >= 0.7 ? '#4caf50' : val >= 0.4 ? '#ff9800' : '#f44336';
-                            return (
-                              <div key={m.key} className="llm-quality-row">
-                                <span className="llm-quality-label">{m.icon} {m.label}</span>
-                                <div className="llm-quality-bar-bg">
-                                  <div
-                                    className="llm-quality-bar-fill"
-                                    style={{ width: `${pct}%`, backgroundColor: color }}
-                                  />
-                                </div>
-                                <span className="llm-quality-value" style={{ color }}>{pct}%</span>
-                              </div>
-                            );
-                          })}
-                        </>
-                      ) : (
-                        <div className="llm-quality-empty">Nessun dialogo valutato</div>
-                      )}
-                      <button
-                        className="llm-quality-refresh"
-                        onClick={async () => {
-                          try {
-                            const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
-                              signal: AbortSignal.timeout(5000),
-                            });
-                            if (r.ok) setQualityScores(await r.json());
-                          } catch { /* ignore */ }
-                        }}
-                      >
-                        Aggiorna
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
