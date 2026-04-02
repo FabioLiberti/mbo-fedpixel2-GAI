@@ -101,21 +101,26 @@ def agent_chat_v1(maze, init_persona, target_persona):
 def _retrieve_fl_insights_for_convo(persona, target_name):
     """Retrieve FL insights from long-term memory relevant to a conversation.
 
-    Returns a short string with up to 2 recent insights (thoughts) about FL
-    that can enrich conversation context.
+    Returns a short string with up to 3 recent insights (thoughts and events)
+    about FL that can enrich conversation context.
     """
     spec = persona.scratch.fl_specialization or "federated learning"
-    focal_points = [spec, target_name]
+    focal_points = [spec, target_name, "accuracy", "federato", "round"]
     try:
-        retrieved = new_retrieve(persona, focal_points, n_count=5)
+        retrieved = new_retrieve(persona, focal_points, n_count=10)
     except Exception:
         return ""
 
     insights = []
     for _fp, nodes in retrieved.items():
         for node in nodes:
-            if node.type == "thought" and node.embedding_key:
-                insights.append(node.embedding_key)
+            # Include both thought and event nodes with FL-related content
+            if node.type in ("thought", "event") and node.embedding_key:
+                key_lower = node.embedding_key.lower()
+                if any(kw in key_lower for kw in
+                       ["fl ", "round", "accuracy", "federato", "privacy",
+                        "modello", "aggreg", "convergenz", "gain"]):
+                    insights.append(node.embedding_key)
     # Deduplicate
     seen = set()
     unique = []
@@ -123,7 +128,7 @@ def _retrieve_fl_insights_for_convo(persona, target_name):
         if ins not in seen:
             seen.add(ins)
             unique.append(ins)
-    return "\n".join(unique[:2])
+    return "\n".join(unique[:3])
 
 
 # Minimum number of exchanges before "end" is honored.
@@ -131,7 +136,8 @@ def _retrieve_fl_insights_for_convo(persona, target_name):
 _MIN_CHAT_TURNS = 3
 
 
-def generate_one_utterance(maze, init_persona, target_persona, retrieved, curr_chat):
+def generate_one_utterance(maze, init_persona, target_persona, retrieved, curr_chat,
+                           fl_insights_init="", fl_insights_target=""):
     """Generate a single utterance in a conversation."""
     spec_init = init_persona.scratch.fl_specialization or "FL"
     spec_target = target_persona.scratch.fl_specialization or "FL"
@@ -146,6 +152,18 @@ def generate_one_utterance(maze, init_persona, target_persona, retrieved, curr_c
         f"avvia una conversazione con "
         f"{target_persona.scratch.name} sul progetto FL."
     )
+
+    # Inject FL knowledge into conversation context
+    if fl_insights_init:
+        curr_context += (
+            f"\n{init_persona.scratch.name} ricorda: "
+            f"{fl_insights_init.split(chr(10))[0][:150]}"
+        )
+    if fl_insights_target:
+        curr_context += (
+            f"\n{target_persona.scratch.name} ricorda: "
+            f"{fl_insights_target.split(chr(10))[0][:150]}"
+        )
 
     x = run_gpt_generate_iterative_chat_utt(
         maze, init_persona, target_persona,
@@ -200,7 +218,8 @@ def agent_chat_v2(maze, init_persona, target_persona):
             focal_points.append(insights_init.split("\n")[0][:80])
         retrieved = new_retrieve(init_persona, focal_points, 15)
         utt, end = generate_one_utterance(
-            maze, init_persona, target_persona, retrieved, curr_chat)
+            maze, init_persona, target_persona, retrieved, curr_chat,
+            fl_insights_init=insights_init, fl_insights_target=insights_target)
         curr_chat.append([init_persona.scratch.name, utt])
         if end:
             break
@@ -228,7 +247,8 @@ def agent_chat_v2(maze, init_persona, target_persona):
             focal_points.append(insights_target.split("\n")[0][:80])
         retrieved = new_retrieve(target_persona, focal_points, 15)
         utt, end = generate_one_utterance(
-            maze, target_persona, init_persona, retrieved, curr_chat)
+            maze, target_persona, init_persona, retrieved, curr_chat,
+            fl_insights_init=insights_target, fl_insights_target=insights_init)
         curr_chat.append([target_persona.scratch.name, utt])
         if end:
             break

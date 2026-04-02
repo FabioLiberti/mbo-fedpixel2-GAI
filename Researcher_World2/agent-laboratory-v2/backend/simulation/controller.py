@@ -315,6 +315,274 @@ class SimulationController:
 
         logger.info(f"Injected FL bias-awareness events for round {fl_round}")
 
+    # Role-specific poignancy for FL thought nodes
+    _ROLE_FL_POIGNANCY = {
+        "professor": 7,
+        "researcher": 8,
+        "student": 6,
+        "doctor": 7,
+        "privacy_specialist": 9,
+        "professor_senior": 7,
+        "sw_engineer": 6,
+        "engineer": 6,
+        "student_postdoc": 7,
+    }
+
+    # Role-specific FL thought templates (concise, for embedding_key)
+    _ROLE_FL_THOUGHT_TEMPLATES = {
+        "professor": (
+            "Round {round}: accuracy globale {acc:.0%} (gain {gain:+.1%} per {lab}). "
+            "La federazione tra laboratori sta {trend}."
+        ),
+        "researcher": (
+            "Round {round}: modello globale accuracy {acc:.0%}, delta locale {gain:+.1%}. "
+            "Budget privacy al {budget:.0%}. {trend_detail}"
+        ),
+        "student": (
+            "Round {round}: ho appreso che il modello federato raggiunge {acc:.0%}. "
+            "Il nostro lab {lab} contribuisce con un gain di {gain:+.1%}."
+        ),
+        "doctor": (
+            "Round {round}: il modello su dati clinici di {lab} ({demo}) ha accuracy {acc:.0%}. "
+            "Implicazioni per la diagnosi: {trend}."
+        ),
+        "privacy_specialist": (
+            "Round {round}: budget privacy (ε) al {budget:.0%}. "
+            "Accuracy {acc:.0%} con DP-SGD attivo. {dp_note}"
+        ),
+    }
+
+    def _deposit_fl_thought_nodes(self):
+        """Deposit FL round results as thought nodes in each agent's memory.
+
+        Unlike event nodes (24h lifetime), thought nodes persist 72-144h
+        and are retrieved by _retrieve_fl_insights_for_convo() to enrich dialogs.
+        """
+        if not self.model or not self.fl_system:
+            return
+
+        fl_state = self.fl_system.get_state()
+        fl_round = fl_state["round"]
+        metrics = fl_state["metrics"]
+        dp = fl_state.get("dp", {})
+
+        lvg_list = metrics.get("local_vs_global", [])
+        lvg = lvg_list[-1] if lvg_list else {}
+
+        budget = dp.get("budget_fraction", 1.0)
+        dp_note = "Attenzione: budget quasi esaurito!" if budget < 0.25 else "Consumo nella norma."
+
+        deposited = 0
+        for lab_id in self.model.get_lab_ids():
+            lab_lvg = lvg.get(lab_id, {})
+            acc = lab_lvg.get("global_acc", 0)
+            gain = lab_lvg.get("gain", 0)
+            demo = self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti")
+
+            if gain > 0.02:
+                trend = "migliorando la generalizzazione"
+                trend_detail = "Il modello federato migliora rispetto al locale."
+            elif gain < -0.02:
+                trend = "ancora convergendo"
+                trend_detail = "Il modello locale è ancora migliore — serve convergenza."
+            else:
+                trend = "stabilizzandosi"
+                trend_detail = "Locale e globale sono allineati."
+
+            for agent in self.model.get_lab_agents(lab_id):
+                role = getattr(agent, "role", "researcher")
+                poignancy = self._ROLE_FL_POIGNANCY.get(role, 7)
+
+                # Select template (fallback to researcher)
+                template = self._ROLE_FL_THOUGHT_TEMPLATES.get(
+                    role, self._ROLE_FL_THOUGHT_TEMPLATES["researcher"]
+                )
+
+                try:
+                    thought_text = template.format(
+                        round=fl_round, acc=acc, gain=gain,
+                        lab=lab_id, demo=demo, budget=budget,
+                        trend=trend, trend_detail=trend_detail,
+                        dp_note=dp_note,
+                    )
+                except KeyError:
+                    thought_text = (
+                        f"Round {fl_round}: accuracy {acc:.0%}, "
+                        f"gain {gain:+.1%} per {lab_id}."
+                    )
+
+                try:
+                    s = agent.name
+                    p = "ha appreso dal round FL"
+                    o = f"round {fl_round} {lab_id}"
+
+                    keywords = {"fl", "round", "accuracy", "federato",
+                                role, lab_id, f"round_{fl_round}"}
+
+                    embedding = get_embedding(thought_text)
+                    embedding_pair = (thought_text, embedding)
+
+                    agent.a_mem.add_thought(
+                        agent.scratch.curr_time,  # created
+                        None,                      # expiration (auto via compute_expiration)
+                        s, p, o,
+                        thought_text,
+                        keywords,
+                        poignancy,
+                        embedding_pair,
+                        [],                        # filling
+                    )
+
+                    # Accumulate importance for reflection trigger
+                    agent.scratch.importance_trigger_curr -= poignancy
+                    agent.scratch.importance_ele_n += 1
+                    deposited += 1
+
+                except Exception as e:
+                    logger.error(f"Failed to deposit FL thought for '{agent.name}': {e}")
+
+        logger.info(f"Deposited {deposited} FL thought nodes for round {fl_round}")
+
+    # Template-based FL reflections (no LLM call needed)
+    _FL_REFLECTION_TEMPLATES = {
+        "professor": [
+            "Riflettendo sul round {round}: l'accuracy {acc:.0%} suggerisce che la diversità dei dati tra i lab sta {trend}. Dovremmo considerare l'impatto sulla generalizzazione clinica.",
+            "Dopo il round {round}, noto che il gain di {gain:+.1%} per {lab} indica {gain_insight}. La strategia di federazione merita una revisione critica.",
+        ],
+        "researcher": [
+            "Analizzando i risultati del round {round}: il delta accuracy di {gain:+.1%} indica {gain_insight}. Potrebbe essere utile esplorare aggregazioni alternative.",
+            "Post round {round}: l'accuracy {acc:.0%} con budget privacy al {budget:.0%} conferma {dp_insight}. Devo approfondire il trade-off.",
+        ],
+        "student": [
+            "Dopo il round {round} ho capito meglio come il federated learning bilancia i dati di {lab} ({demo}) con quelli degli altri laboratori. Il gain {gain:+.1%} è {gain_word}.",
+        ],
+        "doctor": [
+            "Riflettendo sul round {round}: accuracy {acc:.0%} sui dati clinici di {lab} ({demo}). Per la pratica clinica, {clinical_insight}. La privacy dei pazienti è garantita.",
+        ],
+        "privacy_specialist": [
+            "Post round {round}: il budget ε è al {budget:.0%}. {dp_detail}. L'accuracy {acc:.0%} conferma che la protezione DP-SGD non compromette significativamente l'utilità.",
+        ],
+    }
+
+    def _trigger_fl_reflection(self):
+        """Trigger lightweight FL reflection for one agent per lab.
+
+        Generates template-based thought nodes (depth=2) without LLM calls,
+        keeping latency near zero. These reflections build on the FL thought
+        nodes from _deposit_fl_thought_nodes() and persist 72-144h.
+        """
+        if not self.model or not self.fl_system:
+            return
+
+        fl_state = self.fl_system.get_state()
+        fl_round = fl_state["round"]
+        metrics = fl_state["metrics"]
+        dp = fl_state.get("dp", {})
+
+        lvg_list = metrics.get("local_vs_global", [])
+        lvg = lvg_list[-1] if lvg_list else {}
+        budget = dp.get("budget_fraction", 1.0)
+
+        reflected = 0
+        for lab_id in self.model.get_lab_ids():
+            agents = self.model.get_lab_agents(lab_id)
+            if not agents:
+                continue
+
+            # Select one agent per lab for reflection (highest role poignancy)
+            agent = max(agents, key=lambda a: self._ROLE_FL_POIGNANCY.get(
+                getattr(a, "role", "researcher"), 6))
+
+            role = getattr(agent, "role", "researcher")
+            lab_lvg = lvg.get(lab_id, {})
+            acc = lab_lvg.get("global_acc", 0)
+            gain = lab_lvg.get("gain", 0)
+            demo = self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti")
+
+            # Contextual substitutions
+            if gain > 0.02:
+                trend = "contribuendo positivamente alla convergenza"
+                gain_insight = "che la collaborazione federata sta funzionando"
+                gain_word = "incoraggiante"
+            elif gain < -0.02:
+                trend = "ancora adattandosi alle differenze tra dataset"
+                gain_insight = "che il modello globale deve ancora adattarsi ai nostri dati"
+                gain_word = "preoccupante ma atteso nelle fasi iniziali"
+            else:
+                trend = "raggiungendo un equilibrio"
+                gain_insight = "una buona convergenza locale-globale"
+                gain_word = "stabile"
+
+            if budget < 0.25:
+                dp_insight = "che stiamo avvicinandoci al limite di privacy"
+                dp_detail = "Il budget sta per esaurirsi, dovremo ridurre i round futuri"
+            else:
+                dp_insight = "un buon equilibrio privacy-utilità"
+                dp_detail = "Il consumo è nella norma, possiamo continuare"
+
+            clinical_insight = (
+                "serve cautela nell'applicazione diagnostica"
+                if acc < 0.75 else "i risultati sono promettenti per l'uso clinico"
+            )
+
+            import random
+            templates = self._FL_REFLECTION_TEMPLATES.get(
+                role, self._FL_REFLECTION_TEMPLATES["researcher"])
+            rng = random.Random(fl_round * 13 + hash(agent.name) % 100)
+            template = rng.choice(templates)
+
+            try:
+                reflection_text = template.format(
+                    round=fl_round, acc=acc, gain=gain,
+                    lab=lab_id, demo=demo, budget=budget,
+                    trend=trend, gain_insight=gain_insight,
+                    gain_word=gain_word, dp_insight=dp_insight,
+                    dp_detail=dp_detail, clinical_insight=clinical_insight,
+                )
+            except KeyError:
+                reflection_text = (
+                    f"Riflettendo sul round {fl_round}: accuracy {acc:.0%}, "
+                    f"gain {gain:+.1%} per {lab_id}."
+                )
+
+            try:
+                s = agent.name
+                p = "riflette sui risultati FL"
+                o = f"round {fl_round}"
+
+                keywords = {"fl", "riflessione", "round", "insight",
+                            role, lab_id, f"round_{fl_round}"}
+
+                embedding = get_embedding(reflection_text)
+                embedding_pair = (reflection_text, embedding)
+
+                # Find the FL thought node just deposited as evidence
+                evidence = []
+                for node in agent.a_mem.seq_thought[:3]:
+                    if f"round {fl_round}" in (node.object or ""):
+                        evidence.append(node.node_id)
+                        break
+
+                agent.a_mem.add_thought(
+                    agent.scratch.curr_time,
+                    None,                      # auto expiration
+                    s, p, o,
+                    reflection_text,
+                    keywords,
+                    7,                         # poignancy
+                    embedding_pair,
+                    evidence,
+                )
+
+                agent.scratch.importance_trigger_curr -= 7
+                agent.scratch.importance_ele_n += 1
+                reflected += 1
+
+            except Exception as e:
+                logger.error(f"Failed FL reflection for '{agent.name}': {e}")
+
+        logger.info(f"FL reflection: {reflected} agents reflected on round {fl_round}")
+
     def _trigger_fl_conversations(self):
         """Generate post-round FL conversations between agent pairs in each lab.
 
@@ -725,6 +993,18 @@ class SimulationController:
 
             # Inject bias-aware insights per lab (uses local_vs_global + cross_eval)
             self._inject_fl_awareness_events()
+
+            # Deposit FL results as thought nodes (persist 72-144h for dialog enrichment)
+            try:
+                self._deposit_fl_thought_nodes()
+            except Exception as e:
+                logger.warning(f"FL thought node deposit failed: {e}")
+
+            # Trigger lightweight FL reflection (1 agent per lab, template-based)
+            try:
+                self._trigger_fl_reflection()
+            except Exception as e:
+                logger.warning(f"FL reflection failed: {e}")
 
             # Generate FL conversations between agent pairs (intra-lab)
             try:
