@@ -73,7 +73,7 @@ export class WorldMapScene extends BaseScene {
     this.load.image('default_lab', 'assets/images/labs/default_preview.png');
 
     // Carica spritesheet personaggi per le miniature degli agenti
-    this.load.spritesheet('professor', 'assets/characters/professor_spritesheet.png', {
+    this.load.spritesheet('professor', 'assets/characters/professor6_spritesheet_32x48.png', {
       frameWidth: 32, frameHeight: 48
     });
     this.load.spritesheet('researcher', 'assets/characters/researcher_spritesheet.png', {
@@ -86,6 +86,9 @@ export class WorldMapScene extends BaseScene {
       frameWidth: 32, frameHeight: 48
     });
     this.load.spritesheet('engineer', 'assets/characters/engineer_spritesheet.png', {
+      frameWidth: 32, frameHeight: 48
+    });
+    this.load.spritesheet('professor6', 'assets/characters/professor6_spritesheet_32x48.png', {
       frameWidth: 32, frameHeight: 48
     });
     this.load.spritesheet('professor_senior', 'assets/characters/professor_spritesheet.png', {

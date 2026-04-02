@@ -293,25 +293,28 @@ export class GlobalAgentController {
     // In una implementazione reale, questi dati potrebbero provenire
     // da un'API o dallo store React/Redux
     
-    // Agenti Mercatorum (allineati al backend)
+    // Agenti Mercatorum (allineati a MercatorumLabScene MERCATORUM_AGENTS)
     const mercatorumAgents = [
-      { id: 'prof1', type: 'professor', labScene: SCENE_KEYS.MERCATORUM, x: 200, y: 200 },
-      { id: 'res1', type: 'researcher', labScene: SCENE_KEYS.MERCATORUM, x: 400, y: 250 },
-      { id: 'stu1', type: 'student', labScene: SCENE_KEYS.MERCATORUM, x: 300, y: 350 },
+      { id: 'prof1', type: 'professor6', labScene: SCENE_KEYS.MERCATORUM, x: 130, y: 140 },
+      { id: 'priv1', type: 'privacy_specialist', labScene: SCENE_KEYS.MERCATORUM, x: 660, y: 140 },
+      { id: 'stu1', type: 'student', labScene: SCENE_KEYS.MERCATORUM, x: 400, y: 420 },
+      { id: 'res1', type: 'researcher', labScene: SCENE_KEYS.MERCATORUM, x: 400, y: 140 },
     ];
 
-    // Agenti Blekinge (allineati al backend)
+    // Agenti Blekinge (allineati a BlekingeLabScene BLEKINGE_AGENTS)
     const blekingeAgents = [
-      { id: 'prof2', type: 'professor', labScene: SCENE_KEYS.BLEKINGE, x: 250, y: 200 },
-      { id: 'res2', type: 'researcher', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 300 },
-      { id: 'stu2', type: 'student', labScene: SCENE_KEYS.BLEKINGE, x: 500, y: 250 },
+      { id: 'prof2', type: 'professor_senior', labScene: SCENE_KEYS.BLEKINGE, x: 130, y: 140 },
+      { id: 'stu2', type: 'student', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 420 },
+      { id: 'swe1', type: 'sw_engineer', labScene: SCENE_KEYS.BLEKINGE, x: 400, y: 140 },
+      { id: 'eng1', type: 'engineer', labScene: SCENE_KEYS.BLEKINGE, x: 660, y: 140 },
     ];
 
-    // Agenti OPBG (allineati al backend)
+    // Agenti OPBG (allineati a OPBGLabScene OPBG_AGENTS)
     const opbgAgents = [
-      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 200, y: 250 },
-      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 350, y: 300 },
-      { id: 'stu3', type: 'student', labScene: SCENE_KEYS.OPBG, x: 450, y: 200 },
+      { id: 'doc1', type: 'doctor', labScene: SCENE_KEYS.OPBG, x: 130, y: 140 },
+      { id: 'spd1', type: 'student_postdoc', labScene: SCENE_KEYS.OPBG, x: 400, y: 420 },
+      { id: 'eng2', type: 'engineer', labScene: SCENE_KEYS.OPBG, x: 660, y: 140 },
+      { id: 'res3', type: 'researcher', labScene: SCENE_KEYS.OPBG, x: 400, y: 140 },
     ];
     
     // Unisci tutti i dati degli agenti

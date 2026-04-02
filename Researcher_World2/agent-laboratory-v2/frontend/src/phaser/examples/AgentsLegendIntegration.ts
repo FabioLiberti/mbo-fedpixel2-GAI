@@ -16,13 +16,27 @@ import type { IAgentScene } from '../types/IAgentScene';
 // Questo codice può essere aggiunto al metodo create() di BlekingeLabScene.ts
 
 export function integrateAgentsLegend(scene: IAgentScene): void {
-  // OPZIONE 1: Caricamento asincrono del file JSON
   async function loadAndCreateLegend(): Promise<void> {
     try {
-      // Carica il file di configurazione degli agenti
-      const agentTypes: Record<string, AgentTypeInfo> = await AgentsLegend.loadAgentTypesConfig(scene);
+      // Prova a usare la config lab-specific se disponibile nel cache
+      let agentTypes: Record<string, AgentTypeInfo> | null = null;
 
-      // Crea la legenda a sinistra (a destra c'è Controlli Lab)
+      const labConfig = scene.cache?.json?.get('labAgentTypesConfig');
+      if (labConfig) {
+        // Determina il labKey dal labTypeId della scena
+        const labTypeId = (scene as any).getLabTypeId?.();
+        const labKey = labTypeId ? labTypeId.toLowerCase() : null;
+        if (labKey && labConfig[labKey]) {
+          agentTypes = labConfig[labKey];
+          console.log(`AgentsLegend: using lab-specific config for "${labKey}"`);
+        }
+      }
+
+      // Fallback alla config globale
+      if (!agentTypes) {
+        agentTypes = await AgentsLegend.loadAgentTypesConfig(scene);
+      }
+
       const legend = new AgentsLegend(
         scene,
         20,
@@ -37,8 +51,7 @@ export function integrateAgentsLegend(scene: IAgentScene): void {
       console.error('Error creating agents legend:', error);
     }
   }
-  
-  // Avvia il processo di caricamento e creazione
+
   loadAndCreateLegend();
 }
 

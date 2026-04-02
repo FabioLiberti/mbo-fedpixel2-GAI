@@ -590,11 +590,12 @@ export class Agent extends Phaser.GameObjects.Sprite {
    * Muove l'agente verso una destinazione specifica
    */
   public moveTo(x: number, y: number): void {
+    if (!this.scene) return;
     this.targetX = x;
     this.targetY = y;
 
     // Use A* pathfinding if a navigation grid is available
-    const sceneGrid = (this.scene as unknown as IAgentScene).grid;
+    const sceneGrid = (this.scene as unknown as IAgentScene)?.grid;
     if (sceneGrid && sceneGrid.length > 0) {
       this.path = findPath(sceneGrid, this.x, this.y, x, y);
       if (this.path.length === 0) {

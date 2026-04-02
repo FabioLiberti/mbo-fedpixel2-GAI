@@ -1,25 +1,54 @@
 {
   "mercatorum": {
-    "professor": {
-      "title": "Professore",
+    "professor6": {
+      "title": "Professoressa",
       "description": "Esperto accademico specializzato in Business Intelligence e analisi di mercato",
       "skills": [
-        "Business intelligence federata", 
-        "Analisi finanziaria", 
+        "Business intelligence federata",
+        "Analisi finanziaria",
         "Previsioni di mercato"
       ],
       "role": "Supervisiona progetti di ricerca su analisi di dati economici e finanziari",
       "background": "Esperienza pluriennale in economia e business analytics",
-      "color": "#d2691e",
-      "spritesheetPath": "assets/characters/professor_spritesheet.png",
+      "color": "#7B1FA2",
+      "spritesheetPath": "assets/characters/professor6_spritesheet_32x48.png",
+      "labSpecific": true
+    },
+    "privacy_specialist_portrait": {
+      "title": "Privacy Specialist",
+      "description": "Esperto in sicurezza e privacy per i sistemi di federated learning",
+      "skills": [
+        "Differential Privacy",
+        "Compliance GDPR",
+        "Attack Simulation"
+      ],
+      "role": "Garantisce che i protocolli FL rispettino gli standard di privacy",
+      "background": "Formazione in crittografia e privacy computazionale",
+      "color": "#607D8B",
+      "spritesheetPath": "assets/sprites/1024x1536/_Manager.png",
+      "iconPath": "assets/sprites/1024x1536/_Manager.png",
+      "labSpecific": true
+    },
+    "student": {
+      "title": "Dottorando",
+      "description": "Giovane ricercatore che studia applicazioni di federated learning in ambito economico",
+      "skills": [
+        "Preprocessing dati finanziari",
+        "Business analytics",
+        "Modelli predittivi economici"
+      ],
+      "role": "Supporta i progetti di ricerca e implementa prototipi analitici",
+      "background": "Master in Finanza Quantitativa e Intelligenza Artificiale",
+      "color": "#FB8C00",
+      "spritesheetPath": "assets/characters/student_spritesheet.png",
       "labSpecific": true
     },
     "researcher": {
       "title": "Ricercatore",
       "description": "Specialista in privacy preserving analytics e compliance normativa dei dati",
       "skills": [
-        "GDPR compliance", 
-        "Privacy-preserving analytics", 
+        "GDPR compliance",
+        "Privacy-preserving analytics",
         "Ottimizzazione modelli predittivi"
       ],
       "role": "Sviluppa metodologie per analisi finanziaria nel rispetto della privacy",
@@ -27,63 +56,63 @@
       "color": "#1a365d",
       "spritesheetPath": "assets/characters/researcher_spritesheet.png",
       "labSpecific": true
-    },
-    "student": {
-      "title": "Dottorando",
-      "description": "Giovane ricercatore che studia applicazioni di federated learning in ambito economico",
-      "skills": [
-        "Preprocessing dati finanziari", 
-        "Business analytics", 
-        "Modelli predittivi economici"
-      ],
-      "role": "Supporta i progetti di ricerca e implementa prototipi analitici",
-      "background": "Master in Finanza Quantitativa e Intelligenza Artificiale",
-      "color": "#f5f5dc",
-      "spritesheetPath": "assets/characters/student_spritesheet.png",
-      "labSpecific": true
     }
   },
   "blekinge": {
-    "professor": {
-      "title": "Professor",
-      "description": "Esperto accademico specializzato in algoritmi avanzati di federated learning",
+    "professor_senior": {
+      "title": "Professor Senior",
+      "description": "Professore anziano con vasta esperienza in algoritmi avanzati di federated learning",
       "skills": [
-        "Algoritmi di aggregazione", 
-        "Ottimizzazione per edge computing", 
+        "Algoritmi di aggregazione",
+        "Ottimizzazione per edge computing",
         "FL Systems Architecture"
       ],
       "role": "Coordina ricerche su paradigmi avanzati di federated learning",
       "background": "Pioniere nelle tecnologie edge e sistemi distribuiti",
-      "color": "#3f51b5",
+      "color": "#0D47A1",
       "spritesheetPath": "assets/characters/professor_spritesheet.png",
-      "labSpecific": true
-    },
-    "researcher": {
-      "title": "Researcher",
-      "description": "Ricercatore post-doc che sviluppa algoritmi di aggregazione oltre FedAvg",
-      "skills": [
-        "Client selection", 
-        "Compressione di comunicazione", 
-        "Algoritmi di aggregazione avanzati"
-      ],
-      "role": "Sviluppa algoritmi per ottimizzare la comunicazione in reti IoT",
-      "background": "Specializzato in reti IoT e sistemi distribuiti",
-      "color": "#4fc3f7",
-      "spritesheetPath": "assets/characters/researcher_spritesheet.png",
       "labSpecific": true
     },
     "student": {
       "title": "PhD Student",
       "description": "Studente di dottorato specializzato in quantizzazione e ottimizzazione per dispositivi edge",
       "skills": [
-        "Quantizzazione", 
-        "Ottimizzazione per dispositivi a bassa potenza", 
+        "Quantizzazione",
+        "Ottimizzazione per dispositivi a bassa potenza",
         "Privacy Engineering"
       ],
       "role": "Esplora tecniche per rendere il FL efficiente su dispositivi IoT",
       "background": "Formazione in ingegneria elettronica e informatica",
-      "color": "#ffcc44",
+      "color": "#FB8C00",
       "spritesheetPath": "assets/characters/student_spritesheet.png",
+      "labSpecific": true
+    },
+    "sw_engineer": {
+      "title": "SW Engineer",
+      "description": "Ingegnere software specializzata nello sviluppo di piattaforme FL",
+      "skills": [
+        "Platform Development",
+        "API Design",
+        "Cloud Infrastructure"
+      ],
+      "role": "Sviluppa e mantiene l'infrastruttura software per il federated learning",
+      "background": "Esperienza nello sviluppo di sistemi distribuiti e piattaforme cloud",
+      "color": "#26A69A",
+      "spritesheetPath": "assets/characters/researcher_spritesheet.png",
+      "labSpecific": true
+    },
+    "engineer": {
+      "title": "ML Engineer",
+      "description": "Ingegnere specializzato nell'implementazione pratica di algoritmi FL",
+      "skills": [
+        "Model Optimization",
+        "Systems Integration",
+        "Empirical Evaluation"
+      ],
+      "role": "Trasforma gli algoritmi teorici in implementazioni efficienti",
+      "background": "Esperienza nell'ingegneria del software e machine learning applicato",
+      "color": "#F44336",
+      "spritesheetPath": "assets/characters/engineer_spritesheet.png",
       "labSpecific": true
     }
   },
@@ -92,42 +121,56 @@
       "title": "Medico",
       "description": "Medico specializzato nell'applicazione del federated learning in contesti pediatrici",
       "skills": [
-        "Diagnostica pediatrica", 
-        "Modelli personalizzati per casi rari", 
+        "Diagnostica pediatrica",
+        "Modelli personalizzati per casi rari",
         "Analisi dati clinici"
       ],
       "role": "Guida l'applicazione clinica dei modelli e la validazione diagnostica",
       "background": "Specializzazione in pediatria con interesse nell'informatica medica",
-      "color": "#009688",
+      "color": "#00B8D4",
       "spritesheetPath": "assets/characters/doctor_spritesheet.png",
       "labSpecific": true
     },
-    "researcher": {
-      "title": "Ricercatore Biomedico",
-      "description": "Ricercatore specializzato nell'elaborazione di dati genetici e immagini mediche",
+    "student_postdoc": {
+      "title": "Post-Doc",
+      "description": "Ricercatore post-doc che implementa e testa prototipi di algoritmi federati",
       "skills": [
-        "Integrazione dati eterogenei", 
-        "Privacy per dati medici", 
-        "Medical imaging"
+        "Algorithm Implementation",
+        "Data Preprocessing",
+        "Experimental Design"
       ],
-      "role": "Sviluppa tecniche FL per diagnosi collaborativa preservando la privacy",
-      "background": "Formazione in bioinformatica e imaging medico",
-      "color": "#26a69a",
-      "spritesheetPath": "assets/characters/researcher_spritesheet.png",
+      "role": "Implementa e testa prototipi di algoritmi federati per dati clinici",
+      "background": "Background in informatica con specializzazione in sistemi distribuiti",
+      "color": "#FB8C00",
+      "spritesheetPath": "assets/characters/student_spritesheet.png",
       "labSpecific": true
     },
     "engineer": {
       "title": "Biomedical Engineer",
       "description": "Ingegnere biomedico che integra sistemi FL con dispositivi medici",
       "skills": [
-        "Integrazione dispositivi medici", 
-        "Elaborazione biosegnali", 
+        "Integrazione dispositivi medici",
+        "Elaborazione biosegnali",
         "Sistemi sanitari distribuiti"
       ],
       "role": "Facilita l'integrazione di dati da dispositivi medici eterogenei",
       "background": "Ingegneria biomedica con focus su elaborazione segnali",
-      "color": "#4db6ac",
+      "color": "#F44336",
       "spritesheetPath": "assets/characters/engineer_spritesheet.png",
+      "labSpecific": true
+    },
+    "researcher": {
+      "title": "Ricercatore Biomedico",
+      "description": "Ricercatore specializzato nell'elaborazione di dati genetici e immagini mediche",
+      "skills": [
+        "Integrazione dati eterogenei",
+        "Privacy per dati medici",
+        "Medical imaging"
+      ],
+      "role": "Sviluppa tecniche FL per diagnosi collaborativa preservando la privacy",
+      "background": "Formazione in bioinformatica e imaging medico",
+      "color": "#7B1FA2",
+      "spritesheetPath": "assets/characters/researcher_spritesheet.png",
       "labSpecific": true
     }
   }

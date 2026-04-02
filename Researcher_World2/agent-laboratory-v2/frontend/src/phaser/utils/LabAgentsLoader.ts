@@ -72,62 +72,80 @@ export class LabAgentsLoader {
       // Configurazioni di fallback predefinite per ciascun laboratorio
       const fallbackConfigs: Record<string, Record<string, any>> = {
         'mercatorum': {
-          'professor': {
-            title: 'Professore',
-            description: 'Esperto in business intelligence e analisi dati',
-            skills: ['Business analytics', 'Privacy economics', 'Data governance'],
-            role: 'Supervisione progetti di analisi economica',
-            background: 'Economia e statistica',
-            color: '#d2691e', // Terracotta
-            spritesheetPath: 'assets/characters/professor_spritesheet.png'
+          'professor6': {
+            title: 'Professoressa', description: 'Esperto in business intelligence',
+            skills: ['Business analytics', 'Privacy economics'], role: 'Supervisione progetti',
+            background: 'Economia', color: '#7B1FA2',
+            spritesheetPath: 'assets/characters/professor6_spritesheet_32x48.png'
+          },
+          'privacy_specialist_portrait': {
+            title: 'Privacy Specialist', description: 'Esperto in privacy e compliance',
+            skills: ['GDPR compliance', 'Differential Privacy'], role: 'Garanzia privacy',
+            background: 'Crittografia', color: '#607D8B',
+            spritesheetPath: 'assets/sprites/1024x1536/_Manager.png'
+          },
+          'student': {
+            title: 'Dottorando', description: 'Studente di dottorato',
+            skills: ['Data Science', 'Business analytics'], role: 'Supporto ricerca',
+            background: 'Finanza Quantitativa', color: '#FB8C00',
+            spritesheetPath: 'assets/characters/student_spritesheet.png'
           },
           'researcher': {
-            title: 'Ricercatore',
-            description: 'Specialista in privacy e compliance normativa',
-            skills: ['GDPR compliance', 'Privacy analytics', 'Data minimization'],
-            role: 'Sviluppo metodologie di analisi privacy-preserving',
-            background: 'Data Science e regolamentazione',
-            color: '#1a365d', // Blu navy
+            title: 'Ricercatore', description: 'Specialista in privacy analytics',
+            skills: ['GDPR compliance', 'Privacy analytics'], role: 'Analisi privacy-preserving',
+            background: 'Data Science', color: '#1a365d',
             spritesheetPath: 'assets/characters/researcher_spritesheet.png'
           }
         },
         'blekinge': {
-          'professor': {
-            title: 'Professor',
-            description: 'Esperto in algoritmi di aggregazione',
-            skills: ['Advanced aggregation', 'Edge computing', 'Architecture design'],
-            role: 'Coordina ricerche su FL avanzato',
-            background: 'Computer Science',
-            color: '#3f51b5', // Blu
+          'professor_senior': {
+            title: 'Professor Senior', description: 'Esperto in algoritmi di aggregazione',
+            skills: ['Advanced aggregation', 'Edge computing'], role: 'Coordina ricerche FL',
+            background: 'Computer Science', color: '#0D47A1',
             spritesheetPath: 'assets/characters/professor_spritesheet.png'
           },
-          'researcher': {
-            title: 'Researcher',
-            description: 'Specialista in ottimizzazione per IoT',
-            skills: ['Client selection', 'Communication efficiency', 'Quantization'],
-            role: 'Sviluppo algoritmi ottimizzati',
-            background: 'Distributed systems',
-            color: '#4fc3f7', // Azzurro
+          'student': {
+            title: 'PhD Student', description: 'Studente specializzato in edge computing',
+            skills: ['Quantizzazione', 'Privacy Engineering'], role: 'Ricerca IoT',
+            background: 'Ingegneria', color: '#FB8C00',
+            spritesheetPath: 'assets/characters/student_spritesheet.png'
+          },
+          'sw_engineer': {
+            title: 'SW Engineer', description: 'Ingegnere piattaforme FL',
+            skills: ['Platform Development', 'API Design'], role: 'Sviluppo infrastruttura',
+            background: 'Sistemi distribuiti', color: '#26A69A',
             spritesheetPath: 'assets/characters/researcher_spritesheet.png'
+          },
+          'engineer': {
+            title: 'ML Engineer', description: 'Implementazione algoritmi FL',
+            skills: ['Model Optimization', 'Systems Integration'], role: 'Implementazione efficiente',
+            background: 'ML applicato', color: '#F44336',
+            spritesheetPath: 'assets/characters/engineer_spritesheet.png'
           }
         },
         'opbg': {
           'doctor': {
-            title: 'Medico',
-            description: 'Medico specializzato in informatica medica',
-            skills: ['Diagnostica', 'Modelli clinici', 'Analisi dati medici'],
-            role: 'Validazione clinica',
-            background: 'Medicina pediatrica',
-            color: '#009688', // Verde acqua
-            spritesheetPath: 'assets/characters/doctor.png'
+            title: 'Medico', description: 'Medico in informatica medica',
+            skills: ['Diagnostica', 'Modelli clinici'], role: 'Validazione clinica',
+            background: 'Pediatria', color: '#00B8D4',
+            spritesheetPath: 'assets/characters/doctor_spritesheet.png'
+          },
+          'student_postdoc': {
+            title: 'Post-Doc', description: 'Ricercatore post-doc',
+            skills: ['Algorithm Implementation', 'Data Preprocessing'], role: 'Test prototipi',
+            background: 'Informatica', color: '#FB8C00',
+            spritesheetPath: 'assets/characters/student_spritesheet.png'
+          },
+          'engineer': {
+            title: 'Biomedical Engineer', description: 'Integrazione dispositivi medici',
+            skills: ['Biosegnali', 'Sistemi sanitari'], role: 'Integrazione dati medici',
+            background: 'Ingegneria biomedica', color: '#F44336',
+            spritesheetPath: 'assets/characters/engineer_spritesheet.png'
           },
           'researcher': {
-            title: 'Ricercatore',
-            description: 'Ricercatore in imaging medico',
-            skills: ['Medical imaging', 'Privacy medica', 'Integrazione dati'],
-            role: 'Analisi dati sanitari',
-            background: 'Bioinformatica',
-            color: '#26a69a', // Verde
+            title: 'Ricercatore Biomedico', description: 'Imaging medico e dati genetici',
+            skills: ['Medical imaging', 'Privacy medica'], role: 'Diagnosi collaborativa',
+            background: 'Bioinformatica', color: '#7B1FA2',
             spritesheetPath: 'assets/characters/researcher_spritesheet.png'
           }
         }

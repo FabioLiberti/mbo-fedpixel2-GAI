@@ -10,8 +10,7 @@
       "role": "Supervisiona progetti di ricerca e guida gli studenti PhD",
       "background": "Esperienza pluriennale in ricerca sul federated learning",
       "color": "#1E88E5",
-      "spritesheetPath": "assets/characters/professor_spritesheet.png",
-      "iconPath": "assets/sprites/1024x1536/_Professor3.png"
+      "spritesheetPath": "assets/characters/professor6_spritesheet_32x48.png"
     },
     "professor_senior": {
       "title": "Professore Senior",

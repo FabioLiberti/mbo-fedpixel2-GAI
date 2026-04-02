@@ -220,6 +220,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       if (this.dialogDebugger) { this.dialogDebugger.destroy(); this.dialogDebugger = null; }
       if (this.labControlsMenu) { this.labControlsMenu.destroy(); this.labControlsMenu = null; }
       this.game.events.off('agent-interaction');
+      this.game.events.off('coffee-break');
+      this.game.events.off('go-to-room');
     });
   }
 
@@ -466,6 +468,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
   /** Move a list of agents to the center of a named zone (with random offset). */
   private moveAgentsToZone(agentIds: string[], zoneName: string): void {
+    if (!this.scene || !this.scene.isActive()) return;
     const zone = this.interactionZones.find(z => z.name === zoneName);
     if (!zone) return;
     for (const agentId of agentIds) {

@@ -35,7 +35,7 @@ export const ASSETS = {
     // Sprite e configurazioni per i personaggi
     characters: {
       professor: {
-        path: '/assets/characters/professor_spritesheet.png',
+        path: '/assets/characters/professor6_spritesheet_32x48.png',
         config: {
           frameWidth: 32,
           frameHeight: 48

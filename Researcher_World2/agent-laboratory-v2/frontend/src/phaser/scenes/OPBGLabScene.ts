@@ -45,6 +45,7 @@ export class OPBGLabScene extends BaseLabScene {
 
   constructor() {
     super('OPBGLabScene');
+    this.labTypeId = LAB_TYPES.OPBG;
   }
 
   // ---- preload ----------------------------------------------------------

@@ -45,6 +45,7 @@ export class BlekingeLabScene extends BaseLabScene {
 
   constructor() {
     super('BlekingeLabScene');
+    this.labTypeId = LAB_TYPES.BLEKINGE;
   }
 
   // ---- preload ----------------------------------------------------------
