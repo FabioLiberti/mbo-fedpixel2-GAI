@@ -443,8 +443,12 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
           </div>
 
           {/* Quality scores expandable */}
-          {qualityOpen && qualityScores && (
+          {qualityOpen && (
             <div className="llm-quality-body">
+              {!qualityScores ? (
+                <div className="llm-quality-empty">Caricamento...</div>
+              ) : (
+              <>
               <div className="llm-quality-total">
                 Valutati: <strong>{qualityScores.total_evaluated || 0}</strong>
               </div>
@@ -491,6 +495,8 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
               >
                 Aggiorna
               </button>
+              </>
+              )}
             </div>
           )}
 
