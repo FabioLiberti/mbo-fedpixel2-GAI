@@ -84,6 +84,8 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [generating, setGenerating] = useState<boolean>(false);
   const [controlsOpen, setControlsOpen] = useState<boolean>(false);
+  const [qualityScores, setQualityScores] = useState<any>(null);
+  const [qualityOpen, setQualityOpen] = useState<boolean>(false);
 
   const DEDUP_WINDOW_MS = 60_000;
 
@@ -108,22 +110,39 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     });
   }, [isDuplicate]);
 
-  // Backend status check
+  // Backend status check — tries /ai/status first, falls back to /simulation/state
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
+    let consecutiveFails = 0;
     const check = async () => {
       try {
         const r = await fetch(`${getApiBaseUrl()}/ai/status`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!cancelled && r.ok) {
+          setBackendStatus('connected');
+          consecutiveFails = 0;
+          return;
+        }
+      } catch { /* try fallback */ }
+      // Fallback: if /ai/status fails (Ollama busy), check if backend itself is alive
+      try {
+        const r2 = await fetch(`${getApiBaseUrl()}/simulation/state`, {
           signal: AbortSignal.timeout(5000),
         });
-        if (!cancelled) setBackendStatus(r.ok ? 'connected' : 'disconnected');
-      } catch {
-        if (!cancelled) setBackendStatus('disconnected');
-      }
+        if (!cancelled && r2.ok) {
+          setBackendStatus('connected');
+          consecutiveFails = 0;
+          return;
+        }
+      } catch { /* both failed */ }
+      consecutiveFails++;
+      // Only mark disconnected after 2 consecutive failures
+      if (!cancelled && consecutiveFails >= 2) setBackendStatus('disconnected');
     };
     check();
-    const interval = setInterval(check, 5000);
+    const interval = setInterval(check, 8000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [visible]);
 
@@ -488,6 +507,76 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                     />
                     Mostra solo LLM
                   </label>
+                </div>
+
+                {/* Dialog Quality */}
+                <div className="llm-quality-section">
+                  <button
+                    className="llm-quality-btn"
+                    onClick={async () => {
+                      setQualityOpen(q => !q);
+                      if (!qualityOpen) {
+                        try {
+                          const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
+                            signal: AbortSignal.timeout(5000),
+                          });
+                          if (r.ok) setQualityScores(await r.json());
+                        } catch { /* ignore */ }
+                      }
+                    }}
+                  >
+                    {qualityOpen ? '\u25BC' : '\u25B6'} Qualit\u00e0 Dialoghi
+                  </button>
+                  {qualityOpen && qualityScores && (
+                    <div className="llm-quality-body">
+                      <div className="llm-quality-total">
+                        Dialoghi valutati: <strong>{qualityScores.total_evaluated || 0}</strong>
+                      </div>
+                      {qualityScores.average_scores && Object.keys(qualityScores.average_scores).length > 0 ? (
+                        <>
+                          {[
+                            { key: 'overall_quality', label: 'Overall', icon: '\u2605' },
+                            { key: 'data_grounding', label: 'Dati FL', icon: '\ud83d\udcca' },
+                            { key: 'role_differentiation', label: 'Ruoli', icon: '\ud83c\udfad' },
+                            { key: 'memory_integration', label: 'Memoria', icon: '\ud83e\udde0' },
+                            { key: 'repetition_score', label: 'Novit\u00e0', icon: '\u2728' },
+                            { key: 'format_compliance', label: 'Formato', icon: '\u2705' },
+                          ].map(m => {
+                            const val = qualityScores.average_scores[m.key] || 0;
+                            const pct = Math.round(val * 100);
+                            const color = val >= 0.7 ? '#4caf50' : val >= 0.4 ? '#ff9800' : '#f44336';
+                            return (
+                              <div key={m.key} className="llm-quality-row">
+                                <span className="llm-quality-label">{m.icon} {m.label}</span>
+                                <div className="llm-quality-bar-bg">
+                                  <div
+                                    className="llm-quality-bar-fill"
+                                    style={{ width: `${pct}%`, backgroundColor: color }}
+                                  />
+                                </div>
+                                <span className="llm-quality-value" style={{ color }}>{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <div className="llm-quality-empty">Nessun dialogo valutato</div>
+                      )}
+                      <button
+                        className="llm-quality-refresh"
+                        onClick={async () => {
+                          try {
+                            const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
+                              signal: AbortSignal.timeout(5000),
+                            });
+                            if (r.ok) setQualityScores(await r.json());
+                          } catch { /* ignore */ }
+                        }}
+                      >
+                        Aggiorna
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
