@@ -439,7 +439,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                 }
               }}
             >
-              QD
+              Qualita Dialoghi
             </button>
             <button
               className="llm-toolbar-toggle-btn"
@@ -449,7 +449,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                 if (!modelOpen) setQualityOpen(false);
               }}
             >
-              LLM
+              Modello LLM
             </button>
             <span style={{ fontSize: 10, color: '#888', marginLeft: 'auto' }}>
               {llmCount}/{filteredLog.length}
@@ -519,18 +519,36 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                 <span>Stato</span>
                 <span style={{ color: statusColor }}>{statusLabel}</span>
               </div>
-              <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label className="llm-switch">
-                  <input type="checkbox" checked={llmEnabled} onChange={e => setLlmEnabled(e.target.checked)} />
-                  <span className="llm-switch-slider" />
-                </label>
-                <span className={`llm-switch-label ${llmEnabled ? 'on' : 'off'}`} style={{ fontSize: 10 }}>
-                  LLM {llmEnabled ? 'ON' : 'OFF'}
-                </span>
-                <button className="llm-generate-btn" onClick={handleGenerate} disabled={generating}
-                  style={{ flex: 1, padding: '4px 0', fontSize: 10 }}>
-                  {generating ? 'Generazione...' : 'Genera'}
-                </button>
+              {/* Controlli (collapsed) */}
+              <div className="llm-controls-section" style={{ marginTop: 6 }}>
+                <div className="llm-controls-header" onClick={() => setControlsOpen(c => !c)}>
+                  <span>{controlsOpen ? '\u25BC' : '\u25B6'} Controlli</span>
+                </div>
+                {controlsOpen && (
+                  <div className="llm-controls-body">
+                    <div className="llm-control-row">
+                      <span>Messaggi LLM</span>
+                      <label className="llm-switch">
+                        <input type="checkbox" checked={llmEnabled} onChange={e => setLlmEnabled(e.target.checked)} />
+                        <span className="llm-switch-slider" />
+                      </label>
+                      <span className={`llm-switch-label ${llmEnabled ? 'on' : 'off'}`}>
+                        {llmEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <div className="llm-control-row">
+                      <span>Frequenza</span>
+                      <input type="range" min={0} max={100} value={msgFrequency}
+                        onChange={e => setMsgFrequency(Number(e.target.value))} className="llm-slider" />
+                      <span className="llm-slider-value">{msgFrequency}%</span>
+                    </div>
+                    <button className="llm-generate-btn" onClick={handleGenerate} disabled={generating}>
+                      {generating ? 'Generazione...' : (
+                        backendStatus === 'connected' ? 'Genera Messaggio LLM' : 'Genera Messaggio Simulato'
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
