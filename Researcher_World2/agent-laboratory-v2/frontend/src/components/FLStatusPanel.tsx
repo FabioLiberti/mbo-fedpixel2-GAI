@@ -187,7 +187,16 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
       }, {} as Record<string, number>)
     : {};
 
-  const stateLabel = currentState || 'IDLE';
+  const rawState = currentState || 'idle';
+  const STATE_DISPLAY: Record<string, string> = {
+    idle: 'In attesa',
+    training: 'Training',
+    sending: 'Invio pesi',
+    aggregating: 'Aggregazione',
+    receiving: 'Ricezione',
+  };
+  const stateLabel = STATE_DISPLAY[rawState.toLowerCase()] || rawState;
+  const stateClass = rawState.toLowerCase();
 
   return (
     <div className={`fl-status-panel visible ${collapsed ? 'fl-collapsed' : ''}`}>
@@ -195,7 +204,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
         <h3>
           Federated Learning
           {flStatus && enabled && (
-            <span className={`fl-state-inline fl-state-${stateLabel.toLowerCase()}`}>{stateLabel}</span>
+            <span className={`fl-state-inline fl-state-${stateClass}`}>{stateLabel}</span>
           )}
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
@@ -259,10 +268,15 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
           </div>
 
           <div className="fl-current-state">
-            <span className="fl-state-label">State:</span>
-            <span className={`fl-state-value fl-state-${stateLabel.toLowerCase()}`}>
+            <span className="fl-state-label">Stato:</span>
+            <span className={`fl-state-value fl-state-${stateClass}`}>
               {stateLabel}
             </span>
+            {stateClass === 'idle' && metrics?.round !== undefined && metrics.round > 0 && (
+              <span style={{ fontSize: '9px', color: '#888', marginLeft: 6 }}>
+                (round {metrics.round} completato)
+              </span>
+            )}
           </div>
 
           <div className="fl-metrics">

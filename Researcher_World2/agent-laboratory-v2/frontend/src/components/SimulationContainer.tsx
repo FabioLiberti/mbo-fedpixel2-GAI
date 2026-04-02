@@ -612,34 +612,44 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const currentLabName = selectedLab ? labDisplayName[selectedLab] || null : null;
 
   return (
-    <div className="simulation-container" style={{ position: 'relative' }}>
-      {/* Container del gioco Phaser */}
-      <div
-        id="phaser-game"
-        ref={gameContainerRef}
-        style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }}
-      />
-
-      {/* Pannello di controllo FL - sempre montato, gestisce internamente la visibilità */}
-      <ErrorBoundary name="FLStatusPanel">
-        <FLStatusPanel
-          flStatus={contextualFlStatus}
-          onToggleFL={handleToggleFL}
-          onAlgorithmChange={handleAlgorithmChange}
-          totalAgentCount={flStatus?.activeAgents?.length || 0}
-          currentLabName={isWorldMap ? null : currentLabName}
+    <>
+      <div className="simulation-container" style={{ position: 'relative' }}>
+        {/* Container del gioco Phaser */}
+        <div
+          id="phaser-game"
+          ref={gameContainerRef}
+          style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }}
         />
-      </ErrorBoundary>
 
-      {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
-      {flStatus && (
-        <FLStatusConnector
-          flStatus={flStatus}
-          onToggleFL={handleToggleFL}
-        />
-      )}
+        {/* Pannello di controllo FL - sempre montato, gestisce internamente la visibilità */}
+        <ErrorBoundary name="FLStatusPanel">
+          <FLStatusPanel
+            flStatus={contextualFlStatus}
+            onToggleFL={handleToggleFL}
+            onAlgorithmChange={handleAlgorithmChange}
+            totalAgentCount={flStatus?.activeAgents?.length || 0}
+            currentLabName={isWorldMap ? null : currentLabName}
+          />
+        </ErrorBoundary>
 
-      {/* LLM Dialog Panel - cronologia dialoghi agenti */}
+        {/* Connettore invisibile per gli eventi FL tra React e Phaser */}
+        {flStatus && (
+          <FLStatusConnector
+            flStatus={flStatus}
+            onToggleFL={handleToggleFL}
+          />
+        )}
+
+        {/* Agent Inspector Panel - shown when an agent is clicked */}
+        <ErrorBoundary name="AgentInspectorPanel">
+          <AgentInspectorPanel
+            agent={selectedAgent}
+            onClose={() => setSelectedAgent(null)}
+          />
+        </ErrorBoundary>
+      </div>
+
+      {/* LLM Dialog Panel - sotto la mappa, larghezza piena */}
       <ErrorBoundary name="LLMDialogPanel">
         <LLMDialogPanel
           backendSimData={backendSimData}
@@ -648,15 +658,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           onClose={() => setLlmPanelVisible(false)}
         />
       </ErrorBoundary>
-
-      {/* Agent Inspector Panel - shown when an agent is clicked */}
-      <ErrorBoundary name="AgentInspectorPanel">
-        <AgentInspectorPanel
-          agent={selectedAgent}
-          onClose={() => setSelectedAgent(null)}
-        />
-      </ErrorBoundary>
-    </div>
+    </>
   );
 };
 
