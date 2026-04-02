@@ -72,10 +72,10 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 }) => {
   const [dialogLog, setDialogLog] = useState<DialogEntry[]>([]);
   const [filterLlmOnly, setFilterLlmOnly] = useState<boolean>(false);
-  const [collapsed, setCollapsed] = useState<boolean>(true);
+  const [collapsed, setCollapsed] = useState<boolean>(false);
   const lastDialogsRef = useRef<Record<string, string>>({});
   const recentTextsRef = useRef<{ text: string; ts: number }[]>([]);
-  const logEndRef = useRef<HTMLDivElement>(null);
+
 
   // Controls state
   const [llmEnabled, setLlmEnabled] = useState<boolean>(true);
@@ -243,12 +243,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
   }, [backendSimData?.fl?.conversations, appendEntries]);
 
-  // Auto-scroll
-  useEffect(() => {
-    if (!collapsed) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [dialogLog, collapsed]);
+  // No auto-scroll needed: newest dialogs appear at top
 
   // Generate message handler
   const handleGenerate = useCallback(async () => {
@@ -382,7 +377,13 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     : backendStatus === 'disconnected' ? 'Disconnesso' : 'Verifica...';
 
   return (
-    <div className={`llm-dialog-panel ${collapsed ? 'llm-collapsed' : ''}`}>
+    <div
+      className={`llm-dialog-panel ${collapsed ? 'llm-collapsed' : ''}`}
+      onPointerDown={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      onWheel={e => e.stopPropagation()}
+    >
       {/* Header */}
       <div className="llm-dialog-header" onClick={() => setCollapsed(c => !c)} style={{ cursor: 'pointer' }}>
         <h3>
@@ -525,7 +526,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                       }
                     }}
                   >
-                    {qualityOpen ? '\u25BC' : '\u25B6'} Qualit\u00e0 Dialoghi
+                    {qualityOpen ? '\u25BC' : '\u25B6'} Qualita Dialoghi
                   </button>
                   {qualityOpen && qualityScores && (
                     <div className="llm-quality-body">
@@ -535,12 +536,12 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                       {qualityScores.average_scores && Object.keys(qualityScores.average_scores).length > 0 ? (
                         <>
                           {[
-                            { key: 'overall_quality', label: 'Overall', icon: '\u2605' },
-                            { key: 'data_grounding', label: 'Dati FL', icon: '\ud83d\udcca' },
-                            { key: 'role_differentiation', label: 'Ruoli', icon: '\ud83c\udfad' },
-                            { key: 'memory_integration', label: 'Memoria', icon: '\ud83e\udde0' },
-                            { key: 'repetition_score', label: 'Novit\u00e0', icon: '\u2728' },
-                            { key: 'format_compliance', label: 'Formato', icon: '\u2705' },
+                            { key: 'overall_quality', label: 'Overall', icon: '*' },
+                            { key: 'data_grounding', label: 'Dati FL', icon: '#' },
+                            { key: 'role_differentiation', label: 'Ruoli', icon: 'R' },
+                            { key: 'memory_integration', label: 'Memoria', icon: 'M' },
+                            { key: 'repetition_score', label: 'Novita', icon: 'N' },
+                            { key: 'format_compliance', label: 'Formato', icon: 'F' },
                           ].map(m => {
                             const val = qualityScores.average_scores[m.key] || 0;
                             const pct = Math.round(val * 100);
@@ -591,7 +592,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                   : 'Nessun dialogo per il filtro selezionato'}
               </p>
             ) : (
-              filteredLog.map((entry, i) => (
+              [...filteredLog].reverse().map((entry, i) => (
                 <div
                   key={i}
                   className={`llm-dialog-entry ${entry.isLlm ? 'llm-generated' : 'stub-generated'} ${entry.source === 'phaser' ? 'phaser-source' : ''} ${entry.source === 'fl-convo' ? 'fl-convo-source' : ''} ${entry.source === 'generated' ? 'generated-source' : ''}`}
@@ -626,7 +627,6 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                 </div>
               ))
             )}
-            <div ref={logEndRef} />
           </div>
         </>
       )}
