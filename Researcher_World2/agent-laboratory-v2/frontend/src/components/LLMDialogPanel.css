@@ -121,14 +121,33 @@
   margin: 0;
 }
 
-.llm-toolbar .llm-quality-btn {
-  width: auto;
-  padding: 3px 8px;
+.llm-toolbar-toggle-btn {
+  padding: 3px 6px;
   font-size: 10px;
-  margin: 0;
+  font-family: monospace;
+  font-weight: bold;
+  border-radius: 3px;
+  cursor: pointer;
   background: rgba(33, 150, 243, 0.2);
   border: 1px solid rgba(33, 150, 243, 0.4);
   color: #64b5f6;
+  transition: all 0.15s;
+}
+
+.llm-toolbar-toggle-btn:hover {
+  background: rgba(33, 150, 243, 0.35);
+  color: #90caf9;
+}
+
+/* Sezione espandibile condivisa (Qualita e Modello) */
+.llm-expandable-section {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* ---- Controls section ---- */

@@ -86,6 +86,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   const [controlsOpen, setControlsOpen] = useState<boolean>(false);
   const [qualityScores, setQualityScores] = useState<any>(null);
   const [qualityOpen, setQualityOpen] = useState<boolean>(false);
+  const [modelOpen, setModelOpen] = useState<boolean>(false);
 
   const DEDUP_WINDOW_MS = 60_000;
 
@@ -400,7 +401,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
       {!collapsed && (
         <>
-          {/* Toolbar: filtri tipo + qualita + solo LLM — sempre visibile */}
+          {/* Toolbar */}
           <div className="llm-toolbar">
             <div className="llm-type-buttons">
               {MSG_TYPES.map(t => (
@@ -414,45 +415,50 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
               ))}
             </div>
             <label className="llm-filter-toggle" title="Mostra solo messaggi LLM">
-              <input
-                type="checkbox"
-                checked={filterLlmOnly}
-                onChange={(e) => setFilterLlmOnly(e.target.checked)}
-              />
+              <input type="checkbox" checked={filterLlmOnly}
+                onChange={(e) => setFilterLlmOnly(e.target.checked)} />
               Solo LLM
             </label>
             <button
-              className="llm-quality-btn"
+              className="llm-toolbar-toggle-btn"
               onClick={async (e) => {
                 e.stopPropagation();
                 const opening = !qualityOpen;
                 setQualityOpen(opening);
+                if (opening) setModelOpen(false);
                 if (opening) {
                   try {
                     const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
                       signal: AbortSignal.timeout(5000),
                     });
-                    if (r.ok) {
-                      setQualityScores(await r.json());
-                    } else {
-                      setQualityScores({ total_evaluated: 0, average_scores: {}, error: 'Backend error' });
-                    }
+                    if (r.ok) setQualityScores(await r.json());
+                    else setQualityScores({ total_evaluated: 0, average_scores: {} });
                   } catch {
-                    setQualityScores({ total_evaluated: 0, average_scores: {}, error: 'Connessione fallita' });
+                    setQualityScores({ total_evaluated: 0, average_scores: {} });
                   }
                 }
               }}
             >
-              {qualityOpen ? '[-]' : '[+]'} Qualita
+              QD
+            </button>
+            <button
+              className="llm-toolbar-toggle-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setModelOpen(o => !o);
+                if (!modelOpen) setQualityOpen(false);
+              }}
+            >
+              LLM
             </button>
             <span style={{ fontSize: 10, color: '#888', marginLeft: 'auto' }}>
-              LLM:{llmCount} Tot:{filteredLog.length}
+              {llmCount}/{filteredLog.length}
             </span>
           </div>
 
-          {/* Quality scores expandable */}
+          {/* Sezione Qualita Dialoghi (a scomparsa) */}
           {qualityOpen && (
-            <div className="llm-quality-body">
+            <div className="llm-expandable-section">
               {!qualityScores ? (
                 <div className="llm-quality-empty">Caricamento...</div>
               ) : (
@@ -477,10 +483,8 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
                       <div key={m.key} className="llm-quality-row">
                         <span className="llm-quality-label">{m.icon} {m.label}</span>
                         <div className="llm-quality-bar-bg">
-                          <div
-                            className="llm-quality-bar-fill"
-                            style={{ width: `${pct}%`, backgroundColor: color }}
-                          />
+                          <div className="llm-quality-bar-fill"
+                            style={{ width: `${pct}%`, backgroundColor: color }} />
                         </div>
                         <span className="llm-quality-value" style={{ color }}>{pct}%</span>
                       </div>
@@ -490,67 +494,46 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
               ) : (
                 <div className="llm-quality-empty">Nessun dialogo valutato</div>
               )}
-              <button
-                className="llm-quality-refresh"
+              <button className="llm-quality-refresh"
                 onClick={async () => {
                   try {
                     const r = await fetch(`${getApiBaseUrl()}/dialog-quality/summary`, {
-                      signal: AbortSignal.timeout(5000),
-                    });
+                      signal: AbortSignal.timeout(5000) });
                     if (r.ok) setQualityScores(await r.json());
                   } catch { /* ignore */ }
-                }}
-              >
-                Aggiorna
-              </button>
+                }}>Aggiorna</button>
               </>
               )}
             </div>
           )}
 
-          {/* Controls avanzati (collapsible) */}
-          <div className="llm-controls-section">
-            <div className="llm-controls-header" onClick={() => setControlsOpen(c => !c)}>
-              <span>{controlsOpen ? '\u25BC' : '\u25B6'} Controlli avanzati</span>
-            </div>
-            {controlsOpen && (
-              <div className="llm-controls-body">
-                <div className="llm-control-row">
-                  <span>Messaggi LLM</span>
-                  <label className="llm-switch">
-                    <input type="checkbox" checked={llmEnabled} onChange={e => setLlmEnabled(e.target.checked)} />
-                    <span className="llm-switch-slider" />
-                  </label>
-                  <span className={`llm-switch-label ${llmEnabled ? 'on' : 'off'}`}>
-                    {llmEnabled ? 'ON' : 'OFF'}
-                  </span>
-                </div>
-                <div className="llm-control-row">
-                  <span>Frequenza</span>
-                  <input type="range" min={0} max={100} value={msgFrequency}
-                    onChange={e => setMsgFrequency(Number(e.target.value))} className="llm-slider" />
-                  <span className="llm-slider-value">{msgFrequency}%</span>
-                </div>
-                <button className="llm-generate-btn" onClick={handleGenerate} disabled={generating}>
-                  {generating ? 'Generazione...' : (
-                    backendStatus === 'connected' ? 'Genera Messaggio LLM' : 'Genera Messaggio Simulato'
-                  )}
-                </button>
-                <div className="llm-model-info">
-                  <div className="llm-model-info-title">Modello LLM</div>
-                  <div className="llm-model-info-row"><span>Modello</span><span>qwen3.5:4b</span></div>
-                  <div className="llm-model-info-row"><span>Provider</span><span>Ollama (locale)</span></div>
-                  <div className="llm-model-info-row"><span>Endpoint</span><span>localhost:11434</span></div>
-                  <div className="llm-model-info-row"><span>Temperature</span><span>0.7</span></div>
-                  <div className="llm-model-info-row"><span>Max Tokens</span><span>1024</span></div>
-                  <div className="llm-model-info-row">
-                    <span>Stato</span>
-                    <span style={{ color: statusColor }}>{statusLabel}</span>
-                  </div>
-                </div>
+          {/* Sezione Modello LLM (a scomparsa) */}
+          {modelOpen && (
+            <div className="llm-expandable-section">
+              <div className="llm-model-info-row"><span>Modello</span><span>qwen3.5:4b</span></div>
+              <div className="llm-model-info-row"><span>Provider</span><span>Ollama (locale)</span></div>
+              <div className="llm-model-info-row"><span>Endpoint</span><span>localhost:11434</span></div>
+              <div className="llm-model-info-row"><span>Temperature</span><span>0.7</span></div>
+              <div className="llm-model-info-row"><span>Max Tokens</span><span>1024</span></div>
+              <div className="llm-model-info-row">
+                <span>Stato</span>
+                <span style={{ color: statusColor }}>{statusLabel}</span>
               </div>
-            )}
-          </div>
+              <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label className="llm-switch">
+                  <input type="checkbox" checked={llmEnabled} onChange={e => setLlmEnabled(e.target.checked)} />
+                  <span className="llm-switch-slider" />
+                </label>
+                <span className={`llm-switch-label ${llmEnabled ? 'on' : 'off'}`} style={{ fontSize: 10 }}>
+                  LLM {llmEnabled ? 'ON' : 'OFF'}
+                </span>
+                <button className="llm-generate-btn" onClick={handleGenerate} disabled={generating}
+                  style={{ flex: 1, padding: '4px 0', fontSize: 10 }}>
+                  {generating ? 'Generazione...' : 'Genera'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Dialog log */}
           <div className="llm-dialog-log">
