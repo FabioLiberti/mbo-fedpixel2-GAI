@@ -1,90 +1,91 @@
 {
-    "simulation": {
-      "speed": 1.0,
-      "tick_rate": 30,
-      "random_seed": 42
+  "simulation": {
+    "speed": 1.0,
+    "tick_rate": 30,
+    "random_seed": 42
+  },
+  "labs": {
+    "mercatorum": {
+      "name": "Università Mercatorum Lab",
+      "dimensions": {
+        "width": 800,
+        "height": 600
+      },
+      "specialization": "business_intelligence",
+      "active": true
     },
-    "labs": {
-      "mercatorum": {
-        "name": "Università Mercatorum Lab",
-        "dimensions": {
-          "width": 800,
-          "height": 600
-        },
-        "specialization": "business_intelligence",
-        "active": true
+    "blekinge": {
+      "name": "Blekinge University Lab",
+      "dimensions": {
+        "width": 800,
+        "height": 600
       },
-      "blekinge": {
-        "name": "Blekinge University Lab",
-        "dimensions": {
-          "width": 800,
-          "height": 600
-        },
-        "specialization": "edge_computing",
-        "active": true
-      },
-      "opbg": {
-        "name": "OPBG IRCCS Lab",
-        "dimensions": {
-          "width": 800,
-          "height": 600
-        },
-        "specialization": "medical_data",
-        "active": true
-      }
+      "specialization": "edge_computing",
+      "active": true
     },
-    "researchers": {
-      "student": {
-        "count": 4,
-        "speed": 1.2,
-        "social_tendency": 0.7,
-        "research_efficiency": 0.5,
-        "specializations": [
-          "data_science",
-          "optimization_theory",
-          "non_iid_data"
-        ]
+    "opbg": {
+      "name": "OPBG IRCCS Lab",
+      "dimensions": {
+        "width": 800,
+        "height": 600
       },
-      "researcher": {
-        "count": 4,
-        "speed": 1.0,
-        "social_tendency": 0.5,
-        "research_efficiency": 0.8,
-        "specializations": [
-          "secure_aggregation",
-          "communication_efficiency",
-          "privacy_engineering",
-          "data_science"
-        ]
-      },
-      "professor": {
-        "count": 1,
-        "speed": 0.8,
-        "social_tendency": 0.6,
-        "research_efficiency": 1.0,
-        "specializations": [
-          "fl_architecture"
-        ]
-      }
-    },
-    "fl": {
-      "algorithms": {
-        "fedavg": {
-          "enabled": true,
-          "aggregation_rounds": 5,
-          "client_fraction": 0.8
-        },
-        "fedprox": {
-          "enabled": false,
-          "aggregation_rounds": 10,
-          "client_fraction": 0.6,
-          "mu": 0.01
-        }
-      },
-      "privacy": {
-        "differential_privacy": false,
-        "epsilon": 1.0,
-        "secure_aggregation": true
-      }
+      "specialization": "medical_data",
+      "active": true
     }
+  },
+  "researchers": {
+    "student": {
+      "count": 4,
+      "speed": 1.2,
+      "social_tendency": 0.7,
+      "research_efficiency": 0.5,
+      "specializations": [
+        "data_science",
+        "optimization_theory",
+        "non_iid_data"
+      ]
+    },
+    "researcher": {
+      "count": 4,
+      "speed": 1.0,
+      "social_tendency": 0.5,
+      "research_efficiency": 0.8,
+      "specializations": [
+        "secure_aggregation",
+        "communication_efficiency",
+        "privacy_engineering",
+        "data_science"
+      ]
+    },
+    "professor": {
+      "count": 1,
+      "speed": 0.8,
+      "social_tendency": 0.6,
+      "research_efficiency": 1.0,
+      "specializations": [
+        "fl_architecture"
+      ]
+    }
+  },
+  "fl": {
+    "algorithms": {
+      "fedavg": {
+        "enabled": true,
+        "aggregation_rounds": 5,
+        "client_fraction": 0.8
+      },
+      "fedprox": {
+        "enabled": false,
+        "aggregation_rounds": 10,
+        "client_fraction": 0.6,
+        "mu": 0.01
+      }
+    },
+    "privacy": {
+      "differential_privacy": false,
+      "epsilon": 1.0,
+      "secure_aggregation": true
+    },
+    "convergence_patience": 20
   }
+}

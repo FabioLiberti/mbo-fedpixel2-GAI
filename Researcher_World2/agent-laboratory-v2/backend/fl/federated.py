@@ -262,6 +262,7 @@ class FederatedLearningSystem:
         dp_epsilon_total: float = 20.0,
         dp_max_grad_norm: float = 1.0,
         dp_noise_multiplier: float = 2.0,
+        convergence_patience: int = 20,
     ):
         """
         Inizializza il sistema di Federated Learning
@@ -285,6 +286,10 @@ class FederatedLearningSystem:
         self.model_type = model_type
         self.mu = mu
         self.checkpoint_dir = checkpoint_dir or self._DEFAULT_CHECKPOINT_DIR
+        # Early-stopping patience: how many non-improving rounds before FL is
+        # considered converged. Kept high so the process keeps running for
+        # observation instead of halting after a few noisy rounds.
+        self.convergence_patience = convergence_patience
 
         # DP-SGD parameters
         self.dp_enabled = dp_enabled
@@ -786,9 +791,11 @@ class FederatedLearningSystem:
             "rounds": rounds,
         }
 
-    def check_convergence(self, patience: int = 3) -> Dict[str, Any]:
+    def check_convergence(self, patience: int = None) -> Dict[str, Any]:
         """Check if training has converged (accuracy plateau) or privacy budget exhausted.
         Returns status dict with convergence info."""
+        if patience is None:
+            patience = getattr(self, "convergence_patience", 20)
         acc = self.metrics["accuracy"]
         n = len(acc)
         budget_exhausted = self.dp_enabled and self.dp_epsilon_spent >= self.dp_epsilon_total

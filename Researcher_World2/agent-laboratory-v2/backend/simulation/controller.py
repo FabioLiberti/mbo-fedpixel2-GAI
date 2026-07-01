@@ -75,11 +75,14 @@ class SimulationController:
             )
 
             # Initialize FL system (try to restore from checkpoint)
+            fl_cfg = (getattr(self.model, "config", None) or {}).get("fl", {})
+            patience = fl_cfg.get("convergence_patience", 20)
             self.fl_system = FederatedLearningSystem(
                 algorithm="fedavg",
                 aggregation_rounds=5,
                 client_fraction=0.8,
-                model_type="simple_nn"
+                model_type="simple_nn",
+                convergence_patience=patience,
             )
             self._register_labs_as_clients()
             if self.fl_system.load_checkpoint():
