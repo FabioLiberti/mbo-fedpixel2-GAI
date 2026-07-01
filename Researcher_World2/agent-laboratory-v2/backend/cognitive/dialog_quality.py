@@ -145,7 +145,10 @@ class DialogQualityMonitor:
                                fl_context: Dict[str, Any]) -> Tuple[float, List[str]]:
         """Score how well the dialog references real FL data.
         Returns (score 0-1, list of matched data points)."""
-        full_text = " ".join(utt for _, utt in dialog).lower()
+        raw_text = " ".join(utt for _, utt in dialog)
+        # Normalize Italian decimal comma -> dot between digits ("39,6" -> "39.6")
+        # so natural prose citing values matches as well as rigid templates.
+        full_text = re.sub(r"(?<=\d),(?=\d)", ".", raw_text).lower()
         matches = []
 
         # Check for specific FL values from context
@@ -154,17 +157,22 @@ class DialogQualityMonitor:
         budget = fl_context.get("dp_budget", 1.0)
         rnd = fl_context.get("round", 0)
 
-        # Check if actual numeric values appear
-        acc_pct = f"{acc:.0%}".replace("%", "")  # "78"
-        if acc_pct in full_text or f"{acc*100:.1f}" in full_text:
+        def _num_present(value_pct: float) -> bool:
+            """True if a percentage value appears (int, 1-decimal, or +/-1 rounding),
+            as a standalone number (not embedded in a longer number)."""
+            cands = {f"{value_pct:.0f}", f"{value_pct:.1f}",
+                     f"{round(value_pct)}", f"{round(value_pct) + 1}",
+                     f"{round(value_pct) - 1}"}
+            return any(re.search(rf"(?<!\d){re.escape(c)}(?!\d)", full_text) for c in cands)
+
+        # Check if actual numeric values appear (tolerant to phrasing/rounding)
+        if _num_present(acc * 100):
             matches.append(f"accuracy={acc:.0%}")
 
-        gain_str = f"{abs(gain)*100:.1f}"
-        if gain_str in full_text:
+        if _num_present(abs(gain) * 100):
             matches.append(f"gain={gain:+.1%}")
 
-        budget_str = f"{budget*100:.0f}"
-        if budget_str in full_text or "budget" in full_text:
+        if _num_present(budget * 100) or "budget" in full_text:
             matches.append(f"budget={budget:.0%}")
 
         if str(rnd) in full_text and ("round" in full_text or "ciclo" in full_text):
@@ -191,19 +199,35 @@ class DialogQualityMonitor:
             return 0.5, {}
 
         per_speaker = {}
+        all_roles = set(roles.values())
         for speaker, utterance in dialog:
             role = roles.get(speaker, "researcher")
-            vocab = _ROLE_VOCABULARY.get(role, set())
-            if not vocab:
+            own_vocab = _ROLE_VOCABULARY.get(role, set())
+            utt_lower = utterance.lower()
+
+            if not own_vocab:
                 per_speaker[speaker] = 0.5
                 continue
 
-            words = set(utterance.lower().split())
-            # Also check 2-grams
-            utt_lower = utterance.lower()
-            hits = sum(1 for v in vocab if v in utt_lower)
-            # Score: at least 1 role word = 0.5, 2 = 0.75, 3+ = 1.0
-            per_speaker[speaker] = min(1.0, hits * 0.35) if hits > 0 else 0.0
+            own_hits = sum(1 for v in own_vocab if v in utt_lower)
+            # Contrastive: best keyword match against any OTHER role's vocabulary.
+            other_hits = 0
+            for r in all_roles:
+                if r == role:
+                    continue
+                v_other = _ROLE_VOCABULARY.get(r, set())
+                if v_other:
+                    other_hits = max(other_hits, sum(1 for v in v_other if v in utt_lower))
+
+            if own_hits == 0 and other_hits == 0:
+                # No role-marked vocabulary either way -> neutral, not penalized
+                per_speaker[speaker] = 0.5
+            elif own_hits >= other_hits:
+                # Speaks distinctly in-role
+                per_speaker[speaker] = min(1.0, 0.6 + 0.2 * own_hits)
+            else:
+                # Sounds more like a different role -> penalize the mismatch
+                per_speaker[speaker] = max(0.0, 0.4 - 0.15 * (other_hits - own_hits))
 
         if not per_speaker:
             return 0.5, {}
