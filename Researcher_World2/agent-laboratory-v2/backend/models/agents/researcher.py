@@ -438,6 +438,13 @@ class ResearcherAgent(Agent):
             return  # FL blocks cognitive pipeline
 
         # --- Priority 2: Cognitive pipeline (throttled) ---
+        # Cognition scoping: skip labs not currently observed (performance).
+        # FL tasks above still run for every agent, so federated training is
+        # unaffected — only thinking/planning/dialogue is paused for other labs.
+        selected_lab = getattr(self.model, 'selected_lab_id', None)
+        if selected_lab and self.lab_id != selected_lab:
+            return
+
         self.cognitive_step_counter += 1
         if self.cognitive_step_counter >= self.cognitive_step_interval:
             self.cognitive_step_counter = 0

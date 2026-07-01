@@ -204,6 +204,15 @@ async def set_simulation_speed(speed: float):
     return {"status": "speed_set", "speed": speed}
 
 
+@app.post("/simulation/selected-lab")
+async def set_selected_lab(lab_id: str = None):
+    """Scope the cognitive pipeline to the lab currently observed in the UI.
+    Empty / 'all' / 'none' clears scoping (all labs active)."""
+    lab = lab_id if lab_id and lab_id.lower() not in ("all", "none", "") else None
+    ok = controller.set_selected_lab(lab)
+    return {"status": "selected_lab_set" if ok else "ignored", "selected_lab": lab}
+
+
 @app.get("/simulation/state")
 async def get_simulation_state():
     return controller.get_simulation_state()
@@ -368,6 +377,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     controller.reset_simulation()
                 elif command == "set_speed":
                     controller.set_speed(params.get("speed", 1.0))
+                elif command == "set_selected_lab":
+                    lab = params.get("lab_id")
+                    if lab and str(lab).lower() in ("all", "none", ""):
+                        lab = None
+                    controller.set_selected_lab(lab)
                 elif command == "enable_fl":
                     controller.enable_federated_learning(params.get("enabled", True))
                 elif command == "toggle_llm":

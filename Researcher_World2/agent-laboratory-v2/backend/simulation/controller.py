@@ -929,6 +929,22 @@ class SimulationController:
         logger.info(f"Simulation speed set to {speed}")
         return True
 
+    def set_selected_lab(self, lab_id):
+        """Scope the cognitive pipeline to a single lab (None = all labs).
+
+        Agents outside the selected lab still run FL training but skip the
+        LLM-heavy cognitive cycle, greatly reducing load when observing one lab.
+        """
+        if not self.model:
+            return False
+        valid = set(self.model.get_lab_ids())
+        if lab_id is not None and lab_id not in valid:
+            logger.warning(f"set_selected_lab: unknown lab '{lab_id}' (valid: {valid})")
+            return False
+        self.model.selected_lab_id = lab_id
+        logger.info(f"Cognition scoped to lab: {lab_id or 'ALL'}")
+        return True
+
     def enable_federated_learning(self, enabled: bool = True):
         if not self.fl_system:
             logger.warning("FL system not initialized")

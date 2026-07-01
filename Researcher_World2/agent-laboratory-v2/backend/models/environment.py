@@ -75,6 +75,11 @@ class LabEnvironment(Model):
         self.tick_rate = self.config.get("simulation", {}).get("tick_rate", 30)
         self.simulation_speed = self.config.get("simulation", {}).get("speed", 1.0)
 
+        # Cognition scoping: when set, only agents in this lab run the cognitive
+        # pipeline (None = all labs active). FL training runs for all agents
+        # regardless. Set by the controller from the frontend's active scene.
+        self.selected_lab_id = None
+
         # Grid
         grid_width, grid_height = 20, 20
         self.grid = MultiGrid(grid_width, grid_height, True)

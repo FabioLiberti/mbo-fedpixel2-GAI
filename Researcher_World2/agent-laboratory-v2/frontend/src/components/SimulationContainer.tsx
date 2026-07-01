@@ -301,6 +301,19 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     }
   }, [selectedLab]);
 
+  // Notifica il backend del lab osservato: la cognizione LLM (pesante) viene
+  // limitata al lab attivo. WorldMap / nessuna scena => tutti i lab attivi.
+  useEffect(() => {
+    const sceneToLabId: Record<string, string> = {
+      MercatorumLabScene: 'mercatorum',
+      BlekingeLabScene: 'blekinge',
+      OPBGLabScene: 'opbg',
+    };
+    const labId = selectedLab ? (sceneToLabId[selectedLab] || 'all') : 'all';
+    fetch(`http://localhost:8091/simulation/selected-lab?lab_id=${labId}`, { method: 'POST' })
+      .catch(() => { /* backend offline: ignora */ });
+  }, [selectedLab]);
+
   // Funzione per avviare la simulazione locale (fallback)
   const startLocalSimulation = useCallback(() => {
     // Se abbiamo già una simulazione attiva, non ne avviamo un'altra
