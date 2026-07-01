@@ -49,6 +49,7 @@ export class DialogEventHandler {
       const ge = this.state.scene.game.events;
       ge.on('agent-interaction', this.handleAgentInteraction, this);
       ge.on('agent-thinking', this.handleAgentThinking, this);
+      ge.on('backend-agent-dialog', this.handleBackendAgentDialog, this);
       ge.on('agent-decision', this.handleAgentDecision, this);
       ge.on('agent-planning', this.handleAgentPlanning, this);
       ge.on('agent-reaction', this.handleAgentReaction, this);
@@ -70,6 +71,7 @@ export class DialogEventHandler {
     const ge = this.state.scene.game.events;
     ge.off('agent-interaction', this.handleAgentInteraction, this);
     ge.off('agent-thinking', this.handleAgentThinking, this);
+    ge.off('backend-agent-dialog', this.handleBackendAgentDialog, this);
     ge.off('agent-decision', this.handleAgentDecision, this);
     ge.off('agent-planning', this.handleAgentPlanning, this);
     ge.off('agent-reaction', this.handleAgentReaction, this);
@@ -392,35 +394,33 @@ export class DialogEventHandler {
 
   // ── Agent thinking ────────────────────────────────────────────────
 
-  private async handleAgentThinking(data: {
+  // Idle "thinking" no longer triggers a separate /ai/thinking LLM call.
+  // Thought bubbles are now sourced from the backend cognitive cycle via the
+  // 'backend-agent-dialog' broadcast (single LLM source), so this is a no-op.
+  private handleAgentThinking(_data: {
     agentId: string; context: string; llm?: boolean; isSimulated?: boolean; counted?: boolean;
-  }): Promise<void> {
-    const s = this.state;
-    this.tagLLMSource(data, data.agentId);
-    if (!s.isLLMAvailable) { await s.checkLLMAvailability(); if (!s.isLLMAvailable) return; }
+  }): void {
+    // intentionally empty — see handleBackendAgentDialog
+  }
+
+  // ── Backend-broadcast dialog -> thought bubble (unified LLM source) ──
+  // The backend agent's real cognitive-cycle dialog (broadcast in the
+  // simulation state) is shown as a bubble on the matching sprite. No extra
+  // LLM call: the text is the same one displayed in the React dialog panel.
+  private handleBackendAgentDialog(data: { name?: string; text?: string; isLlm?: boolean }): void {
     try {
-      const agent = s.getAgentDetails(data.agentId);
-      if (!agent) return;
-      const result = await api.generateAgentThinking({
-        agentId: agent.id, agentName: agent.name, agentRole: agent.role,
-        agentSpecialization: agent.specialization || 'general',
-        interactionType: 'thinking', labType: s.getLabTypeString(),
-        context: data.context, flState: s.getCurrentFLState(),
+      if (!data?.name || !data?.text) return;
+      const id = this.state.getAgentIdByName(data.name);
+      if (!id) return;
+      const { processedText, processType } = this.analyzeText(data.text);
+      this.creator.createCognitiveProcess({
+        sourceId: id, type: DialogType.RESEARCH, text: processedText,
+        cognitiveType: processType || CognitiveProcessType.THINKING,
+        isLLMDialog: !!data.isLlm, priority: 6,
       });
-      s.scene.game.events.emit('api-dialog-response', { agentId: agent.id, response: result });
-      if (result.thinking) {
-        const { processedText, processType } = this.analyzeText(result.thinking);
-        this.creator.createCognitiveProcess({
-          sourceId: agent.id, type: DialogType.RESEARCH, text: processedText,
-          cognitiveType: processType || CognitiveProcessType.THINKING, isLLMDialog: true, priority: 6,
-        });
-        this.bridgeToPanel(agent.id, processedText, true, 'thinking');
-        s.scene.game.events.emit('analytics-dialog', {
-          speakerId: agent.id, text: processedText, category: 'thinking', isLLM: true,
-        });
-      }
+      if (data.isLlm) this.bridgeToPanel(id, processedText, true, 'thinking');
     } catch (e) {
-      console.error('[DialogEventHandler] handleAgentThinking error:', e);
+      console.error('[DialogEventHandler] handleBackendAgentDialog error:', e);
     }
   }
 

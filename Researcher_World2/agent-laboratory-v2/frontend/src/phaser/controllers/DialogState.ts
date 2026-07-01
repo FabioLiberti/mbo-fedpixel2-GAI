@@ -180,6 +180,21 @@ export class DialogState {
     return null;
   }
 
+  /** Resolve a Phaser agent sprite id from the backend agent name. */
+  getAgentIdByName(name: string): string | null {
+    try {
+      const target = String(name).trim().toLowerCase();
+      const match = this.scene.children.getChildren().find((child: any) => {
+        const n = (child.getData && child.getData('name')) || child.name;
+        return n && String(n).trim().toLowerCase() === target;
+      }) as any;
+      return match ? (match.getData('id') || null) : null;
+    } catch (e) {
+      console.error(`[DialogState] getAgentIdByName(${name}):`, e);
+      return null;
+    }
+  }
+
   getRandomAgentByRole(role: string): { id: string; name: string; role: string; specialization: string } | null {
     try {
       const agents = this.scene.children.getChildren()

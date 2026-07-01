@@ -169,6 +169,19 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
 
     appendEntries(newEntries);
+
+    // Unified source: feed the backend agent dialog to Phaser thought bubbles,
+    // so the bubble shows the same real cognitive-cycle text (no separate LLM call).
+    const gameInstance = getGameInstance();
+    if (gameInstance) {
+      for (const e of newEntries) {
+        gameInstance.events.emit('backend-agent-dialog', {
+          name: e.agentName,
+          text: e.dialog,
+          isLlm: e.isLlm,
+        });
+      }
+    }
   }, [backendSimData, appendEntries]);
 
   // 2) Phaser-side LLM dialogs
