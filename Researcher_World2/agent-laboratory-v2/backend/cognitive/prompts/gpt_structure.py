@@ -50,7 +50,11 @@ class OllamaService:
         self.embedding_model = "nomic-embed-text"
         self.temperature = 0.05
         self.max_tokens = 150
-        self.num_ctx = 512
+        self.num_ctx = 2048
+        # Sampling defaults (tunable via llm_config.json -> parameters)
+        self.top_k = 40
+        self.top_p = 0.9
+        self.repeat_penalty = 1.2
         self.max_cache_size = 500
 
         # State
@@ -80,6 +84,10 @@ class OllamaService:
                     params = llm.get("parameters", {})
                     self.temperature = params.get("temperature", self.temperature)
                     self.max_tokens = params.get("max_tokens", self.max_tokens)
+                    self.num_ctx = params.get("num_ctx", self.num_ctx)
+                    self.top_k = params.get("top_k", self.top_k)
+                    self.top_p = params.get("top_p", self.top_p)
+                    self.repeat_penalty = params.get("repeat_penalty", self.repeat_penalty)
                     caching = cfg.get("caching", cfg.get("advanced_settings", {}))
                     self.max_cache_size = caching.get("max_cache_size", self.max_cache_size)
                     logger.info(f"LLM config loaded: model={self.model}")
@@ -218,9 +226,9 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
             options={
                 'temperature': temperature,
                 'num_predict': max_tokens,
-                'top_k': 5,
-                'top_p': 0.2,
-                'repeat_penalty': 1.0,
+                'top_k': _service.top_k,
+                'top_p': _service.top_p,
+                'repeat_penalty': _service.repeat_penalty,
                 'num_ctx': _service.num_ctx,
             },
             think=False,
@@ -259,9 +267,9 @@ def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=Non
             options={
                 'temperature': temperature,
                 'num_predict': max_tokens,
-                'top_k': 5,
-                'top_p': 0.2,
-                'repeat_penalty': 1.0,
+                'top_k': _service.top_k,
+                'top_p': _service.top_p,
+                'repeat_penalty': _service.repeat_penalty,
                 'num_ctx': _service.num_ctx,
             },
             think=False,
