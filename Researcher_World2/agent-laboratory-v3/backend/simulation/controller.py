@@ -1548,6 +1548,10 @@ class SimulationController:
                 "after": change["after"],
                 "votes": dict(Counter(p["option"] for p in proposals)),
                 "proposals": proposals,
+                # Everyone who was asked, one per lab: a proposer missing from
+                # "proposals" gave no verified answer and abstained
+                "proposers": [{"agent": agent.name, "role": agent.role, "lab_id": agent.lab_id}
+                              for agent in proposers],
                 "accuracy_before": ctx["recent_mean"],
                 "accuracy_after": None,
             }

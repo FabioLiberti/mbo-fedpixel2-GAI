@@ -11,6 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { getGameInstance } from '../phaser/game';
+import { LABS, LAB_BY_ID, portraitOf } from './federationTheme';
 
 interface SpotlightProps {
   backendSimData?: any;
@@ -28,7 +29,20 @@ interface Line {
   detail?: string;
   /** Persone citate in fondo al box (es. chi ha votato), con ciò che hanno proposto */
   people?: Array<{ label: string; names: string[] }>;
+  /** Decisione del consorzio: chi ha proposto che cosa, un agente per laboratorio */
+  assembly?: Seat[];
   isLLM: boolean;
+}
+
+/** Il posto di un laboratorio nell'assemblea che decide sui parametri del FL */
+interface Seat {
+  lab: string;
+  agent: string;
+  role: string;
+  /** Ciò che l'agente ha proposto; null se non ha presentato una proposta */
+  optionText: string | null;
+  /** La sua proposta è quella approvata */
+  won: boolean;
 }
 
 interface Shown extends Line {
@@ -111,6 +125,16 @@ const CSS = `
 .dialog-spotlight-ai { font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 6px; background: #3b6fd4; color: #fff; }
 .dialog-spotlight-text { font-weight: 700; line-height: 1.22; }
 .dialog-spotlight-detail { font-size: 20px; color: #c9d2ea; font-weight: 600; margin-top: 8px; }
+.dialog-assembly { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 10px; }
+.dialog-seat { display: flex; gap: 10px; align-items: center; background: rgba(255, 255, 255, 0.06); border: 3px solid transparent; border-radius: 12px; padding: 8px 10px; min-width: 0; }
+.dialog-seat.dialog-seat-won { background: rgba(123, 216, 143, 0.14); }
+.dialog-seat-face { flex: none; width: 64px; height: 96px; background-repeat: no-repeat; image-rendering: pixelated; }
+.dialog-seat-lab { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.dialog-seat-name { font-size: 20px; font-weight: 800; line-height: 1.1; }
+.dialog-seat-role { font-size: 15px; color: #c9d2ea; font-weight: 600; }
+.dialog-seat-option { font-size: 17px; font-weight: 700; line-height: 1.15; margin-top: 3px; }
+.dialog-seat-won .dialog-seat-option { color: #7bd88f; }
+.dialog-seat-none { font-size: 15px; color: #9aa5c4; font-weight: 600; margin-top: 3px; }
 .dialog-spotlight-wait {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 39;
   pointer-events: none; background: rgba(14, 20, 40, 0.78); color: #dfe6fa; border-radius: 999px;
@@ -141,12 +165,45 @@ function linesOf(item: any): Line[] {
     const people: Array<{ label: string; names: string[] }> = [];
     if (winners.length) people.push({ label: 'A favore', names: winners });
     for (const p of others) people.push({ label: `Proponeva di ${p.option_text}`, names: [p.agent] });
+
+    // I posti dell'assemblea: chi è stato interpellato in ogni laboratorio e
+    // che cosa ha proposto (chi non compare tra le proposte si è astenuto)
+    const asked: any[] = Array.isArray(d.proposers) && d.proposers.length
+      ? d.proposers
+      : (d.proposals || []).map((p: any) => ({ agent: p.agent, role: p.role, lab_id: p.lab_id }));
+    const assembly: Seat[] = asked.map((who: any) => {
+      const proposal = (d.proposals || []).find((p: any) => p.agent === who.agent);
+      return {
+        lab: who.lab_id, agent: who.agent, role: who.role,
+        optionText: proposal ? proposal.option_text : null,
+        won: !!proposal && proposal.option === d.option,
+      };
+    });
+    assembly.sort((a, b) => LABS.findIndex(l => l.id === a.lab) - LABS.findIndex(l => l.id === b.lab));
+
+    const proposed = (d.proposals || []).length;
+    const abstained = assembly.filter(seat => seat.optionText === null).length;
+    const abstainedNote = abstained === 0 ? '' : abstained === 1 ? ' · 1 astenuto' : ` · ${abstained} astenuti`;
+    let text: string;
+    let detail: string;
+    if (d.changed) {
+      text = `Si è deciso di ${d.option_text}, ${change}.`;
+      detail = `${winners.length} ${winners.length === 1 ? 'proposta' : 'proposte'} su ${proposed} a favore${abstainedNote}`;
+    } else if (winners.length > 0) {
+      text = 'Si è deciso di non cambiare nulla.';
+      detail = `${winners.length} ${winners.length === 1 ? 'proposta' : 'proposte'} su ${proposed} a favore${abstainedNote}`;
+    } else {
+      text = 'Nessuna proposta ha la maggioranza: non si cambia nulla.';
+      detail = `${proposed} ${proposed === 1 ? 'proposta' : 'proposte diverse'}, nessuna prevale${abstainedNote}`;
+    }
     return [{
       kind: 'decision',
-      speaker: `Decisione del round ${d.round}`,
+      speaker: `Assemblea del consorzio · round ${d.round}`,
       listener: null,
-      text: d.changed ? `Si è deciso di ${d.option_text}, ${change}.` : 'Si è deciso di non cambiare nulla.',
+      text,
+      detail,
       people,
+      assembly,
       isLLM: false,
     }];
   }
@@ -359,6 +416,7 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
   }
 
   const style = FAMILY_STYLE[shown.role] || FAMILY_STYLE.researcher;
+  const assembly = shown.kind === 'decision' && shown.assembly && shown.assembly.length > 0 ? shown.assembly : null;
   return (
     <div key={shown.key} className="dialog-spotlight" style={{ border: `5px solid ${style.color}` }}>
       <div className="dialog-spotlight-who">
@@ -376,11 +434,48 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
         )}
         {shown.isLLM && <span className="dialog-spotlight-ai">AI</span>}
       </div>
+      {assembly && (
+        <div className="dialog-assembly">
+          {assembly.map(seat => {
+            const lab = LAB_BY_ID[seat.lab];
+            const face = portraitOf(seat.agent, seat.role);
+            return (
+              <div
+                key={seat.agent}
+                className={`dialog-seat${seat.won ? ' dialog-seat-won' : ''}`}
+                style={{ borderColor: lab?.color || '#3a4568' }}
+              >
+                <div
+                  className="dialog-seat-face"
+                  style={{
+                    backgroundImage: `url(${face.url})`,
+                    backgroundSize: face.sheet ? '256px 96px' : 'contain',
+                    backgroundPosition: face.sheet ? '0 0' : 'center',
+                    imageRendering: face.sheet ? 'pixelated' : 'auto',
+                  }}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div className="dialog-seat-lab" style={{ color: lab?.color }}>{lab?.label || seat.lab}</div>
+                  <div className="dialog-seat-name">{seat.agent}</div>
+                  <div className="dialog-seat-role">({ROLE_LABEL[seat.role] || seat.role})</div>
+                  {seat.optionText ? (
+                    <div className="dialog-seat-option">
+                      {seat.won ? '✔ ' : ''}Propone di {seat.optionText}
+                    </div>
+                  ) : (
+                    <div className="dialog-seat-none">Nessuna proposta: si astiene</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="dialog-spotlight-text" style={{ fontSize: textSize(shown.text) }}>
         {shown.text}
       </div>
       {shown.detail && <div className="dialog-spotlight-detail">{shown.detail}</div>}
-      {shown.peopleText.map(group => (
+      {!assembly && shown.peopleText.map(group => (
         <div key={group.label} className="dialog-spotlight-detail">
           {group.label}: {group.text}
         </div>

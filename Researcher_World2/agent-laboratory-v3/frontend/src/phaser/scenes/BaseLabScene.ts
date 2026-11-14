@@ -455,42 +455,46 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     console.log('Creating test agents (base - override in subclass)');
   }
 
-  // Distanza minima tra due agenti: sotto questa gli sprite si coprirebbero
-  private static readonly AGENT_MIN_DISTANCE = 46;
+  // Parte dell'immagine di un agente occupata dal personaggio: metà larghezza
+  // e metà altezza del rettangolo che due sprite non devono condividere
+  private static readonly AGENT_BODY_HALF_WIDTH = 0.41;
+  private static readonly AGENT_BODY_HALF_HEIGHT = 0.46;
 
   /**
-   * Gli sprite non si sovrappongono mai: due agenti più vicini della distanza
-   * minima vengono allontanati lungo la retta che li unisce. Chi sta parlando
-   * resta fermo e si sposta solo l'altro.
+   * Gli sprite non si sovrappongono mai. Ogni agente occupa un rettangolo
+   * grande quanto il suo personaggio: quando due rettangoli si toccano, i due
+   * agenti vengono allontanati lungo l'asse su cui basta lo spostamento più
+   * piccolo (di fianco, oppure uno sopra e uno sotto). Chi sta parlando resta
+   * fermo e si sposta solo l'altro.
    */
   private separateAgents(): void {
-    const min = BaseLabScene.AGENT_MIN_DISTANCE;
     const cam = this.cameras.main;
     const frozen = (agent: Agent) => this.stagedAgents.includes(agent);
+    const halfW = (agent: Agent) => agent.displayWidth * BaseLabScene.AGENT_BODY_HALF_WIDTH;
+    const halfH = (agent: Agent) => agent.displayHeight * BaseLabScene.AGENT_BODY_HALF_HEIGHT;
     for (let i = 0; i < this.agents.length; i++) {
       for (let j = i + 1; j < this.agents.length; j++) {
         const a = this.agents[i];
         const b = this.agents[j];
         if (!a || !b) continue;
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance >= min) continue;
-        if (distance < 0.5) {
-          // stessa posizione: una direzione fissa per la coppia, così non oscillano
-          const angle = ((i * 7 + j * 13) % 12) * (Math.PI / 6);
-          dx = Math.cos(angle);
-          dy = Math.sin(angle);
-          distance = 1;
-        }
-        const push = (min - distance);
-        const ux = dx / distance;
-        const uy = dy / distance;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const overlapX = halfW(a) + halfW(b) - Math.abs(dx);
+        const overlapY = halfH(a) + halfH(b) - Math.abs(dy);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+
+        // quanto si può spostare ciascuno: chi parla resta dov'è
         const shareA = frozen(a) && !frozen(b) ? 0 : frozen(b) && !frozen(a) ? 1 : 0.5;
-        a.x -= ux * push * shareA;
-        a.y -= uy * push * shareA;
-        b.x += ux * push * (1 - shareA);
-        b.y += uy * push * (1 - shareA);
+        if (overlapX <= overlapY) {
+          // stessa colonna: una direzione fissa per la coppia, così non oscillano
+          const dir = dx !== 0 ? Math.sign(dx) : ((i + j) % 2 === 0 ? 1 : -1);
+          a.x -= dir * overlapX * shareA;
+          b.x += dir * overlapX * (1 - shareA);
+        } else {
+          const dir = dy !== 0 ? Math.sign(dy) : ((i + j) % 2 === 0 ? 1 : -1);
+          a.y -= dir * overlapY * shareA;
+          b.y += dir * overlapY * (1 - shareA);
+        }
         // restano dentro la scena
         for (const agent of [a, b]) {
           agent.x = Phaser.Math.Clamp(agent.x, 40, cam.width - 40);

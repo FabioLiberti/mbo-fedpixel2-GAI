@@ -148,6 +148,9 @@ def test_controller_applies_the_agents_decision():
         decision = controller.fl_decisions[0]
         assert decision["round"] == 5
         assert len(decision["proposals"]) == 3                       # one agent per lab
+        # who was asked is recorded too, so that an abstention can be shown
+        assert [p["agent"] for p in decision["proposers"]] == [p["agent"] for p in decision["proposals"]]
+        assert {p["lab_id"] for p in decision["proposers"]} == {"mercatorum", "blekinge", "opbg"}
         assert {p["lab_id"] for p in decision["proposals"]} == {"mercatorum", "blekinge", "opbg"}
         assert all(p["from_llm"] is False for p in decision["proposals"])   # LLM is off
         assert decision["option"] == "noise_down" and decision["changed"]

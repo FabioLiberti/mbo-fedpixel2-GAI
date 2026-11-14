@@ -11,6 +11,7 @@
 // nessuno ha usato per addestrare.
 
 import React, { useState } from 'react';
+import { LABS } from './federationTheme';
 
 interface StripProps {
   backendSimData?: any;
@@ -19,12 +20,6 @@ interface StripProps {
   /** Laboratorio in cui ci si trova (null sulla mappa generale) */
   currentLabId: string | null;
 }
-
-const LABS: Array<{ id: string; label: string; color: string }> = [
-  { id: 'mercatorum', label: 'Mercatorum', color: '#e0a030' },
-  { id: 'blekinge',   label: 'Blekinge',   color: '#4f9be8' },
-  { id: 'opbg',       label: 'OPBG',       color: '#45b97c' },
-];
 
 // Fase del round, come la comunica il backend
 const PHASES: Record<string, { label: string; detail: string }> = {
