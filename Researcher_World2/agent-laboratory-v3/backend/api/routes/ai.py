@@ -139,11 +139,13 @@ async def generate_dialog(request: DialogGenerationRequest, connector: LLMConnec
         # Log per debugging
         logger.info(f"Generated LLM dialog for agent {request.agentId}: {dialog[:30]}...")
         
+        # La fonte dichiarata è quella reale: un testo di ripiego non è "llm"
+        from_model = not connector.is_fallback(dialog)
         return {
             "dialog": dialog,
-            "isLLMGenerated": True,
-            "source": "llm",  # Aggiunto campo per identificare chiaramente la fonte
-            "model": connector.model  # Aggiunto nome del modello
+            "isLLMGenerated": from_model,
+            "source": "llm" if from_model else "fallback",
+            "model": connector.model if from_model else None
         }
     
     except Exception as e:
@@ -231,7 +233,10 @@ async def generate_thinking(request: ThinkingRequest, connector: LLMConnector = 
             context=context,
             current_situation=situation
         )
-        return {"thinking": dialog, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+        from_model = not connector.is_fallback(dialog)
+        return {"thinking": dialog, "isLLMGenerated": from_model,
+                "source": "llm" if from_model else "fallback",
+                "model": connector.model if from_model else None}
     except Exception as e:
         logger.error(f"Error generating thinking: {e}")
         return {
@@ -258,7 +263,10 @@ async def generate_decision(request: DecisionRequest, connector: LLMConnector = 
             available_options=["FedAvg", "FedProx", "FedSGD"]
         )
         decision_text = result.get("decision", str(result)) if isinstance(result, dict) else str(result)
-        return {"decision": decision_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+        from_model = not connector.is_fallback(decision_text)
+        return {"decision": decision_text, "isLLMGenerated": from_model,
+                "source": "llm" if from_model else "fallback",
+                "model": connector.model if from_model else None}
     except Exception as e:
         logger.error(f"Error generating decision: {e}")
         return {
@@ -289,7 +297,10 @@ async def generate_plan(request: PlanRequest, connector: LLMConnector = Depends(
             goal=goal
         )
         plan_text = result.get("plan", str(result)) if isinstance(result, dict) else str(result)
-        return {"plan": plan_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+        from_model = not connector.is_fallback(plan_text)
+        return {"plan": plan_text, "isLLMGenerated": from_model,
+                "source": "llm" if from_model else "fallback",
+                "model": connector.model if from_model else None}
     except Exception as e:
         logger.error(f"Error generating plan: {e}")
         return {
@@ -320,7 +331,10 @@ async def generate_reaction(request: ReactionRequest, connector: LLMConnector = 
             event_description=event_desc
         )
         reaction_text = result.get("reaction", str(result)) if isinstance(result, dict) else str(result)
-        return {"reaction": reaction_text, "isLLMGenerated": True, "source": "llm", "model": connector.model}
+        from_model = not connector.is_fallback(reaction_text)
+        return {"reaction": reaction_text, "isLLMGenerated": from_model,
+                "source": "llm" if from_model else "fallback",
+                "model": connector.model if from_model else None}
     except Exception as e:
         logger.error(f"Error generating reaction: {e}")
         return {
