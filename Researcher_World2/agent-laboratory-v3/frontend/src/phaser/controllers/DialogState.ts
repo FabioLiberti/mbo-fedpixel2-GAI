@@ -58,7 +58,7 @@ export class DialogState {
 
   // LLM check throttle
   lastLLMCheck = 0;
-  readonly LLM_CHECK_INTERVAL = 60_000;
+  readonly LLM_CHECK_INTERVAL = 4_000;
 
   // Counters
   cognitiveProcessCounter = 0;

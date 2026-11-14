@@ -21,8 +21,14 @@ export class DialogController implements DialogCreator {
     this.renderer = new DialogRenderer(this.state);
     this.eventHandler = new DialogEventHandler(this.state, this.renderer, this);
 
-    // Kick-off
+    // Kick-off. Lo stato del modello viene riletto periodicamente, così
+    // accendere o spegnere l'interruttore LLM ha effetto entro pochi secondi
+    // (il timer appartiene alla scena e viene rimosso alla sua chiusura).
     this.state.checkLLMAvailability();
+    scene.time.addEvent({
+      delay: 5000, loop: true,
+      callback: () => { this.state.checkLLMAvailability(); },
+    });
     this.eventHandler.registerEvents();
   }
 
@@ -97,6 +103,9 @@ export class DialogController implements DialogCreator {
   resetDialogStatistics() { this.state.resetDialogStatistics(); }
   setDebugMode(enabled: boolean) { this.state.setDebugMode(enabled); }
 
+  /** True se l'agente sta mostrando un box o ne ha uno in attesa. */
+  isAgentBusy(agentId: string): boolean { return this.renderer.isAgentBusy(agentId); }
+
   removeBubble(agentId: string) { this.renderer.removeBubble(agentId); }
   removeAllBubbles() { this.renderer.removeAllBubbles(); }
 
@@ -105,9 +114,8 @@ export class DialogController implements DialogCreator {
   // ── Cleanup ───────────────────────────────────────────────────────
 
   destroy(): void {
-    this.state.activeBubbles.forEach((b) => b.destroy());
+    this.renderer.removeAllBubbles();
     this.eventHandler.unregisterEvents();
-    this.state.activeBubbles.clear();
     this.state.dialogQueue = [];
     this.state.isProcessingQueue = false;
     this.state.dialogSources.clear();

@@ -23,68 +23,164 @@ export class DialogRenderer {
   }
 
   // ── Queue processing ──────────────────────────────────────────────
+  //
+  // Ogni agente mostra al massimo un box alla volta. Un dialogo che arriva
+  // mentre il suo agente ne sta già mostrando uno aspetta in un unico posto
+  // per agente (il più recente sostituisce il precedente): così non si
+  // accumula mai un arretrato di testi ormai vecchi. Agenti diversi possono
+  // parlare contemporaneamente.
+
+  /** Dialogo in attesa per ciascun agente (al massimo uno). */
+  private pendingByAgent: Map<string, DialogConfig> = new Map();
+  /** Priorità del box attualmente mostrato da ciascun agente. */
+  private activePriority: Map<string, number> = new Map();
+  /** Timer che chiude il box di ciascun agente. */
+  private activeTimers: Map<string, Phaser.Time.TimerEvent> = new Map();
+  /** Spostamento del box rispetto alla posizione standard sopra l'agente. */
+  private bubbleOffset: Map<string, { dx: number; lift: number }> = new Map();
+  private lastOverlapCheck = 0;
+
+  private static readonly BASE_OFFSET_Y = 40;
+  /** Posizioni provate, in ordine, finché il box non copre più un altro box. */
+  private static readonly PLACEMENTS: Array<{ dx: number; lift: number }> = [
+    { dx: 0, lift: 0 }, { dx: 0, lift: 70 }, { dx: 0, lift: 140 },
+    { dx: -160, lift: 0 }, { dx: 160, lift: 0 },
+    { dx: -160, lift: 70 }, { dx: 160, lift: 70 },
+    { dx: 0, lift: -150 },
+  ];
 
   processDialogQueue(): void {
     const s = this.state;
-    if (s.dialogQueue.length === 0) {
-      s.isProcessingQueue = false;
-      return;
-    }
-
     s.isProcessingQueue = true;
-
-    // Sort by priority (highest first)
-    s.dialogQueue.sort((a, b) => {
-      const pa = a.priority ?? 5;
-      const pb = b.priority ?? 5;
-      return pb - pa;
-    });
-
-    const dialog = s.dialogQueue.shift();
-    if (!dialog) {
-      s.isProcessingQueue = false;
-      return;
+    while (s.dialogQueue.length > 0) {
+      const dialog = s.dialogQueue.shift();
+      if (dialog) this.submit(dialog);
     }
+    s.isProcessingQueue = false;
+  }
 
-    const sourcePosition = this.getAgentPosition(dialog.sourceId);
+  /** True se l'agente sta mostrando un box o ne ha uno in attesa. */
+  isAgentBusy(agentId: string): boolean {
+    return this.state.activeBubbles.has(agentId) || this.pendingByAgent.has(agentId);
+  }
 
-    if (!sourcePosition && dialog.sourceId.startsWith('cognitive_')) {
-      const center = {
-        x: this.scene.cameras.main.centerX,
-        y: this.scene.cameras.main.centerY,
-      };
-      this.showCognitiveProcess(dialog, center, null);
-    } else if (!sourcePosition) {
-      console.warn(`[DialogRenderer] Agent not found: ${dialog.sourceId}`);
-      this.processDialogQueue();
-      return;
-    } else {
-      let targetPosition: { x: number; y: number } | null = null;
-      if (dialog.targetId) {
-        targetPosition = this.getAgentPosition(dialog.targetId);
-        if (!targetPosition && s.debugMode) {
-          console.warn(`[DialogRenderer] Target agent not found: ${dialog.targetId}`);
-        }
-      }
+  private submit(dialog: DialogConfig): void {
+    const id = dialog.sourceId;
+    const priority = dialog.priority ?? 5;
 
-      if (dialog.cognitiveType) {
-        this.showCognitiveProcess(dialog, sourcePosition, targetPosition);
+    if (this.state.activeBubbles.has(id)) {
+      const current = this.activePriority.get(id) ?? 5;
+      if (priority > current) {
+        // Un dialogo più importante (es. una battuta a un collega) prende
+        // subito il posto di un pensiero
+        this.removeBubble(id);
+        this.display(dialog);
       } else {
-        this.showSpeechBubble(dialog, sourcePosition, targetPosition);
+        const waiting = this.pendingByAgent.get(id);
+        if (!waiting || priority >= (waiting.priority ?? 5)) this.pendingByAgent.set(id, dialog);
       }
+      return;
+    }
+    this.display(dialog);
+  }
 
-      if (dialog.showEffect) {
-        this.showDialogEffect(dialog.type, sourcePosition, targetPosition);
-      }
+  private display(dialog: DialogConfig): void {
+    const s = this.state;
+    const id = dialog.sourceId;
+    const isSystem = id.startsWith('cognitive_');
+    const sourcePosition = this.getAgentPosition(id);
+
+    if (!sourcePosition) {
+      if (s.debugMode) console.warn(`[DialogRenderer] Agent not found: ${id}`);
+      return;
     }
 
-    const duration = dialog.duration || Math.min(8000 + dialog.text.length * 50, 18000);
+    let targetPosition: { x: number; y: number } | null = null;
+    if (dialog.targetId) targetPosition = this.getAgentPosition(dialog.targetId);
 
-    this.scene.time.delayedCall(duration, () => {
-      this.removeBubble(dialog.sourceId);
+    if (dialog.cognitiveType || isSystem) {
+      this.showCognitiveProcess(dialog, sourcePosition, targetPosition);
+    } else {
+      this.showSpeechBubble(dialog, sourcePosition, targetPosition);
+    }
+    if (!s.activeBubbles.has(id)) return; // la creazione del box è fallita
+
+    if (!isSystem) this.placeWithoutOverlap(id, sourcePosition);
+    this.activePriority.set(id, dialog.priority ?? 5);
+
+    if (dialog.showEffect && !isSystem) {
+      this.showDialogEffect(dialog.type, sourcePosition, targetPosition);
+    }
+
+    const defaultDuration = dialog.cognitiveType
+      ? Math.min(4000 + dialog.text.length * 40, 9000)
+      : Math.min(8000 + dialog.text.length * 50, 18000);
+    const duration = dialog.duration || defaultDuration;
+
+    const timer = this.scene.time.delayedCall(duration, () => {
+      this.activeTimers.delete(id);
+      this.removeBubble(id);
       if (dialog.callback) dialog.callback();
-      this.scene.time.delayedCall(300, () => this.processDialogQueue());
+      const next = this.pendingByAgent.get(id);
+      if (next) {
+        this.pendingByAgent.delete(id);
+        this.scene.time.delayedCall(300, () => this.submit(next));
+      }
     });
+    this.activeTimers.set(id, timer);
+  }
+
+  /** Ingombro a schermo di un box (riquadro del testo più il margine del fondo). */
+  private boundsOf(bubble: any): Phaser.Geom.Rectangle | null {
+    try {
+      const node = bubble?.container ?? bubble?.bubble;
+      if (!node || typeof node.getBounds !== 'function') return null;
+      const b: Phaser.Geom.Rectangle = node.getBounds();
+      if (!b || b.width <= 0 || b.height <= 0) return null;
+      return new Phaser.Geom.Rectangle(b.x - 12, b.y - 12, b.width + 24, b.height + 24);
+    } catch {
+      return null;
+    }
+  }
+
+  /** True se il box dell'agente copre, anche in parte, quello di un altro agente. */
+  private overlapsAnother(agentId: string): boolean {
+    const mine = this.boundsOf(this.state.activeBubbles.get(agentId));
+    if (!mine) return false;
+    let hit = false;
+    this.state.activeBubbles.forEach((other, otherId) => {
+      if (hit || otherId === agentId) return;
+      const theirs = this.boundsOf(other);
+      if (theirs && Phaser.Geom.Rectangle.Overlaps(mine, theirs)) hit = true;
+    });
+    return hit;
+  }
+
+  /**
+   * Posiziona il box dell'agente provando, in ordine, più in alto, di lato e
+   * infine sotto, finché non copre più il box di un altro agente.
+   */
+  private placeWithoutOverlap(agentId: string, pos: { x: number; y: number }): void {
+    const bubble = this.state.activeBubbles.get(agentId);
+    if (!bubble || !bubble.updatePosition) return;
+    const top = this.scene.cameras.main.worldView.y;
+
+    for (const placement of DialogRenderer.PLACEMENTS) {
+      bubble.updatePosition(pos.x + placement.dx, pos.y - DialogRenderer.BASE_OFFSET_Y - placement.lift);
+      const mine = this.boundsOf(bubble);
+      const insideView = !mine || mine.y >= top;
+      // Il box non deve coprire nemmeno l'agente che sta parlando
+      const speaker = new Phaser.Geom.Rectangle(pos.x - 18, pos.y - 26, 36, 52);
+      const coversSpeaker = !!mine && Phaser.Geom.Rectangle.Overlaps(mine, speaker);
+      if (insideView && !coversSpeaker && !this.overlapsAnother(agentId)) {
+        this.bubbleOffset.set(agentId, placement);
+        return;
+      }
+    }
+    // Nessuna posizione libera: resta quella standard
+    const standard = DialogRenderer.PLACEMENTS[0];
+    bubble.updatePosition(pos.x, pos.y - DialogRenderer.BASE_OFFSET_Y);
+    this.bubbleOffset.set(agentId, standard);
   }
 
   // ── Cognitive process bubble ──────────────────────────────────────
@@ -143,10 +239,8 @@ export class DialogRenderer {
     if (s.activeBubbles.has(dialog.sourceId)) this.removeBubble(dialog.sourceId);
 
     try {
-      // Offset response bubbles higher to avoid overlapping with question bubble
-      const yOffset = dialog.isResponse ? -80 : -40;
       const bubble = new SpeechBubble(
-        this.scene, sourcePos.x, sourcePos.y + yOffset, dialog.text, dialog.type, {
+        this.scene, sourcePos.x, sourcePos.y - DialogRenderer.BASE_OFFSET_Y, dialog.text, dialog.type, {
           width: 130, padding: 6,
           targetPos: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
           isLLMDialog: dialog.isLLMDialog || false,
@@ -180,6 +274,11 @@ export class DialogRenderer {
   }
 
   removeBubble(agentId: string): void {
+    const timer = this.activeTimers.get(agentId);
+    if (timer) { timer.remove(false); this.activeTimers.delete(agentId); }
+    this.activePriority.delete(agentId);
+    this.bubbleOffset.delete(agentId);
+
     const bubble = this.state.activeBubbles.get(agentId);
     if (bubble) {
       bubble.destroy();
@@ -190,6 +289,11 @@ export class DialogRenderer {
   }
 
   removeAllBubbles(): void {
+    this.activeTimers.forEach((timer) => timer.remove(false));
+    this.activeTimers.clear();
+    this.activePriority.clear();
+    this.bubbleOffset.clear();
+    this.pendingByAgent.clear();
     this.state.activeBubbles.forEach((b) => b.destroy());
     this.state.activeBubbles.clear();
     this.state.dialogQueue = [];
@@ -218,14 +322,26 @@ export class DialogRenderer {
     return null;
   }
 
-  update(_time: number, _delta: number): void {
+  update(time: number, _delta: number): void {
     this.state.activeBubbles.forEach((bubble, agentId) => {
       if (agentId.startsWith('cognitive_')) return;
       const pos = this.getAgentPosition(agentId);
       if (pos && bubble.updatePosition) {
-        bubble.updatePosition(pos.x, pos.y - 40);
+        const offset = this.bubbleOffset.get(agentId) ?? DialogRenderer.PLACEMENTS[0];
+        bubble.updatePosition(pos.x + offset.dx, pos.y - DialogRenderer.BASE_OFFSET_Y - offset.lift);
       }
     });
+
+    // Gli agenti si muovono: ogni tanto si ricontrolla che un box non sia
+    // finito sopra un altro, e in tal caso lo si riposiziona
+    if (time - this.lastOverlapCheck > 300) {
+      this.lastOverlapCheck = time;
+      this.state.activeBubbles.forEach((_bubble, agentId) => {
+        if (agentId.startsWith('cognitive_') || !this.overlapsAnother(agentId)) return;
+        const pos = this.getAgentPosition(agentId);
+        if (pos) this.placeWithoutOverlap(agentId, pos);
+      });
+    }
   }
 
   // ── Visual effects ────────────────────────────────────────────────

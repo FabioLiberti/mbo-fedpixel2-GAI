@@ -14,6 +14,7 @@ import type { DialogRenderer } from './DialogRenderer';
 export interface DialogCreator {
   createDialog(config: DialogConfig): void;
   createCognitiveProcess(config: DialogConfig): void;
+  isAgentBusy(agentId: string): boolean;
 }
 
 export class DialogEventHandler {
@@ -403,6 +404,10 @@ export class DialogEventHandler {
     // intentionally empty — see handleBackendAgentDialog
   }
 
+  /** Ultimo istante in cui un testo preimpostato del backend è stato mostrato, per agente. */
+  private lastBackendBubbleAt: Map<string, number> = new Map();
+  private static readonly BACKEND_BUBBLE_MIN_GAP_MS = 12000;
+
   // ── Backend-broadcast dialog -> thought bubble (unified LLM source) ──
   // The backend agent's real cognitive-cycle dialog (broadcast in the
   // simulation state) is shown as a bubble on the matching sprite. No extra
@@ -412,7 +417,21 @@ export class DialogEventHandler {
       if (!data?.name || !data?.text) return;
       const id = this.state.getAgentIdByName(data.name);
       if (!id) return;
-      const { processedText, processType } = this.analyzeText(data.text);
+
+      // Il backend aggiorna lo stato degli agenti più volte al secondo: i
+      // testi preimpostati vengono mostrati con parsimonia (uno ogni tanto per
+      // agente, e solo se l'agente non sta già mostrando altro). I testi
+      // generati dal modello passano sempre.
+      if (!data.isLlm) {
+        const now = Date.now();
+        const last = this.lastBackendBubbleAt.get(id) ?? 0;
+        if (now - last < DialogEventHandler.BACKEND_BUBBLE_MIN_GAP_MS) return;
+        if (this.creator.isAgentBusy(id)) return;
+        this.lastBackendBubbleAt.set(id, now);
+      }
+      const { processedText: rawText, processType } = this.analyzeText(data.text);
+      const processedText = data.isLlm ? rawText : this.tidyPresetText(rawText);
+      if (!processedText) return;
       this.creator.createCognitiveProcess({
         sourceId: id, type: DialogType.RESEARCH, text: processedText,
         cognitiveType: processType || CognitiveProcessType.THINKING,
@@ -422,6 +441,22 @@ export class DialogEventHandler {
     } catch (e) {
       console.error('[DialogEventHandler] handleBackendAgentDialog error:', e);
     }
+  }
+
+  /**
+   * I testi preimpostati del backend sono descrizioni interne dell'attività,
+   * con annotazioni di servizio come "(step 12)" o "(insight: ...)" e
+   * identificativi con il trattino basso. Qui diventano una frase leggibile.
+   */
+  private tidyPresetText(text: string): string {
+    let t = text
+      .replace(/\s*\((?:step|insight)\b[^)]*\)?/gi, '')  // annotazioni, anche troncate
+      .replace(/_/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    if (!t) return '';
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+    return t;
   }
 
   // ── Agent decision ────────────────────────────────────────────────

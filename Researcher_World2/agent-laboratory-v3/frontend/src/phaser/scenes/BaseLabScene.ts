@@ -17,6 +17,7 @@ import { DialogEventTracker } from '../controllers/DialogEventTracker';
 import { debugTextures, debugTextureKey } from '../utils/textureDebugHelper';
 import { generateTilesetCanvas, TilesetTheme, TILE } from '../utils/tilesetGenerator';
 import { DialogAnalytics } from '../controllers/DialogAnalytics';
+import { FLDialogType, CognitiveProcessType } from '../types/DialogTypes';
 
 /**
  * Interfaccia per i dati di interazione tra agenti
@@ -123,6 +124,14 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Cooldown per state icons (agentId → next allowed timestamp)
   private zoneIconCooldowns: Map<string, number> = new Map();
 
+  // Freno alle interazioni di prossimità: una coppia di agenti a contatto può
+  // avviare un'interazione al più una volta ogni PAIR_INTERACTION_COOLDOWN_MS,
+  // e nella scena ne parte al più una ogni SCENE_INTERACTION_GAP_MS
+  private static readonly PAIR_INTERACTION_COOLDOWN_MS = 20000;
+  private static readonly SCENE_INTERACTION_GAP_MS = 5000;
+  private pairInteractionCooldowns: Map<string, number> = new Map();
+  private nextSceneInteractionAt: number = 0;
+
   // Listener registrati da questa scena sull'emettitore globale del gioco:
   // vengono rimossi uno per uno alla chiusura della scena (vedi teardownScene)
   private gameEventListeners: Array<[string, (...args: any[]) => void]> = [];
@@ -209,6 +218,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
     // Stato che non deve sopravvivere al prossimo ingresso nella scena
     this.zoneIconCooldowns.clear();
+    this.pairInteractionCooldowns.clear();
+    this.nextSceneInteractionAt = 0;
     this.isZoomed = false;
     this.zoomBackBtn = null;
   }
@@ -349,6 +360,9 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.agents.forEach(agent => {
       if (agent && typeof agent.update === 'function') agent.update(time, delta);
     });
+    // I box dei dialoghi seguono gli agenti mentre si muovono
+    const dialogs = this.agentController?.getDialogController();
+    if (dialogs) dialogs.update(time, delta);
   }
 
   protected checkInteractions(): void {
@@ -377,7 +391,19 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
-    if (Math.random() < 0.3) {
+    // Questo metodo viene chiamato a ogni fotogramma finché due agenti sono a
+    // contatto: senza freno la stessa coppia avvierebbe decine di interazioni
+    // al secondo.
+    const now = this.time.now;
+    const pairKey = [agent1.getId(), agent2.getId()].sort().join('|');
+    if ((this.pairInteractionCooldowns.get(pairKey) ?? 0) > now) return;
+    if (now < this.nextSceneInteractionAt) return;
+
+    // La coppia entra in pausa anche se il sorteggio non avvia nulla, così il
+    // sorteggio non viene ripetuto a ogni fotogramma
+    this.pairInteractionCooldowns.set(pairKey, now + BaseLabScene.PAIR_INTERACTION_COOLDOWN_MS);
+    if (Math.random() < 0.8) {
+      this.nextSceneInteractionAt = now + BaseLabScene.SCENE_INTERACTION_GAP_MS;
       this.game.events.emit('agent-interaction', {
         agentId1: agent1.getId(), agentId2: agent2.getId(), type: 'proximity'
       });
@@ -464,12 +490,13 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const t = this.add.text(agent.x, startY, icon, { fontSize: '22px' });
       t.setOrigin(0.5).setDepth(100).setAlpha(1);
 
+      // L'icona sparisce prima che compaia la frase, così non si sovrappongono
       this.tweens.add({
         targets: t,
         alpha: 0,
-        y: startY - 20,
-        delay: 2000,
-        duration: 1500,
+        y: startY - 6,
+        delay: 500,
+        duration: 600,
         ease: 'Power1',
         onComplete: () => t.destroy(),
       });
@@ -490,18 +517,15 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
               speakerId: agent.getId(), text: phrase,
               category: 'state_phrase', isLLM: false,
             });
-            const bubble = this.add.text(agent.x, agent.y - 52, phrase, {
-              fontSize: '8px', fontFamily: 'Arial',
-              color: '#ffffff', backgroundColor: '#000000aa',
-              padding: { left: 5, right: 5, top: 3, bottom: 3 },
-            }).setOrigin(0.5, 1).setDepth(101).setAlpha(0);
-
-            this.tweens.add({
-              targets: bubble, alpha: 1, duration: 300, ease: 'Power1',
-            });
-            this.tweens.add({
-              targets: bubble, alpha: 0, delay: 3500, duration: 1000, ease: 'Power1',
-              onComplete: () => bubble.destroy(),
+            // La frase passa dallo stesso sistema di box degli altri dialoghi
+            // (un box per agente, che lo segue): niente più testo disegnato a
+            // parte. Se l'agente sta già mostrando qualcosa, la frase si salta.
+            const dialogs = this.agentController?.getDialogController();
+            if (!dialogs || !agent.scene || dialogs.isAgentBusy(agent.getId())) return;
+            dialogs.createCognitiveProcess({
+              sourceId: agent.getId(), type: FLDialogType.GENERAL, text: phrase,
+              cognitiveType: CognitiveProcessType.THINKING,
+              isLLMDialog: false, priority: 2, duration: 4500,
             });
           });
         }
@@ -945,14 +969,17 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
       const check = async () => {
         if (!label.scene) return; // scene was destroyed
         try {
-          const resp = await fetch('http://localhost:8091/ai/status', { signal: AbortSignal.timeout(3000) });
+          // Stato reale: interruttore LLM dell'interfaccia e raggiungibilità di Ollama
+          const resp = await fetch('http://localhost:8091/llm/status', { signal: AbortSignal.timeout(6000) });
           if (!label.scene) return;
           if (resp.ok) {
             const data = await resp.json();
-            if (data.available) {
+            if (data.llm_enabled && data.ollama_reachable) {
               drawDot(0x44cc44); label.setText('LLM attivo'); label.setColor('#44cc44');
+            } else if (data.llm_enabled) {
+              drawDot(0xcc4444); label.setText('LLM non raggiungibile'); label.setColor('#cc4444');
             } else {
-              drawDot(0xcccc00); label.setText('Preset'); label.setColor('#cccc00');
+              drawDot(0xcccc00); label.setText('Dialoghi preimpostati'); label.setColor('#cccc00');
             }
           } else {
             drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');

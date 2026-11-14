@@ -382,15 +382,22 @@ export const api = {
   },
 
   // Verifica se il servizio LLM è disponibile
+  // Il modello è "disponibile" per il gioco solo se l'interruttore LLM
+  // dell'interfaccia è acceso E Ollama risponde. Prima contava solo Ollama:
+  // con l'interruttore spento il gioco chiamava comunque il modello.
   checkLLMAvailability: async () => {
     try {
-      const url = `${API_BASE_URL}/ai/status`;
-      console.log(`Checking LLM availability: ${url}`);
+      const url = `${API_BASE_URL}/llm/status`;
       const response = await fetch(url);
       if (!response.ok) {
         return { available: false };
       }
-      return await response.json();
+      const status = await response.json();
+      return {
+        available: Boolean(status.llm_enabled && status.ollama_reachable),
+        enabled: Boolean(status.llm_enabled),
+        reachable: Boolean(status.ollama_reachable),
+      };
     } catch (error) {
       console.error('API error:', error);
       return { available: false };

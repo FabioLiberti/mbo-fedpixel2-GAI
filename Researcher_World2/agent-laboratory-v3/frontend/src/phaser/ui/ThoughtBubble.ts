@@ -70,6 +70,10 @@ export class ThoughtBubble {
     }
 
     this.bubble = this.createBubble(fillColor, border);
+
+    // Sopra etichette delle stanze e arredi, come i fumetti dei dialoghi
+
+    this.bubble.setDepth(1000);
     this.scene.add.existing(this.bubble);
 
     if (this.isLLMGenerated) {
