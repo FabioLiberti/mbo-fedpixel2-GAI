@@ -60,6 +60,10 @@ function App() {
   const [flBestAccuracy, setFlBestAccuracy] = useState<number>(0);
   const [flNextRoundIn, setFlNextRoundIn] = useState<number>(0);
   const [flEpsilonSpent, setFlEpsilonSpent] = useState<number | null>(null);
+  // FL guidato dagli agenti: parametri correnti, decisioni prese e loro effetto
+  const [flParams, setFlParams] = useState<{ noise_multiplier: number; local_epochs: number } | null>(null);
+  const [flDecisions, setFlDecisions] = useState<any[]>([]);
+  const [flNextDecisionAt, setFlNextDecisionAt] = useState<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   // Nuovo stato per la documentazione
   const [showDocumentation, setShowDocumentation] = useState<boolean>(false);
@@ -134,6 +138,9 @@ function App() {
       );
       setFlNextRoundIn(Number(fl.seconds_to_next_round ?? 0));
       setFlEpsilonSpent(fl.dp?.enabled ? Number(fl.dp.epsilon_spent ?? 0) : null);
+      setFlParams(fl.params ?? null);
+      setFlDecisions(Array.isArray(fl.decisions) ? fl.decisions : []);
+      setFlNextDecisionAt(fl.guidance?.enabled ? Number(fl.guidance.next_at_round) : null);
     }
   }, []);
 
@@ -618,6 +625,77 @@ function App() {
                 )}
               </div>
               
+              {/* FL guidato dagli agenti: cosa hanno proposto, cosa è stato deciso, che effetto ha avuto */}
+              {simStatus !== 'stopped' && flParams && (
+                <div className="controls-group">
+                  <h3>Decisioni degli agenti sul FL</h3>
+                  <div className="stats-container">
+                    <div className="stat-item">
+                      <span className="stat-label">Rumore di privacy:</span>
+                      <span className="stat-value">{Number(flParams.noise_multiplier).toFixed(2)}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Epoche locali:</span>
+                      <span className="stat-value">{flParams.local_epochs}</span>
+                    </div>
+                    {flNextDecisionAt !== null && (
+                      <div className="stat-item">
+                        <span className="stat-label">Prossima decisione:</span>
+                        <span className="stat-value">al round {flNextDecisionAt}</span>
+                      </div>
+                    )}
+                    {flDecisions.length === 0 && (
+                      <p style={{ color: '#888', fontStyle: 'italic', margin: '8px 0 0', fontSize: '0.85em' }}>
+                        Gli agenti non hanno ancora deciso nulla.
+                      </p>
+                    )}
+                    {[...flDecisions].reverse().slice(0, 3).map((d: any) => (
+                      <div
+                        key={d.round}
+                        style={{
+                          marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: '0.85em',
+                          background: d.changed ? '#fff4ec' : '#f1f1f1',
+                          borderLeft: `3px solid ${d.changed ? '#d9733a' : '#aaa'}`, textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          Round {d.round}: {d.changed ? d.option_text : 'nessuna modifica'}
+                        </div>
+                        {d.changed && (
+                          <div>
+                            {d.before.noise !== d.after.noise
+                              ? `rumore ${Number(d.before.noise).toFixed(2)} → ${Number(d.after.noise).toFixed(2)}`
+                              : `epoche ${d.before.epochs} → ${d.after.epochs}`}
+                            {d.applied_at_round !== d.round ? ` (applicata al round ${d.applied_at_round})` : ''}
+                          </div>
+                        )}
+                        <div style={{ color: '#555' }}>
+                          Accuracy media: {Math.round(d.accuracy_before * 100)}% prima,{' '}
+                          {d.accuracy_after !== null && d.accuracy_after !== undefined
+                            ? `${Math.round(d.accuracy_after * 100)}% dopo`
+                            : 'effetto in misurazione'}
+                        </div>
+                        {(d.proposals || []).map((p: any) => (
+                          <div key={p.agent} style={{ marginTop: 5, color: '#333' }}>
+                            <strong>{p.agent}</strong>{' '}
+                            <span
+                              title={p.from_llm ? 'Proposta scritta dal modello' : 'Proposta da regola preimpostata'}
+                              style={{
+                                fontSize: '0.8em', padding: '0 4px', borderRadius: 3, color: '#fff',
+                                background: p.from_llm ? '#3b6fd4' : '#999',
+                              }}
+                            >
+                              {p.from_llm ? 'AI' : 'regola'}
+                            </span>{' '}
+                            {p.option_text}: <em>{p.reason}</em>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Pulsante di debug e info */}
               <div className="controls-group">
                 <h3>Debug</h3>

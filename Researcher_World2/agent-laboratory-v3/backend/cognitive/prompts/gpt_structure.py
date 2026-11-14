@@ -14,6 +14,7 @@ import time
 import hashlib
 import os
 import logging
+import threading
 from threading import Lock
 
 import numpy as np
@@ -130,6 +131,71 @@ class OllamaService:
 # Module-level singleton instance
 _service = OllamaService()
 
+# ============================================================================
+# One LLM call at a time, urgent callers first
+# ============================================================================
+
+class _PriorityGate:
+    """Lets one LLM call through at a time; callers marked urgent go first.
+
+    The local model answers one request at a time anyway: sending many at once
+    only makes them wait inside Ollama, where a long queue turns into client
+    timeouts. Waiting here instead costs nothing, and lets the few calls that
+    drive the federation (proposals and post-round dialogs) go before the many
+    calls of the agents' cognitive cycle.
+    """
+
+    def __init__(self):
+        self._cond = threading.Condition()
+        self._busy = False
+        self._waiting: dict = {}  # priority -> number of callers waiting
+
+    def acquire(self, priority: int):
+        with self._cond:
+            self._waiting[priority] = self._waiting.get(priority, 0) + 1
+            try:
+                while self._busy or any(n > 0 and p > priority for p, n in self._waiting.items()):
+                    self._cond.wait()
+            finally:
+                self._waiting[priority] -= 1
+            self._busy = True
+
+    def release(self):
+        with self._cond:
+            self._busy = False
+            self._cond.notify_all()
+
+
+_llm_gate = _PriorityGate()
+_llm_priority = threading.local()
+
+
+class urgent_llm:
+    """Context manager: LLM calls made inside it (on this thread) go before
+    those with a lower priority (0 is the default of every other call)."""
+
+    def __init__(self, priority: int = 1):
+        self._priority = priority
+
+    def __enter__(self):
+        self._previous = getattr(_llm_priority, "level", 0)
+        _llm_priority.level = self._priority
+        return self
+
+    def __exit__(self, *exc):
+        _llm_priority.level = self._previous
+        return False
+
+
+def _gated(call):
+    """Run an LLM request through the gate, with this thread's priority."""
+    _llm_gate.acquire(getattr(_llm_priority, "level", 0))
+    try:
+        return call()
+    finally:
+        _llm_gate.release()
+
+
 
 def get_and_reset_llm_success() -> bool:
     """Return True if at least one LLM call succeeded since last check, then reset."""
@@ -220,7 +286,7 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
         return "OLLAMA NOT AVAILABLE"
 
     try:
-        response = ol.chat(
+        response = _gated(lambda: ol.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             options={
@@ -232,7 +298,7 @@ def ollama_chat_request(prompt, model=None, temperature=None, max_tokens=None):
                 'num_ctx': _service.num_ctx,
             },
             think=False,
-        )
+        ))
         msg = response.message if hasattr(response, 'message') else response['message']
         content = msg.content if hasattr(msg, 'content') else msg['content']
         result = clean_ollama_response(content)
@@ -261,7 +327,7 @@ def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=Non
         return "OLLAMA NOT AVAILABLE"
 
     try:
-        response = ol.generate(
+        response = _gated(lambda: ol.generate(
             model=model,
             prompt=prompt,
             options={
@@ -273,7 +339,7 @@ def ollama_generate_request(prompt, model=None, temperature=None, max_tokens=Non
                 'num_ctx': _service.num_ctx,
             },
             think=False,
-        )
+        ))
         raw = response.response if hasattr(response, 'response') else response['response']
         result = clean_ollama_response(raw)
         _service.response_cache[cache_key] = result

@@ -83,13 +83,17 @@
     },
     "privacy": {
       "differential_privacy": true,
-      "noise_multiplier": 0.5,
+      "noise_multiplier": 1.0,
       "max_grad_norm": 1.0,
       "epsilon_total": 1000.0,
       "enforce_budget": false,
       "secure_aggregation": true
     },
     "round_interval_seconds": 10,
+    "agent_guidance": {
+      "enabled": true,
+      "every_rounds": 5
+    },
     "stop_on_convergence": false,
     "convergence_patience": 20
   }

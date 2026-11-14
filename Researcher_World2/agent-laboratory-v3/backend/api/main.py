@@ -316,7 +316,8 @@ async def toggle_llm(enabled: bool = True):
     # Adjust cognitive step interval for all agents:
     # LLM on CPU is slow (~25s/call, ~15 calls/cycle), so use high interval
     # to keep simulation responsive. Stubs are instant → use low interval.
-    new_interval = 100 if enabled else 10
+    from cognitive.prompts.run_gpt_prompt import is_cognitive_llm_enabled
+    new_interval = 100 if is_cognitive_llm_enabled() else 10
     if controller.model:
         for agent in controller.model.schedule.agents:
             if hasattr(agent, 'cognitive_step_interval'):

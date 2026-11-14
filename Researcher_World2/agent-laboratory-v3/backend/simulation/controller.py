@@ -90,6 +90,14 @@ class SimulationController:
         self._fl_logic_lock = Lock()
         self._fl_memory_writes: "collections.deque" = collections.deque(maxlen=300)
 
+        # Agent-guided FL: every fl_guidance_every rounds one agent per lab
+        # proposes a change to the FL parameters, the proposals are voted and
+        # the winner is applied (see cognitive/fl_guidance.py)
+        self.fl_guidance_enabled = True
+        self.fl_guidance_every = 5
+        self.fl_decisions: List[Dict[str, Any]] = []
+        self._fl_guidance_turn = 0
+
         # Dialog quality monitor
         self.dialog_monitor = DialogQualityMonitor()
 
@@ -159,6 +167,11 @@ class SimulationController:
             self.fl_round_interval = float(fl_cfg.get("round_interval_seconds", 10.0))
             self._fl_round_started_at = 0.0
             self._fl_phase_started_at = 0.0
+            guidance_cfg = fl_cfg.get("agent_guidance", {})
+            self.fl_guidance_enabled = bool(guidance_cfg.get("enabled", True))
+            self.fl_guidance_every = max(1, int(guidance_cfg.get("every_rounds", 5)))
+            self.fl_decisions = []
+            self._fl_guidance_turn = 0
             self.fl_system = FederatedLearningSystem(
                 algorithm="fedavg",
                 aggregation_rounds=5,
@@ -234,7 +247,7 @@ class SimulationController:
     # FL Event Injection into Agent Memory
     # =========================================================================
 
-    def _inject_fl_event(self, agent, description: str, poignancy: int = 7):
+    def _inject_fl_event(self, agent, description: str, poignancy: int = 7, lasting: bool = False):
         """
         Inject an FL event into an agent's associative memory.
         This allows agents to "remember" FL activities and reflect on them.
@@ -243,7 +256,7 @@ class SimulationController:
             # Called from the FL clock thread: the write is done later by the
             # simulation loop, the only thread that touches agent memories
             self._fl_memory_writes.append(
-                ("event", lambda: self._inject_fl_event(agent, description, poignancy))
+                ("event", lambda: self._inject_fl_event(agent, description, poignancy, lasting))
             )
             return
         try:
@@ -262,9 +275,15 @@ class SimulationController:
             embedding_pair = (description, embedding)
 
             # Add to associative memory
+            # A lasting memory does not expire with simulated time (which runs
+            # days per minute): it is given up only for lack of room, and last
+            expiration = None
+            if lasting and agent.scratch.curr_time:
+                expiration = agent.scratch.curr_time + datetime.timedelta(days=3650)
+
             agent.a_mem.add_event(
                 agent.scratch.curr_time,  # created
-                None,                      # expiration
+                expiration,                # None = computed from the importance
                 s, p, o,
                 f"{s} {p} {o}",           # full description
                 keywords,
@@ -695,7 +714,8 @@ class SimulationController:
         remaining = self.fl_round_interval - (time.monotonic() - self._fl_round_started_at)
         return round(max(0.0, remaining), 1)
 
-    def _generate_fl_dialogs(self, kind: str, tasks: list, generate, apply, use_llm: bool):
+    def _generate_fl_dialogs(self, kind: str, tasks: list, generate, apply, use_llm: bool,
+                             priority: int = 1):
         """Generate one batch of post-round dialogs and apply the results.
 
         Without the LLM the texts are instant templates: generated and applied
@@ -717,11 +737,18 @@ class SimulationController:
 
         run_id = self.fl_run_id
 
+        def urgent(task):
+            # These few calls drive the federation: they go before the many
+            # calls of the agents' cognitive cycle in the queue for the model
+            from cognitive.prompts.gpt_structure import urgent_llm
+            with urgent_llm(priority):
+                return generate(task)
+
         def worker():
             from concurrent.futures import ThreadPoolExecutor
             try:
                 with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-                    results = list(pool.map(generate, tasks))
+                    results = list(pool.map(urgent, tasks))
                 self._fl_dialog_results.put((run_id, kind, apply, results))
             except Exception as e:
                 logger.warning(f"FL dialogs ({kind}) generation failed: {e}")
@@ -796,12 +823,19 @@ class SimulationController:
             }
             tasks.append((pair, fl_context))
 
-        # Generate conversations (parallel if LLM, sequential is fine for stubs)
+        # A model answer takes several seconds, and a session lasts minutes:
+        # the model writes the conversation of one lab per round (the one on
+        # screen, otherwise one in turn) and the others use templates.
+        lab_ids = [ctx["lab_id"] for _, ctx in tasks]
+        llm_lab = getattr(self.model, "selected_lab_id", None)
+        if llm_lab not in lab_ids and lab_ids:
+            llm_lab = lab_ids[fl_round % len(lab_ids)]
+
         def _gen(args):
             pair, ctx = args
             try:
                 return pair, ctx, generate_fl_conversation(
-                    pair[0], pair[1], ctx, use_llm=use_llm
+                    pair[0], pair[1], ctx, use_llm=use_llm and ctx["lab_id"] == llm_lab
                 )
             except Exception as e:
                 logger.warning(f"FL convo for {ctx['lab_id']} failed: {e}")
@@ -950,11 +984,15 @@ class SimulationController:
 
         from cognitive.converse import generate_fl_conversation
 
+        # As for the intra-lab dialogs: the model writes one cross-lab
+        # conversation per round, the other uses a template
+        llm_task = id(tasks[0][1]) if tasks else None
+
         def _gen(args):
             pair, ctx = args
             try:
                 return pair, ctx, generate_fl_conversation(
-                    pair[0], pair[1], ctx, use_llm=use_llm
+                    pair[0], pair[1], ctx, use_llm=use_llm and id(ctx) == llm_task
                 )
             except Exception as e:
                 logger.warning(f"Cross-lab convo {ctx['lab_id']} failed: {e}")
@@ -1281,6 +1319,13 @@ class SimulationController:
             except Exception as e:
                 logger.warning(f"Cross-lab FL conversations failed: {e}")
 
+            # Every few rounds the agents decide how the federation continues
+            try:
+                self._update_fl_decision_effects()
+                self._run_agent_guidance()
+            except Exception as e:
+                logger.warning(f"FL agent guidance failed: {e}")
+
             logger.info("FL round completed")
 
     def _collect_client_updates(self) -> Dict[str, Any]:
@@ -1316,6 +1361,115 @@ class SimulationController:
                 self.fl_step_counter += 1
             if self._check_fl_phase_completion():
                 self._advance_fl_phase()
+
+    # =========================================================================
+    # Agent-guided FL
+    # =========================================================================
+
+    def _run_agent_guidance(self):
+        """Every fl_guidance_every rounds, ask one agent per lab how the
+        federation should continue, and apply the proposal that wins the vote."""
+        if not (self.fl_guidance_enabled and self.fl_system and self.model):
+            return
+        asked_at = self.fl_system.round
+        if asked_at == 0 or asked_at % self.fl_guidance_every != 0:
+            return
+        if any(d["round"] == asked_at for d in self.fl_decisions):
+            return
+
+        from collections import Counter
+        from cognitive import fl_guidance
+        from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+
+        ctx = fl_guidance.build_context(self.fl_system, self.fl_decisions)
+        turn = self._fl_guidance_turn
+        self._fl_guidance_turn += 1
+
+        # One proposer per lab, a different agent at every decision
+        proposers = []
+        for lab_id in self.model.get_lab_ids():
+            agents = self.model.get_lab_agents(lab_id)
+            if agents:
+                proposers.append(agents[turn % len(agents)])
+        use_llm = is_llm_enabled()
+
+        def _gen(agent):
+            try:
+                return fl_guidance.propose(agent, ctx, use_llm)
+            except Exception as e:
+                logger.warning(f"FL guidance: proposal of {agent.name} failed: {e}")
+                return None
+
+        def _apply(results):
+            proposals = [p for p in results if p]
+            if not proposals:
+                return
+            option = fl_guidance.decide(proposals)
+            change = fl_guidance.apply_option(self.fl_system, option)
+            decision = {
+                "round": asked_at,
+                "applied_at_round": self.fl_system.round,
+                "option": option,
+                "option_text": fl_guidance.OPTION_SHORT[option],
+                "changed": change["changed"],
+                "before": change["before"],
+                "after": change["after"],
+                "votes": dict(Counter(p["option"] for p in proposals)),
+                "proposals": proposals,
+                "accuracy_before": ctx["recent_mean"],
+                "accuracy_after": None,
+            }
+            self.fl_decisions = (self.fl_decisions + [decision])[-20:]
+
+            # Each proposer says its proposal (shown as its box on screen)
+            by_name = {agent.name: agent for agent in proposers}
+            for p in proposals:
+                agent = by_name.get(p["agent"])
+                if agent is not None:
+                    agent.last_dialog = f"Propongo di {p['option_text']}. {p['reason']}"
+                    agent.dialog_is_llm = bool(p["from_llm"])
+
+            # ...and every agent remembers what was decided
+            winners = [p["agent"] for p in proposals if p["option"] == option]
+            if change["changed"]:
+                # No parentheses here: the memory strips what precedes them
+                if change["before"]["noise"] != change["after"]["noise"]:
+                    detail = (f"il rumore di privacy passa da {change['before']['noise']} "
+                              f"a {change['after']['noise']}")
+                else:
+                    detail = (f"le epoche locali passano da {change['before']['epochs']} "
+                              f"a {change['after']['epochs']}")
+                outcome = (
+                    f"Round {asked_at}: il consorzio ha deciso di {decision['option_text']}, "
+                    f"{detail}, su proposta di {' e '.join(winners)}."
+                )
+            else:
+                outcome = (
+                    f"Round {asked_at}: il consorzio ha discusso i parametri del FL "
+                    f"e ha deciso di non cambiare nulla."
+                )
+            for agent in self.model.schedule.agents:
+                # A decision of the consortium is what the agents must still
+                # remember rounds later: highest importance, and it does not expire
+                self._inject_fl_event(agent, outcome, poignancy=9, lasting=True)
+            logger.info(f"FL guidance at round {asked_at}: {option} {change['after']}")
+
+        # The proposals go before the post-round dialogs in the queue for the model
+        self._generate_fl_dialogs("guidance", proposers, _gen, _apply, use_llm, priority=2)
+
+    def _update_fl_decision_effects(self):
+        """Fill in what happened to the accuracy after each applied decision
+        (mean of the 3 rounds that followed it)."""
+        if not self.fl_system:
+            return
+        acc = self.fl_system.metrics.get("accuracy", [])
+        for decision in self.fl_decisions:
+            if decision.get("accuracy_after") is not None:
+                continue
+            start = decision["applied_at_round"]
+            following = acc[start:start + 3]
+            if len(following) == 3:
+                decision["accuracy_after"] = round(sum(following) / 3, 4)
 
     # =========================================================================
     # FL clock thread and deferred memory writes
@@ -1499,6 +1653,18 @@ class SimulationController:
                     "run_id": self.fl_run_id,
                     "round_interval": self.fl_round_interval,
                     "seconds_to_next_round": self._seconds_to_next_fl_round(),
+                    "params": {
+                        "noise_multiplier": self.fl_system.dp_noise_multiplier,
+                        "local_epochs": self.fl_system.local_epochs,
+                    },
+                    "guidance": {
+                        "enabled": self.fl_guidance_enabled,
+                        "every_rounds": self.fl_guidance_every,
+                        "next_at_round": (
+                            (fl_state["round"] // self.fl_guidance_every + 1) * self.fl_guidance_every
+                        ),
+                    },
+                    "decisions": self.fl_decisions[-6:],
                     "round": fl_state["round"],
                     "algorithm": fl_state.get("algorithm", "fedavg"),
                     "mu": self.fl_system.mu if self.fl_system else 0.01,

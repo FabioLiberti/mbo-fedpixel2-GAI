@@ -26,18 +26,51 @@ logger = logging.getLogger(__name__)
 # True = returns sensible defaults (fast, no LLM needed)
 # False = calls LLM via gpt_structure.py (requires Ollama)
 # ============================================================================
+# USE_STUBS governs the prompt functions of the agents' cognitive pipeline
+# (perceive / plan / reflect): True = templates, False = the model.
 USE_STUBS = True
+# The LLM switch of the interface. When on, the model writes what the user
+# sees: the agents' proposals on the federation, the dialogs after each round
+# and the dialogs in the scene.
+_LLM_ENABLED = False
+_COGNITIVE_LLM = None  # read once from llm_config.json
+
+
+def _cognitive_llm_configured() -> bool:
+    """True if llm_config.json asks for the LLM inside the cognitive pipeline too
+    ("llm": {"cognitive_pipeline": true}). Off by default: one cycle of the
+    pipeline needs about 15 model calls per agent, minutes of work on a laptop,
+    during which the simulation step cannot advance."""
+    global _COGNITIVE_LLM
+    if _COGNITIVE_LLM is None:
+        import json
+        import os
+        path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "config", "llm_config.json"))
+        try:
+            with open(path) as f:
+                _COGNITIVE_LLM = bool(json.load(f).get("llm", {}).get("cognitive_pipeline", False))
+        except Exception:
+            _COGNITIVE_LLM = False
+    return _COGNITIVE_LLM
 
 
 def set_llm_enabled(enabled: bool):
-    """Enable/disable real LLM calls at runtime (called from API)."""
-    global USE_STUBS
-    USE_STUBS = not enabled
-    logger.info(f"LLM {'enabled' if enabled else 'disabled'} (USE_STUBS={USE_STUBS})")
+    """Turn the LLM switch on or off at runtime (called from the API)."""
+    global USE_STUBS, _LLM_ENABLED
+    _LLM_ENABLED = bool(enabled)
+    USE_STUBS = not (_LLM_ENABLED and _cognitive_llm_configured())
+    logger.info(f"LLM {'enabled' if enabled else 'disabled'} "
+                f"(cognitive pipeline on {'templates' if USE_STUBS else 'the model'})")
 
 
 def is_llm_enabled() -> bool:
-    """Return True if real LLM calls are active."""
+    """True if the LLM switch is on."""
+    return _LLM_ENABLED
+
+
+def is_cognitive_llm_enabled() -> bool:
+    """True if the cognitive pipeline itself is calling the model."""
     return not USE_STUBS
 
 

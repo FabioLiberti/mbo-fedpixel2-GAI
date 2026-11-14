@@ -21,7 +21,7 @@ from cognitive.retrieve import new_retrieve
 from cognitive.plan import plan as cognitive_plan
 from cognitive.reflect import reflect
 from cognitive.execute import execute as cognitive_execute
-from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+from cognitive.prompts.run_gpt_prompt import is_cognitive_llm_enabled
 from cognitive.prompts.gpt_structure import get_and_reset_llm_success
 
 logging.basicConfig(level=logging.INFO)
@@ -518,7 +518,7 @@ class ResearcherAgent(Agent):
         # Build dialog: LLM dialog is already rich (from _generate_thought_dialog)
         if self.dialog_is_llm:
             dialog = self.last_dialog or ""
-        elif not is_llm_enabled():
+        elif not is_cognitive_llm_enabled():
             dialog = self.last_dialog or self.scratch.act_description or "idle"
         else:
             dialog = ""  # LLM enabled but no LLM dialog yet — suppress stubs

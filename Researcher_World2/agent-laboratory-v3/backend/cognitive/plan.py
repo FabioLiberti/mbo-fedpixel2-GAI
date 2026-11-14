@@ -10,7 +10,7 @@ import random
 import logging
 
 from .prompts.gpt_structure import get_embedding, ChatGPT_single_request
-from .prompts.run_gpt_prompt import is_llm_enabled
+from .prompts.run_gpt_prompt import is_cognitive_llm_enabled
 from .prompts.run_gpt_prompt import (
     run_gpt_prompt_wake_up_hour,
     run_gpt_prompt_daily_plan,
@@ -219,7 +219,7 @@ def generate_new_decomp_schedule(persona, inserted_act, inserted_act_dur,
 
 def revise_identity(persona):
     """Revise persona's identity/status at start of new day."""
-    if not is_llm_enabled():
+    if not is_cognitive_llm_enabled():
         # Stub mode: keep current identity unchanged
         return
 

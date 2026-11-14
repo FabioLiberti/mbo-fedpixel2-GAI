@@ -342,6 +342,8 @@ class FederatedLearningSystem:
         self.dp_epsilon_spent = 0.0
         self.dp_max_grad_norm = dp_max_grad_norm
         self.dp_noise_multiplier = dp_noise_multiplier
+        # Passes over the local data that each client makes in a round
+        self.local_epochs = 5
         # The epsilon tracked here is a nominal figure (see aggregate_models).
         # By default it is reported but does not stop the federation; with
         # dp_enforce_budget=True rounds stop once the nominal total is reached.
@@ -483,7 +485,7 @@ class FederatedLearningSystem:
                 weights=client_model,
                 data_x=data_x,
                 data_y=data_y,
-                epochs=5,
+                epochs=self.local_epochs,
                 lr=0.05,
                 batch_size=32,
                 mu=mu,
@@ -547,7 +549,7 @@ class FederatedLearningSystem:
         else:
             history = client_model.fit(
                 data_x, data_y,
-                epochs=5,
+                epochs=self.local_epochs,
                 batch_size=32,
                 verbose=0
             )
@@ -787,6 +789,7 @@ class FederatedLearningSystem:
             "algorithm": self.algorithm,
             "round": self.round,
             "client_count": len(self.clients),
+            "local_epochs": self.local_epochs,
             "metrics": self.metrics,
             "dp": {
                 "enabled": self.dp_enabled,
@@ -921,6 +924,11 @@ class FederatedLearningSystem:
             "model_type": self.model_type,
             "mu": self.mu,
             "client_ids": list(self.clients.keys()),
+            # Values that can change during a run (e.g. on the agents' proposal)
+            "tuning": {
+                "noise_multiplier": self.dp_noise_multiplier,
+                "local_epochs": self.local_epochs,
+            },
             "dp": {
                 "enabled": self.dp_enabled,
                 "epsilon_total": self.dp_epsilon_total,
@@ -972,6 +980,10 @@ class FederatedLearningSystem:
             # Only what was consumed is resumed: the DP settings themselves
             # (noise, total, clipping) are the ones of the current configuration
             self.dp_epsilon_spent = dp.get("epsilon_spent", 0.0)
+            # ...except the values tuned during this very run, which belong to it
+            tuning = state.get("tuning") or {}
+            self.dp_noise_multiplier = float(tuning.get("noise_multiplier", self.dp_noise_multiplier))
+            self.local_epochs = int(tuning.get("local_epochs", self.local_epochs))
             self.metrics = {
                 "accuracy": state["metrics"].get("accuracy", []),
                 "loss": state["metrics"].get("loss", []),
