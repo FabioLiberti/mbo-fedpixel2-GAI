@@ -816,6 +816,33 @@ class SimulationController:
             "next_decision_round": (self.fl_system.round // every + 1) * every,
         }
 
+    def _federation_view(self) -> Dict[str, Any]:
+        """The federation as a whole, for the strip shown in every lab: who
+        takes part, with how many patients, and what the global model gives
+        each lab compared with the model the lab trains alone (latest round)."""
+        from fl.federated import lab_partition_sizes
+        sizes = lab_partition_sizes()
+        benefit_history = self.fl_system.metrics.get("federation_benefit") or []
+        latest = benefit_history[-1] if benefit_history else {}
+        labs = {}
+        for lab_id in (self.model.get_lab_ids() if self.model else []):
+            size = sizes.get(lab_id, {})
+            labs[lab_id] = {
+                "patients": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
+                "train_rows": size.get("train", 0),
+                "test_rows": size.get("test", 0),
+                "age_min": size.get("age_min", 0),
+                "age_max": size.get("age_max", 0),
+                "benefit": latest.get(lab_id),
+            }
+        return {
+            "labs": labs,
+            "common_test_rows": sum(size.get("test", 0) for size in sizes.values()),
+            # False for a run resumed from a checkpoint saved without the
+            # labs' solo models: then there is no comparison to show
+            "baseline_available": bool(self.fl_system.local_only_models),
+        }
+
     def _trigger_agent_thoughts(self):
         """Once per decision cycle, ask the model what the agents of one lab
         (the one on screen, otherwise one in turn) are thinking about the real
@@ -1791,6 +1818,7 @@ class SimulationController:
                     "dp": fl_state.get("dp"),
                     "convergence": self.fl_system.check_convergence() if self.fl_system else None,
                     "conversations": self.fl_conversations,
+                    "federation": self._federation_view(),
                 }
 
         return base_data

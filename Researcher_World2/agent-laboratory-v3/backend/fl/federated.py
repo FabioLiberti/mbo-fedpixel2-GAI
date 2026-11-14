@@ -118,6 +118,20 @@ def _client_partition(client_id: str) -> Dict[str, np.ndarray]:
     return _PARTITIONS[client_id]
 
 
+def lab_partition_sizes() -> Dict[str, Dict[str, int]]:
+    """How many patients each lab trains on, how many it holds out for testing,
+    and the ages of its patients in the dataset."""
+    data = _load_heart_dataset()
+    sizes = {}
+    for cid in sorted(_LAB_AGE_RANGES):
+        part = _client_partition(cid)
+        ages = data["ages"][part["all"]]
+        sizes[cid] = {"train": int(len(part["train"])), "test": int(len(part["test"])),
+                      "age_min": int(ages.min()) if len(ages) else 0,
+                      "age_max": int(ages.max()) if len(ages) else 0}
+    return sizes
+
+
 def get_global_test_data() -> Tuple[np.ndarray, np.ndarray]:
     """Held-out rows of all labs, pooled: the test set of the global model."""
     data = _load_heart_dataset()
@@ -371,7 +385,14 @@ class FederatedLearningSystem:
             "per_client": [],
             "local_vs_global": [],   # per-round: {lab: {local_acc, global_acc, gain}}
             "cross_eval": [],        # per-round: {eval_lab: {train_lab: acc, ...}}
+            # per-round: {lab: the global model against the model the lab trains alone}
+            "federation_benefit": [],
         }
+        # Reference models: what each lab would have if it worked alone. Same
+        # starting weights, same rows and same epochs as its federated training,
+        # but never aggregated with the others (and with no privacy noise:
+        # nothing leaves the lab). Empty = not available for this run.
+        self.local_only_models: Dict[str, List[np.ndarray]] = {}
 
         # Inizializza il modello globale
         self._initialize_global_model()
@@ -418,6 +439,8 @@ class FederatedLearningSystem:
             client_model.set_weights(self.global_model.get_weights())
         else:
             client_model = [w.copy() for w in self.global_model]
+            if client_id in _LAB_AGE_RANGES and self.round == 0:
+                self.local_only_models[client_id] = [w.copy() for w in self.global_model]
         
         self.clients[client_id] = {
             "model": client_model,
@@ -501,6 +524,7 @@ class FederatedLearningSystem:
             client["data_size"] = len(data_x)
             client["last_round"] = self.round
             metrics = {"loss": loss, "accuracy": accuracy, "noise_sigma": noise_sigma}
+            self._train_local_only(client_id, data_x, data_y)
             logger.info(
                 f"Client {client_id} trained (numpy) {len(data_x)} samples | "
                 f"loss={loss:.4f} acc={accuracy:.4f}"
@@ -683,6 +707,10 @@ class FederatedLearningSystem:
         cross = self._evaluate_cross()
         self.metrics["cross_eval"].append(cross)
 
+        # C: the global model against what each lab would have alone
+        benefit = self._evaluate_federation_benefit()
+        self.metrics.setdefault("federation_benefit", []).append(benefit)
+
         logger.info(
             f"Round {self.round} aggregated {len(weights)} clients | "
             f"acc={round_acc:.4f} loss={round_loss:.4f}"
@@ -702,6 +730,7 @@ class FederatedLearningSystem:
             "loss": round_loss,
             "local_vs_global": lvg,
             "cross_eval": cross,
+            "federation_benefit": benefit,
         }
 
         # Auto-save checkpoint after each aggregation
@@ -738,6 +767,52 @@ class FederatedLearningSystem:
                 "local_acc": local_eval["accuracy"],
                 "global_acc": global_eval["accuracy"],
                 "gain": gain,
+            }
+        return result
+
+    def _train_local_only(self, client_id: str, data_x: np.ndarray, data_y: np.ndarray):
+        """One more round of the model this lab trains alone: the same rows and
+        epochs as its federated training, never mixed with the other labs.
+        It uses its own random sequence, so the federation runs exactly as it
+        would without this reference model."""
+        alone = self.local_only_models.get(client_id)
+        if alone is None:
+            return
+        saved = np.random.get_state()
+        try:
+            np.random.seed((_stable_id(client_id) + 7919 * (self.round + 1)) % (2 ** 32))
+            updated, _, _, _ = numpy_train(
+                weights=alone, data_x=data_x, data_y=data_y,
+                epochs=self.local_epochs, lr=0.05, batch_size=32,
+                dp_enabled=False,
+            )
+            self.local_only_models[client_id] = updated
+        finally:
+            np.random.set_state(saved)
+
+    def _evaluate_federation_benefit(self) -> Dict[str, Dict[str, Any]]:
+        """What the federation gives each lab: the global model against the
+        model the lab trains alone, both on rows nobody trained on - the lab's
+        own held-out patients and those of all the labs together.
+        Returns {lab: {alone_own, federated_own, alone_common, federated_common,
+        own_test_rows, common_test_rows, train_rows}}."""
+        if HAS_TF or not self.local_only_models:
+            return {}
+        data = _load_heart_dataset()
+        common_x, common_y = get_global_test_data()
+        federated_common = self._eval_weights(self.global_model, common_x, common_y)["accuracy"]
+        result: Dict[str, Dict[str, Any]] = {}
+        for cid, alone in self.local_only_models.items():
+            part = _client_partition(cid)
+            own_x, own_y = data["X"][part["test"]], data["y"][part["test"]]
+            result[cid] = {
+                "alone_own": self._eval_weights(alone, own_x, own_y)["accuracy"],
+                "federated_own": self._eval_weights(self.global_model, own_x, own_y)["accuracy"],
+                "alone_common": self._eval_weights(alone, common_x, common_y)["accuracy"],
+                "federated_common": federated_common,
+                "own_test_rows": int(len(own_x)),
+                "common_test_rows": int(len(common_x)),
+                "train_rows": int(len(part["train"])),
             }
         return result
 
@@ -847,6 +922,9 @@ class FederatedLearningSystem:
                 entry["local_vs_global"] = self.metrics["local_vs_global"][i]
             if i < len(self.metrics["cross_eval"]):
                 entry["cross_eval"] = self.metrics["cross_eval"][i]
+            benefit = self.metrics.get("federation_benefit", [])
+            if i < len(benefit):
+                entry["federation_benefit"] = benefit[i]
             rounds.append(entry)
         return {
             "algorithm": self.algorithm,
@@ -915,6 +993,12 @@ class FederatedLearningSystem:
         else:
             np.savez(weights_path, *self.global_model.get_weights())
 
+        # 1b) The models the labs train alone (reference for the benefit of the federation)
+        alone_path = os.path.join(self.checkpoint_dir, "local_only_weights.npz")
+        if not HAS_TF and self.local_only_models:
+            np.savez(alone_path, **{f"{cid}__{i}": w for cid, ws in self.local_only_models.items()
+                                    for i, w in enumerate(ws)})
+
         # 2) State + metrics (.json)
         state = {
             "algorithm": self.algorithm,
@@ -946,6 +1030,7 @@ class FederatedLearningSystem:
                 "per_client": self.metrics["per_client"],
                 "local_vs_global": self.metrics["local_vs_global"],
                 "cross_eval": self.metrics["cross_eval"],
+                "federation_benefit": self.metrics.get("federation_benefit", []),
             },
         }
         state_path = os.path.join(self.checkpoint_dir, "fl_state.json")
@@ -994,6 +1079,7 @@ class FederatedLearningSystem:
                 "per_client": state["metrics"].get("per_client", []),
                 "local_vs_global": state["metrics"].get("local_vs_global", []),
                 "cross_eval": state["metrics"].get("cross_eval", []),
+                "federation_benefit": state["metrics"].get("federation_benefit", []),
             }
 
             # 2) Load weights
@@ -1010,6 +1096,21 @@ class FederatedLearningSystem:
                 if cid not in self.clients:
                     self.register_client(cid)
             self.update_client_models()
+
+            # 4) The models the labs train alone. A run saved without them
+            # continues without: a reference started later would have trained
+            # for fewer rounds than the federation, and the comparison would be unfair.
+            self.local_only_models = {}
+            alone_path = os.path.join(self.checkpoint_dir, "local_only_weights.npz")
+            if not HAS_TF and self.round > 0 and os.path.exists(alone_path):
+                saved = np.load(alone_path)
+                for cid in state.get("client_ids", []):
+                    keys = [f"{cid}__{i}" for i in range(len(weight_arrays))]
+                    if all(k in saved.files for k in keys):
+                        self.local_only_models[cid] = [saved[k] for k in keys]
+            elif not HAS_TF and self.round == 0:
+                self.local_only_models = {cid: [w.copy() for w in self.global_model]
+                                          for cid in self.clients if cid in _LAB_AGE_RANGES}
 
             logger.info(
                 f"Checkpoint loaded: round {self.round}, "

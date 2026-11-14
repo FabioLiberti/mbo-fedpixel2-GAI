@@ -3,6 +3,7 @@ import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
 import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
 import DialogSpotlight from './DialogSpotlight';
+import FederationStrip from './FederationStrip';
 import AgentInspectorPanel from './AgentInspectorPanel';
 import LLMDialogPanel from './LLMDialogPanel';
 import ErrorBoundary from './ErrorBoundary';
@@ -669,8 +670,24 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   };
   const currentLabName = selectedLab ? labDisplayName[selectedLab] || null : null;
 
+  // Laboratorio in cui ci si trova, come lo chiama il backend
+  const sceneToLabId: Record<string, string> = {
+    [SCENE_KEYS.MERCATORUM]: 'mercatorum',
+    [SCENE_KEYS.BLEKINGE]: 'blekinge',
+    [SCENE_KEYS.OPBG]: 'opbg',
+  };
+
   return (
     <>
+      {/* Fascia della federazione: i tre laboratori, l'aggregatore, la fase del round */}
+      <ErrorBoundary name="FederationStrip">
+        <FederationStrip
+          backendSimData={backendSimData}
+          active={simulationActive}
+          currentLabId={selectedLab ? sceneToLabId[selectedLab] || null : null}
+        />
+      </ErrorBoundary>
+
       <div className="simulation-container" style={{ position: 'relative' }}>
         {/* Container del gioco Phaser */}
         <div
