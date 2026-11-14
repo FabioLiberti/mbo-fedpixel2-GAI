@@ -1,6 +1,3 @@
-# === Local tool config (must not appear in repo) ===
-.claude/
-
 # === OS & Editor ===
 .DS_Store
 Thumbs.db
