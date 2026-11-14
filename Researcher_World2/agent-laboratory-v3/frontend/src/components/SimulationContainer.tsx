@@ -649,7 +649,6 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
         {flStatus && (
           <FLStatusConnector
             flStatus={flStatus}
-            onToggleFL={handleToggleFL}
           />
         )}
 

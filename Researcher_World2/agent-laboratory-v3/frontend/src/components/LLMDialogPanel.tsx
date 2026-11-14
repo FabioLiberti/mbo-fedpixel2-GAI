@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './LLMDialogPanel.css';
 import { addPhaserDialogListener, PhaserDialogDetail } from '../utils/customEvents';
-import { getGameInstance } from '../utils/gameInstance';
+import { getGameInstance } from '../phaser/game';
 
 interface DialogEntry {
   timestamp: string;
@@ -244,8 +244,13 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
     const gameInstance = getGameInstance();
     if (gameInstance) {
-      for (const convo of convos.filter((c: any) => c.round === latest.round)) {
-        gameInstance.events.emit('analytics-fl-conversation', convo);
+      try {
+        for (const convo of convos.filter((c: any) => c.round === latest.round)) {
+          gameInstance.events.emit('analytics-fl-conversation', convo);
+        }
+      } catch (err) {
+        // Un errore lato Phaser non deve far cadere il pannello React
+        console.error('[LLMDialogPanel] analytics-fl-conversation error:', err);
       }
     }
   }, [backendSimData?.fl?.conversations, appendEntries]);

@@ -188,7 +188,10 @@ export class DialogState {
         const n = (child.getData && child.getData('name')) || child.name;
         return n && String(n).trim().toLowerCase() === target;
       }) as any;
-      return match ? (match.getData('id') || null) : null;
+      if (!match) return null;
+      // Agent sprites expose their id through getId(); nothing calls setData('id')
+      const id = typeof match.getId === 'function' ? match.getId() : match.getData?.('id');
+      return id || null;
     } catch (e) {
       console.error(`[DialogState] getAgentIdByName(${name}):`, e);
       return null;
