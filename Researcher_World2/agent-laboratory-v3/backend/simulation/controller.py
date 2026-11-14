@@ -70,9 +70,13 @@ class SimulationController:
         # Dialog quality monitor
         self.dialog_monitor = DialogQualityMonitor()
 
-        # Thread control
+        # Thread control. Every simulation loop gets its own stop token:
+        # stop_event is the token of the most recently started loop. A loop
+        # that is still inside a slow step when it is stopped keeps its own
+        # (set) token, so a later start cannot bring it back to life.
         self.simulation_thread = None
         self.stop_event = Event()
+        self.stop_join_timeout = 2.0  # seconds stop_simulation waits for the loop
         self._lock = Lock()  # protects shared state (running, paused, speed, fl_*)
 
         logger.info(f"Simulation controller initialized with config: {config_path}")
@@ -928,16 +932,25 @@ class SimulationController:
                 logger.error("Could not initialize simulation model")
                 return False
 
+            # A loop stopped while inside a slow step may still be finishing it
+            previous_thread = self.simulation_thread
+            if previous_thread is not None and not previous_thread.is_alive():
+                previous_thread = None
+
             self.running = True
             self.paused = False
-            self.stop_event.clear()
+            stop_token = Event()
+            self.stop_event = stop_token
 
             # Enable FL automatically so data is broadcast from the start
             if self.fl_system and not self.fl_enabled:
                 self.fl_enabled = True
                 logger.info("FL enabled automatically on simulation start")
 
-            self.simulation_thread = Thread(target=self._simulation_loop)
+            self.simulation_thread = Thread(
+                target=self._simulation_loop,
+                args=(stop_token, previous_thread),
+            )
             self.simulation_thread.daemon = True
             self.simulation_thread.start()
 
@@ -951,13 +964,23 @@ class SimulationController:
                 return False
             self.running = False
             self.stop_event.set()
+            thread = self.simulation_thread
 
-        if self.simulation_thread:
-            self.simulation_thread.join(timeout=2.0)
-            if self.simulation_thread.is_alive():
-                logger.warning("Simulation thread did not terminate gracefully")
+        if thread:
+            thread.join(timeout=self.stop_join_timeout)
+            if thread.is_alive():
+                # Still inside a step (e.g. waiting on the LLM). Its stop token
+                # is set, so it exits as soon as the step returns. The
+                # reference is kept so that the next start can wait for it.
+                logger.warning(
+                    "Simulation thread is still finishing its current step; "
+                    "it will exit when the step returns"
+                )
+            else:
+                with self._lock:
+                    if self.simulation_thread is thread:
+                        self.simulation_thread = None
 
-        self.simulation_thread = None
         logger.info("Simulation stopped")
         return True
 
@@ -1177,15 +1200,32 @@ class SimulationController:
     # Simulation Loop
     # =========================================================================
 
-    def _simulation_loop(self):
+    def _simulation_loop(self, stop_token: Event, previous_thread: Optional[Thread] = None):
+        """Run simulation steps until stop_token is set.
+
+        stop_token belongs to this loop only. previous_thread is an earlier
+        loop that was stopped while inside a step on the same model: this loop
+        waits for it to finish, so the model is never stepped by two loops.
+        """
         step_count = 0
         try:
-            while self.running and not self.stop_event.is_set():
+            while (
+                previous_thread is not None
+                and previous_thread.is_alive()
+                and not stop_token.is_set()
+            ):
+                previous_thread.join(timeout=0.2)
+
+            while not stop_token.is_set():
                 if not self.paused:
                     step_time = 1.0 / (self.model.tick_rate * self.speed)
 
                     start_time = time.time()
                     self.model.step_parallel(max_workers=4)
+                    if stop_token.is_set():
+                        # Stopped (or reset) while the step was running: do not
+                        # touch FL state or broadcast on behalf of a new loop.
+                        break
                     step_count += 1
 
                     # Process FL logic
@@ -1221,7 +1261,10 @@ class SimulationController:
                     time.sleep(0.1)
         except Exception as e:
             logger.error(f"Error in simulation loop: {e}")
-            self.running = False
+            with self._lock:
+                # Only the current loop may mark the simulation as stopped
+                if self.stop_event is stop_token:
+                    self.running = False
         finally:
             logger.info(f"Simulation loop terminated after {step_count} steps")
 
@@ -1315,6 +1358,9 @@ class SimulationController:
             self.stop_simulation()
 
         with self._lock:
+            # The model is replaced below: a loop still finishing a step works
+            # on the old model, so the new loop does not need to wait for it.
+            self.simulation_thread = None
             self.model = None
             self.fl_system = None
             self.fl_enabled = False

@@ -194,6 +194,58 @@ def test_reset_opens_new_fl_run():
     print("PASS: test_reset_opens_new_fl_run")
 
 
+def test_stop_start_keeps_single_loop():
+    """Stop + start while a step is still blocked must not leave two loops stepping."""
+    import tempfile
+    import threading
+    import time
+    from simulation.controller import SimulationController
+
+    with tempfile.TemporaryDirectory() as checkpoint_root:
+        controller = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert controller.initialize_model()
+        controller.stop_join_timeout = 0.1
+
+        counters = {"active": 0, "max_active": 0, "calls": 0}
+        guard = threading.Lock()
+
+        def slow_step(max_workers=4):
+            # Stands in for a cognitive cycle waiting on a slow LLM call
+            with guard:
+                counters["active"] += 1
+                counters["calls"] += 1
+                counters["max_active"] = max(counters["max_active"], counters["active"])
+            time.sleep(0.6)
+            with guard:
+                counters["active"] -= 1
+
+        controller.model.step_parallel = slow_step
+
+        assert controller.start_simulation()
+        controller.fl_enabled = False
+        time.sleep(0.2)  # the first step is now in progress
+        first_thread = controller.simulation_thread
+
+        assert controller.stop_simulation()  # returns while the step is blocked
+        assert first_thread.is_alive()
+
+        assert controller.start_simulation()
+        controller.fl_enabled = False
+        second_thread = controller.simulation_thread
+        time.sleep(2.0)
+
+        assert not first_thread.is_alive(), "the stopped loop came back to life"
+        assert second_thread.is_alive()
+        assert counters["max_active"] == 1, "two loops stepped the model at once"
+        assert counters["calls"] >= 2, "the new loop is not stepping"
+
+        assert controller.stop_simulation()
+        second_thread.join(timeout=3.0)
+        assert not second_thread.is_alive()
+
+    print("PASS: test_stop_start_keeps_single_loop")
+
+
 if __name__ == "__main__":
     tests = [
         test_environment_creation,
@@ -204,6 +256,7 @@ if __name__ == "__main__":
         test_get_lab_agents,
         test_fl_event_injection,
         test_reset_opens_new_fl_run,
+        test_stop_start_keeps_single_loop,
     ]
 
     passed = 0
