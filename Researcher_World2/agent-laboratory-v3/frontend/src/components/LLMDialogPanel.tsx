@@ -230,7 +230,8 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
           agentRole: role,
           labId: convo.lab_id,
           dialog: utterance,
-          isLlm: true,
+          // Il backend dichiara chi ha scritto il testo: il modello o un template
+          isLlm: Boolean(convo.is_llm),
           source: 'fl-convo',
           cognitiveType: 'dialog',
           state: 'discussing',

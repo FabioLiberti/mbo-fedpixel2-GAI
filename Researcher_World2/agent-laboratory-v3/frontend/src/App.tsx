@@ -55,6 +55,11 @@ function App() {
   const [flAccuracy, setFlAccuracy] = useState<number>(0);
   const [flLoss, setFlLoss] = useState<number>(0);
   const [flState, setFlState] = useState<string>('idle');
+  // Andamento del FL: miglior accuracy finora, secondi al prossimo round,
+  // privacy consumata (valore nominale)
+  const [flBestAccuracy, setFlBestAccuracy] = useState<number>(0);
+  const [flNextRoundIn, setFlNextRoundIn] = useState<number>(0);
+  const [flEpsilonSpent, setFlEpsilonSpent] = useState<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   // Nuovo stato per la documentazione
   const [showDocumentation, setShowDocumentation] = useState<boolean>(false);
@@ -122,6 +127,13 @@ function App() {
       setFlLoss(latestLoss);
       setFlProgress(Math.round(latestAccuracy * 100));
       setFlState(fl.current_phase || 'idle');
+      setFlBestAccuracy(
+        Array.isArray(fl.metrics?.accuracy) && fl.metrics.accuracy.length > 0
+          ? Math.max(...fl.metrics.accuracy)
+          : latestAccuracy
+      );
+      setFlNextRoundIn(Number(fl.seconds_to_next_round ?? 0));
+      setFlEpsilonSpent(fl.dp?.enabled ? Number(fl.dp.epsilon_spent ?? 0) : null);
     }
   }, []);
 
@@ -561,7 +573,9 @@ function App() {
                     <div className="stat-item">
                       <span className="stat-label">Stato:</span>
                       <span className={`stat-value fl-state-${flState}`}>{
-                        {idle:'In attesa',training:'Training',sending:'Invio pesi',aggregating:'Aggregazione',receiving:'Ricezione'}[flState] || flState.toUpperCase()
+                        flState === 'idle'
+                          ? (flNextRoundIn > 0 ? `Prossimo round tra ${Math.ceil(flNextRoundIn)} s` : 'Tra due round')
+                          : ({training:'Training',sending:'Invio pesi',aggregating:'Aggregazione',receiving:'Ricezione'} as Record<string, string>)[flState] || flState
                       }</span>
                     </div>
                     <div className="stat-item">
@@ -573,15 +587,25 @@ function App() {
                       <span className="stat-value">{flRound}</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-label">Accuracy:</span>
+                      <span className="stat-label">Accuracy (test):</span>
                       <span className="stat-value">{flAccuracy.toFixed(4)}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Migliore finora:</span>
+                      <span className="stat-value">{flBestAccuracy.toFixed(4)}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">Loss:</span>
                       <span className="stat-value">{flLoss.toFixed(4)}</span>
                     </div>
+                    {flEpsilonSpent !== null && (
+                      <div className="stat-item">
+                        <span className="stat-label">Privacy ε (nominale):</span>
+                        <span className="stat-value">{flEpsilonSpent.toFixed(0)}</span>
+                      </div>
+                    )}
                     <div className="stat-item">
-                      <span className="stat-label">FL Progress:</span>
+                      <span className="stat-label">Accuracy sul test:</span>
                       <div className="progress-bar">
                         <div
                           className="progress-fill"

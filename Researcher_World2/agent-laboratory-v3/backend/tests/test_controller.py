@@ -298,6 +298,112 @@ def test_pause_then_resume_or_start():
     print("PASS: test_pause_then_resume_or_start")
 
 
+def test_fl_held_out_test_set():
+    """Each lab trains on rows that are never used to evaluate the global model."""
+    import numpy as np
+    from fl.federated import generate_client_data, get_global_test_data, _LAB_AGE_RANGES
+
+    def as_set(x):
+        return {row.tobytes() for row in np.ascontiguousarray(x)}
+
+    test_x, test_y = get_global_test_data()
+    assert len(test_x) == len(test_y) > 0
+    pooled_test = as_set(test_x)
+
+    total = 0
+    for lab in _LAB_AGE_RANGES:
+        train_x, _ = generate_client_data(lab, n_samples=10_000, seed=1)
+        lab_test_x, _ = generate_client_data(lab, n_samples=10_000, seed=1, subset="test")
+        all_x, _ = generate_client_data(lab, n_samples=10_000, seed=1, subset="all")
+        assert len(train_x) + len(lab_test_x) == len(all_x)
+        assert 0.1 < len(lab_test_x) / len(all_x) < 0.3
+        assert as_set(lab_test_x) <= pooled_test
+        total += len(lab_test_x)
+        # same request, same rows in the same order: sampling does not depend on the process
+        again_x, _ = generate_client_data(lab, n_samples=10_000, seed=1)
+        assert np.array_equal(train_x, again_x)
+    assert total == len(test_x)
+    print("PASS: test_fl_held_out_test_set")
+
+
+def test_fl_keeps_running_past_nominal_budget():
+    """By default the nominal privacy budget is reported but does not stop the federation."""
+    import tempfile
+    from fl.federated import FederatedLearningSystem, generate_client_data, get_global_test_data
+
+    def run_rounds(fl, n):
+        for _ in range(n):
+            updates, metrics = {}, {}
+            for lab in ("mercatorum", "blekinge", "opbg"):
+                m, w = fl.train_client(lab, *generate_client_data(lab, n_samples=120, seed=42 + fl.round))
+                updates[lab] = w
+                metrics[lab] = m
+            fl.aggregate_models(updates, client_metrics=metrics)
+            fl.update_client_models()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fl = FederatedLearningSystem(checkpoint_dir=tmp, dp_epsilon_total=15.0)
+        for lab in ("mercatorum", "blekinge", "opbg"):
+            fl.register_client(lab)
+        run_rounds(fl, 3)
+        status = fl.check_convergence()
+        assert fl.dp_epsilon_spent > fl.dp_epsilon_total
+        assert status["budget_nominal_exceeded"] is True
+        assert status["budget_exhausted"] is False and status["should_stop"] is False
+
+        # The accuracy that is reported is the global model on the held-out rows
+        test_x, test_y = get_global_test_data()
+        expected = FederatedLearningSystem._eval_weights(fl.global_model, test_x, test_y)["accuracy"]
+        assert fl.metrics["accuracy"][-1] == expected
+        assert len(fl.metrics["train_accuracy"]) == len(fl.metrics["accuracy"]) == 3
+
+    with tempfile.TemporaryDirectory() as tmp:
+        enforced = FederatedLearningSystem(checkpoint_dir=tmp, dp_epsilon_total=15.0, dp_enforce_budget=True)
+        for lab in ("mercatorum", "blekinge", "opbg"):
+            enforced.register_client(lab)
+        run_rounds(enforced, 3)
+        status = enforced.check_convergence()
+        assert status["budget_exhausted"] is True and status["should_stop"] is True
+    print("PASS: test_fl_keeps_running_past_nominal_budget")
+
+
+def test_fl_round_pacing_and_dialog_source():
+    """A new round waits for the round interval; template dialogs are not labelled as LLM."""
+    import tempfile
+    from simulation.controller import SimulationController
+    from cognitive.converse import generate_fl_conversation
+
+    with tempfile.TemporaryDirectory() as checkpoint_root:
+        controller = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert controller.initialize_model()
+        controller.fl_round_interval = 30.0
+        controller.fl_enabled = True
+
+        controller._start_fl_round()
+        assert controller.fl_round_in_progress
+        # close the round by hand, then ask for the next one straight away
+        controller.fl_round_in_progress = False
+        controller.fl_current_phase = None
+        controller._start_fl_round()
+        assert not controller.fl_round_in_progress, "a round started before the interval elapsed"
+        assert 0 < controller._seconds_to_next_fl_round() <= 30.0
+
+        controller.fl_round_interval = 0.0
+        controller._start_fl_round()
+        assert controller.fl_round_in_progress
+
+        agents = controller.model.get_lab_agents("mercatorum")
+        convo = generate_fl_conversation(
+            agents[0], agents[1],
+            {"round": 1, "accuracy": 0.7, "gain": 0.02, "dp_budget": 0.9,
+             "lab_id": "mercatorum", "demo": "pazienti"},
+            use_llm=False,
+        )
+        assert len(convo) >= 2
+        assert convo.from_llm is False
+    print("PASS: test_fl_round_pacing_and_dialog_source")
+
+
 if __name__ == "__main__":
     tests = [
         test_environment_creation,
@@ -310,6 +416,9 @@ if __name__ == "__main__":
         test_reset_opens_new_fl_run,
         test_stop_start_keeps_single_loop,
         test_pause_then_resume_or_start,
+        test_fl_held_out_test_set,
+        test_fl_keeps_running_past_nominal_budget,
+        test_fl_round_pacing_and_dialog_source,
     ]
 
     passed = 0

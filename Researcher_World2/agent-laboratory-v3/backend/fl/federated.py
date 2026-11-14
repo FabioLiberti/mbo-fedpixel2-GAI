@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import zlib
 import random
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
@@ -85,25 +86,67 @@ def _load_heart_dataset() -> Dict[str, Any]:
     return _HEART_DATA
 
 
-def generate_client_data(client_id: str, n_samples: int = 200, seed: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+# Fraction of each lab's rows held out for evaluation and never used in training
+TEST_FRACTION = 0.2
+_PARTITIONS: Dict[str, Dict[str, np.ndarray]] = {}
+
+
+def _stable_id(client_id: str) -> int:
+    """Deterministic integer for a client id. Python's hash() changes at every
+    process start, which made runs with the same seed give different results."""
+    return zlib.crc32(client_id.encode("utf-8")) & 0xFFFFFFFF
+
+
+def _client_partition(client_id: str) -> Dict[str, np.ndarray]:
+    """Row indices of a lab's training and test rows. The split is fixed and
+    stratified by label, so the test rows are the same in every round and run."""
+    if client_id in _PARTITIONS:
+        return _PARTITIONS[client_id]
+    data = _load_heart_dataset()
+    lo, hi = _LAB_AGE_RANGES[client_id]
+    rows = np.where((data["ages"] >= lo) & (data["ages"] < hi))[0]
+    rng = np.random.RandomState(_stable_id(client_id))
+    labels = data["y"][rows, 0]
+    test_rows: List[int] = []
+    for cls in np.unique(labels):
+        cls_rows = rng.permutation(rows[labels == cls])
+        n_test = int(round(len(cls_rows) * TEST_FRACTION)) if len(cls_rows) > 1 else 0
+        test_rows.extend(int(r) for r in cls_rows[:n_test])
+    test = np.array(sorted(test_rows), dtype=int)
+    train = np.array(sorted(set(int(r) for r in rows) - set(test_rows)), dtype=int)
+    _PARTITIONS[client_id] = {"train": train, "test": test, "all": rows}
+    return _PARTITIONS[client_id]
+
+
+def get_global_test_data() -> Tuple[np.ndarray, np.ndarray]:
+    """Held-out rows of all labs, pooled: the test set of the global model."""
+    data = _load_heart_dataset()
+    rows = np.concatenate([_client_partition(cid)["test"] for cid in sorted(_LAB_AGE_RANGES)])
+    return data["X"][rows], data["y"][rows]
+
+
+def generate_client_data(client_id: str, n_samples: int = 200, seed: int = 0,
+                         subset: str = "train") -> Tuple[np.ndarray, np.ndarray]:
     """
     Return non-IID Heart Disease data for a client.
     Each lab gets a different age-range partition (naturally non-IID).
     Input dim = 13 (age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal).
+
+    subset: "train" (default) for the rows a lab trains on, "test" for its
+    held-out rows, "all" for both. For an id that is not a lab the pooled
+    held-out rows of all labs are returned ("all": the whole dataset).
     """
     data = _load_heart_dataset()
-    rng = np.random.RandomState(seed ^ (hash(client_id) & 0xFFFFFFFF))
+    rng = np.random.RandomState(seed ^ _stable_id(client_id))
 
-    age_range = _LAB_AGE_RANGES.get(client_id)
-    if age_range:
-        lo, hi = age_range
-        mask = (data["ages"] >= lo) & (data["ages"] < hi)
+    if client_id in _LAB_AGE_RANGES:
+        rows = _client_partition(client_id)[subset if subset in ("train", "test", "all") else "train"]
+        X = data["X"][rows]
+        y = data["y"][rows]
+    elif subset == "all":
+        X, y = data["X"], data["y"]
     else:
-        # Validation or unknown client: random 20% sample from all data
-        mask = np.ones(len(data["X"]), dtype=bool)
-
-    X = data["X"][mask]
-    y = data["y"][mask]
+        X, y = get_global_test_data()
 
     # Shuffle and cap at n_samples
     idx = rng.permutation(len(X))[:min(n_samples, len(X))]
@@ -261,8 +304,10 @@ class FederatedLearningSystem:
         dp_enabled: bool = True,
         dp_epsilon_total: float = 20.0,
         dp_max_grad_norm: float = 1.0,
-        dp_noise_multiplier: float = 2.0,
+        dp_noise_multiplier: float = 0.5,
         convergence_patience: int = 20,
+        dp_enforce_budget: bool = False,
+        stop_on_convergence: bool = False,
     ):
         """
         Inizializza il sistema di Federated Learning
@@ -297,6 +342,12 @@ class FederatedLearningSystem:
         self.dp_epsilon_spent = 0.0
         self.dp_max_grad_norm = dp_max_grad_norm
         self.dp_noise_multiplier = dp_noise_multiplier
+        # The epsilon tracked here is a nominal figure (see aggregate_models).
+        # By default it is reported but does not stop the federation; with
+        # dp_enforce_budget=True rounds stop once the nominal total is reached.
+        self.dp_enforce_budget = dp_enforce_budget
+        # A long accuracy plateau is reported, and stops rounds only on request
+        self.stop_on_convergence = stop_on_convergence
 
         # Imposta seed per riproducibilità
         self.random = random.Random(seed)
@@ -309,8 +360,10 @@ class FederatedLearningSystem:
         self.clients = {}  # ID cliente -> modello cliente
         self.global_model = None
         self.metrics = {
-            "accuracy": [],
-            "loss": [],
+            "accuracy": [],          # global model on the held-out test set
+            "loss": [],              # global model on the held-out test set
+            "train_accuracy": [],    # weighted mean of the clients' local training accuracy
+            "train_loss": [],
             "communication_overhead": [],
             "privacy_budget": 1.0,
             "per_client": [],
@@ -422,8 +475,9 @@ class FederatedLearningSystem:
             global_w = [w.copy() for w in self.global_model] if use_prox else None
             mu = self.mu if use_prox else 0.0
 
-            # Check if privacy budget is exhausted
-            dp_active = self.dp_enabled and self.dp_epsilon_spent < self.dp_epsilon_total
+            # Noise is applied in every round. (Before, once the nominal budget
+            # was spent the noise was silently switched off.)
+            dp_active = self.dp_enabled
 
             updated_weights, loss, accuracy, noise_sigma = numpy_train(
                 weights=client_model,
@@ -580,8 +634,19 @@ class FederatedLearningSystem:
             round_loss = _binary_cross_entropy(a3, val_y)
             round_acc = float(np.mean((a3 >= 0.5).astype(np.float32) == val_y))
 
+        # round_acc / round_loss above are the clients' own training figures,
+        # measured before aggregation. What is reported as the accuracy of the
+        # federation is the aggregated global model on rows no lab trained on.
+        train_acc, train_loss = round_acc, round_loss
+        if not HAS_TF:
+            test_x, test_y = get_global_test_data()
+            global_eval = self._eval_weights(self.global_model, test_x, test_y)
+            round_acc, round_loss = global_eval["accuracy"], global_eval["loss"]
+
         self.metrics["accuracy"].append(round(round_acc, 4))
         self.metrics["loss"].append(round(round_loss, 4))
+        self.metrics.setdefault("train_accuracy", []).append(round(train_acc, 4))
+        self.metrics.setdefault("train_loss", []).append(round(train_loss, 4))
         self.metrics["communication_overhead"].append(len(client_updates))
         if client_metrics:
             self.metrics["per_client"].append(
@@ -663,7 +728,7 @@ class FederatedLearningSystem:
             return {}
         result = {}
         for cid in client_updates:
-            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round)
+            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round, subset="test")
             local_eval = self._eval_weights(client_updates[cid], data_x, data_y)
             global_eval = self._eval_weights(self.global_model, data_x, data_y)
             gain = round(global_eval["accuracy"] - local_eval["accuracy"], 4)
@@ -682,7 +747,7 @@ class FederatedLearningSystem:
             return {}
         result = {}
         for cid in self.clients:
-            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round)
+            data_x, data_y = generate_client_data(cid, n_samples=200, seed=42 + self.round, subset="test")
             ev = self._eval_weights(self.global_model, data_x, data_y)
             ev["samples"] = len(data_x)
             result[cid] = ev
@@ -731,7 +796,8 @@ class FederatedLearningSystem:
                 "budget_fraction": self.metrics["privacy_budget"],
                 "noise_multiplier": self.dp_noise_multiplier,
                 "max_grad_norm": self.dp_max_grad_norm,
-                "exhausted": self.dp_epsilon_spent >= self.dp_epsilon_total,
+                "enforced": self.dp_enforce_budget,
+                "exhausted": self.dp_enforce_budget and self.dp_epsilon_spent >= self.dp_epsilon_total,
             },
         }
 
@@ -798,7 +864,9 @@ class FederatedLearningSystem:
             patience = getattr(self, "convergence_patience", 20)
         acc = self.metrics["accuracy"]
         n = len(acc)
-        budget_exhausted = self.dp_enabled and self.dp_epsilon_spent >= self.dp_epsilon_total
+        nominal_exceeded = self.dp_enabled and self.dp_epsilon_spent >= self.dp_epsilon_total
+        # The budget stops the federation only when it is enforced
+        budget_exhausted = nominal_exceeded and self.dp_enforce_budget
 
         converged = False
         if n >= patience + 1:
@@ -809,10 +877,11 @@ class FederatedLearningSystem:
         return {
             "converged": converged,
             "budget_exhausted": budget_exhausted,
+            "budget_nominal_exceeded": nominal_exceeded,
             "rounds_completed": n,
             "patience": patience,
             "best_accuracy": round(max(acc), 4) if acc else 0,
-            "should_stop": converged or budget_exhausted,
+            "should_stop": (converged and self.stop_on_convergence) or budget_exhausted,
         }
 
     def update_client_models(self):
@@ -862,6 +931,8 @@ class FederatedLearningSystem:
             "metrics": {
                 "accuracy": self.metrics["accuracy"],
                 "loss": self.metrics["loss"],
+                "train_accuracy": self.metrics.get("train_accuracy", []),
+                "train_loss": self.metrics.get("train_loss", []),
                 "communication_overhead": self.metrics["communication_overhead"],
                 "privacy_budget": self.metrics["privacy_budget"],
                 "per_client": self.metrics["per_client"],
@@ -898,14 +969,14 @@ class FederatedLearningSystem:
 
             # Restore DP state
             dp = state.get("dp", {})
-            self.dp_enabled = dp.get("enabled", self.dp_enabled)
-            self.dp_epsilon_total = dp.get("epsilon_total", self.dp_epsilon_total)
+            # Only what was consumed is resumed: the DP settings themselves
+            # (noise, total, clipping) are the ones of the current configuration
             self.dp_epsilon_spent = dp.get("epsilon_spent", 0.0)
-            self.dp_noise_multiplier = dp.get("noise_multiplier", self.dp_noise_multiplier)
-            self.dp_max_grad_norm = dp.get("max_grad_norm", self.dp_max_grad_norm)
             self.metrics = {
                 "accuracy": state["metrics"].get("accuracy", []),
                 "loss": state["metrics"].get("loss", []),
+                "train_accuracy": state["metrics"].get("train_accuracy", []),
+                "train_loss": state["metrics"].get("train_loss", []),
                 "communication_overhead": state["metrics"].get("communication_overhead", []),
                 "privacy_budget": state["metrics"].get("privacy_budget", 1.0),
                 "per_client": state["metrics"].get("per_client", []),

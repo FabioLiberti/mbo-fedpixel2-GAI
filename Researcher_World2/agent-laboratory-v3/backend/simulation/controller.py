@@ -9,8 +9,11 @@ import asyncio
 import logging
 import json
 import uuid
+import queue
 import numpy as np
 from typing import Dict, List, Any, Optional, Callable
+import threading
+import collections
 from threading import Thread, Event, Lock
 import time
 
@@ -66,6 +69,26 @@ class SimulationController:
             fl_checkpoint_dir or FederatedLearningSystem._DEFAULT_CHECKPOINT_DIR
         )
         self.fl_run_id: Optional[str] = None
+
+        # FL pacing in wall-clock time: a new round starts every
+        # fl_round_interval seconds and its four phases share that time, so the
+        # process can be followed on screen whatever the simulation speed.
+        self.fl_round_interval = 10.0
+        self._fl_round_started_at = 0.0
+        self._fl_phase_started_at = 0.0
+
+        # Post-round dialogs written by the LLM are generated in background
+        # threads and handed back through this queue: the simulation loop only
+        # applies the finished results and never waits for the model.
+        self._fl_dialog_results: "queue.Queue" = queue.Queue()
+        self._fl_dialog_threads: Dict[str, Thread] = {}
+
+        # The FL process runs on its own clock thread (_fl_loop), so it keeps
+        # its pace even while a simulation step is waiting on the LLM. That
+        # thread never writes into the agents' memories: those writes are
+        # queued here and executed by the simulation loop between two steps.
+        self._fl_logic_lock = Lock()
+        self._fl_memory_writes: "collections.deque" = collections.deque(maxlen=300)
 
         # Dialog quality monitor
         self.dialog_monitor = DialogQualityMonitor()
@@ -131,6 +154,11 @@ class SimulationController:
             if run_id is None:
                 run_id = self._open_new_fl_run()
             self.fl_run_id = run_id
+            # FL parameters come from the "fl" section of simulation_config.json
+            privacy_cfg = fl_cfg.get("privacy", {})
+            self.fl_round_interval = float(fl_cfg.get("round_interval_seconds", 10.0))
+            self._fl_round_started_at = 0.0
+            self._fl_phase_started_at = 0.0
             self.fl_system = FederatedLearningSystem(
                 algorithm="fedavg",
                 aggregation_rounds=5,
@@ -138,6 +166,12 @@ class SimulationController:
                 model_type="simple_nn",
                 convergence_patience=patience,
                 checkpoint_dir=os.path.join(self.fl_checkpoint_root, "runs", run_id),
+                dp_enabled=bool(privacy_cfg.get("differential_privacy", True)),
+                dp_noise_multiplier=float(privacy_cfg.get("noise_multiplier", 0.5)),
+                dp_max_grad_norm=float(privacy_cfg.get("max_grad_norm", 1.0)),
+                dp_epsilon_total=float(privacy_cfg.get("epsilon_total", 1000.0)),
+                dp_enforce_budget=bool(privacy_cfg.get("enforce_budget", False)),
+                stop_on_convergence=bool(fl_cfg.get("stop_on_convergence", False)),
             )
             self._register_labs_as_clients()
             if resuming and self.fl_system.load_checkpoint():
@@ -205,6 +239,13 @@ class SimulationController:
         Inject an FL event into an agent's associative memory.
         This allows agents to "remember" FL activities and reflect on them.
         """
+        if self._on_fl_clock():
+            # Called from the FL clock thread: the write is done later by the
+            # simulation loop, the only thread that touches agent memories
+            self._fl_memory_writes.append(
+                ("event", lambda: self._inject_fl_event(agent, description, poignancy))
+            )
+            return
         try:
             s = agent.name
             p = "participated in"
@@ -647,6 +688,62 @@ class SimulationController:
 
         logger.info(f"FL reflection: {reflected} agents reflected on round {fl_round}")
 
+    def _seconds_to_next_fl_round(self) -> float:
+        """Seconds until the next round starts (0 while a round is in progress)."""
+        if self.fl_round_in_progress or not self._fl_round_started_at:
+            return 0.0
+        remaining = self.fl_round_interval - (time.monotonic() - self._fl_round_started_at)
+        return round(max(0.0, remaining), 1)
+
+    def _generate_fl_dialogs(self, kind: str, tasks: list, generate, apply, use_llm: bool):
+        """Generate one batch of post-round dialogs and apply the results.
+
+        Without the LLM the texts are instant templates: generated and applied
+        right away. With the LLM each text takes many seconds, so the batch is
+        generated in a background thread and applied later by the simulation
+        loop (_apply_pending_fl_dialogs). If the previous batch of the same
+        kind is still being written, this round is simply not commented.
+        """
+        if not tasks:
+            return
+        if not use_llm:
+            apply([generate(task) for task in tasks])
+            return
+
+        running = self._fl_dialog_threads.get(kind)
+        if running is not None and running.is_alive():
+            logger.info(f"FL dialogs ({kind}): previous batch still being written, round skipped")
+            return
+
+        run_id = self.fl_run_id
+
+        def worker():
+            from concurrent.futures import ThreadPoolExecutor
+            try:
+                with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+                    results = list(pool.map(generate, tasks))
+                self._fl_dialog_results.put((run_id, kind, apply, results))
+            except Exception as e:
+                logger.warning(f"FL dialogs ({kind}) generation failed: {e}")
+
+        thread = Thread(target=worker, daemon=True, name=f"fl-dialogs-{kind}")
+        self._fl_dialog_threads[kind] = thread
+        thread.start()
+
+    def _apply_pending_fl_dialogs(self):
+        """Apply dialog batches finished by the background threads (loop thread only)."""
+        while True:
+            try:
+                run_id, kind, apply, results = self._fl_dialog_results.get_nowait()
+            except queue.Empty:
+                return
+            if run_id != self.fl_run_id:
+                continue  # written for a run that has been reset since
+            try:
+                apply(results)
+            except Exception as e:
+                logger.warning(f"FL dialogs ({kind}) could not be applied: {e}")
+
     def _trigger_fl_conversations(self):
         """Generate post-round FL conversations between agent pairs in each lab.
 
@@ -710,74 +807,76 @@ class SimulationController:
                 logger.warning(f"FL convo for {ctx['lab_id']} failed: {e}")
                 return pair, ctx, None
 
-        if use_llm and len(tasks) > 1:
-            with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-                results = list(pool.map(_gen, tasks))
-        else:
-            results = [_gen(t) for t in tasks]
+        def _apply(results):
+            new_convos = []
+            for pair, ctx, convo in results:
+                if not convo:
+                    continue
 
-        new_convos = []
-        for pair, ctx, convo in results:
-            if not convo:
-                continue
+                # Who really wrote this text: the model, or a template used
+                # because the LLM is off or its call failed
+                from_llm = bool(getattr(convo, "from_llm", False))
 
-            # Update agent dialog state for WebSocket broadcast
-            for name, utterance in convo[-2:]:
+                # Update agent dialog state for WebSocket broadcast
+                for name, utterance in convo[-2:]:
+                    for agent in pair:
+                        if agent.name == name:
+                            agent.last_dialog = utterance
+                            agent.dialog_is_llm = from_llm
+                pair[0].scratch.chatting_with = pair[1].name
+                pair[1].scratch.chatting_with = pair[0].name
+
+                role_a = getattr(pair[0], 'role', 'researcher')
+                role_b = getattr(pair[1], 'role', 'researcher')
+
+                new_convos.append({
+                    "lab_id": ctx["lab_id"],
+                    "round": fl_round,
+                    "agents": [pair[0].name, pair[1].name],
+                    "roles": [role_a, role_b],
+                    "dialog": list(convo),
+                    "is_llm": from_llm,
+                })
+
+                # Inject conversation as memory events
+                full_text = " | ".join([f"{n}: {u}" for n, u in convo])
                 for agent in pair:
-                    if agent.name == name:
-                        agent.last_dialog = utterance
-                        agent.dialog_is_llm = use_llm
-            pair[0].scratch.chatting_with = pair[1].name
-            pair[1].scratch.chatting_with = pair[0].name
+                    self._inject_fl_event(
+                        agent,
+                        f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
+                        poignancy=7,
+                    )
 
-            role_a = getattr(pair[0], 'role', 'researcher')
-            role_b = getattr(pair[1], 'role', 'researcher')
+                # Evaluate dialog quality
+                try:
+                    # Collect recent FL memories for memory_integration scoring
+                    agent_memories = {}
+                    for agent in pair:
+                        fl_thoughts = [
+                            n.embedding_key for n in agent.a_mem.seq_thought[:5]
+                            if any(kw in (n.embedding_key or "").lower()
+                                   for kw in ["fl", "round", "accuracy", "federato"])
+                        ]
+                        if fl_thoughts:
+                            agent_memories[agent.name] = " ".join(fl_thoughts[:2])
 
-            new_convos.append({
-                "lab_id": ctx["lab_id"],
-                "round": fl_round,
-                "agents": [pair[0].name, pair[1].name],
-                "roles": [role_a, role_b],
-                "dialog": convo,
-            })
+                    self.dialog_monitor.evaluate(
+                        dialog=convo,
+                        fl_context=ctx,
+                        roles={pair[0].name: role_a, pair[1].name: role_b},
+                        memories=agent_memories,
+                        expected_speakers=[pair[0].name, pair[1].name],
+                        source="llm" if from_llm else "stub",
+                        lab_id=ctx["lab_id"],
+                    )
+                except Exception as e:
+                    logger.warning(f"Dialog quality eval failed for {ctx['lab_id']}: {e}")
 
-            # Inject conversation as memory events
-            full_text = " | ".join([f"{n}: {u}" for n, u in convo])
-            for agent in pair:
-                self._inject_fl_event(
-                    agent,
-                    f"Discussione FL round {fl_round} con collega: {full_text[:200]}",
-                    poignancy=7,
-                )
+            # Store for broadcast (keep last 3 rounds)
+            self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
+            logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
 
-            # Evaluate dialog quality
-            try:
-                # Collect recent FL memories for memory_integration scoring
-                agent_memories = {}
-                for agent in pair:
-                    fl_thoughts = [
-                        n.embedding_key for n in agent.a_mem.seq_thought[:5]
-                        if any(kw in (n.embedding_key or "").lower()
-                               for kw in ["fl", "round", "accuracy", "federato"])
-                    ]
-                    if fl_thoughts:
-                        agent_memories[agent.name] = " ".join(fl_thoughts[:2])
-
-                self.dialog_monitor.evaluate(
-                    dialog=convo,
-                    fl_context=ctx,
-                    roles={pair[0].name: role_a, pair[1].name: role_b},
-                    memories=agent_memories,
-                    expected_speakers=[pair[0].name, pair[1].name],
-                    source="llm" if use_llm else "stub",
-                    lab_id=ctx["lab_id"],
-                )
-            except Exception as e:
-                logger.warning(f"Dialog quality eval failed for {ctx['lab_id']}: {e}")
-
-        # Store for broadcast (keep last 3 rounds)
-        self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
-        logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
+        self._generate_fl_dialogs("intra", tasks, _gen, _apply, use_llm)
 
     def _trigger_cross_lab_conversations(self):
         """Generate cross-lab FL conversations after global aggregation.
@@ -861,67 +960,67 @@ class SimulationController:
                 logger.warning(f"Cross-lab convo {ctx['lab_id']} failed: {e}")
                 return pair, ctx, None
 
-        if use_llm and len(tasks) > 1:
-            with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-                results = list(pool.map(_gen, tasks))
-        else:
-            results = [_gen(t) for t in tasks]
+        def _apply(results):
+            new_convos = []
+            for pair, ctx, convo in results:
+                if not convo:
+                    continue
 
-        new_convos = []
-        for pair, ctx, convo in results:
-            if not convo:
-                continue
+                from_llm = bool(getattr(convo, "from_llm", False))
 
-            # Update agent dialog state
-            for name, utterance in convo[-2:]:
+                # Update agent dialog state
+                for name, utterance in convo[-2:]:
+                    for agent in pair:
+                        if agent.name == name:
+                            agent.last_dialog = utterance
+                            agent.dialog_is_llm = from_llm
+                pair[0].scratch.chatting_with = pair[1].name
+                pair[1].scratch.chatting_with = pair[0].name
+
+                new_convos.append({
+                    "lab_id": ctx["lab_id"],
+                    "round": fl_round,
+                    "agents": [pair[0].name, pair[1].name],
+                    "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
+                    "labs": [ctx["lab_a"], ctx["lab_b"]],
+                    "cross_lab": True,
+                    "dialog": list(convo),
+                    "is_llm": from_llm,
+                })
+
+                # Inject cross-lab conversation as high-poignancy memory
+                full_text = " | ".join([f"{n}: {u}" for n, u in convo])
                 for agent in pair:
-                    if agent.name == name:
-                        agent.last_dialog = utterance
-                        agent.dialog_is_llm = use_llm
-            pair[0].scratch.chatting_with = pair[1].name
-            pair[1].scratch.chatting_with = pair[0].name
+                    self._inject_fl_event(
+                        agent,
+                        f"Collaborazione inter-lab round {fl_round} "
+                        f"({ctx['lab_a']}↔{ctx['lab_b']}): {full_text[:200]}",
+                        poignancy=8,
+                    )
 
-            new_convos.append({
-                "lab_id": ctx["lab_id"],
-                "round": fl_round,
-                "agents": [pair[0].name, pair[1].name],
-                "roles": [getattr(pair[0], 'role', ''), getattr(pair[1], 'role', '')],
-                "labs": [ctx["lab_a"], ctx["lab_b"]],
-                "cross_lab": True,
-                "dialog": convo,
-            })
+                # Evaluate cross-lab dialog quality
+                role_a = getattr(pair[0], 'role', 'researcher')
+                role_b = getattr(pair[1], 'role', 'researcher')
+                try:
+                    self.dialog_monitor.evaluate(
+                        dialog=convo,
+                        fl_context=ctx,
+                        roles={pair[0].name: role_a, pair[1].name: role_b},
+                        expected_speakers=[pair[0].name, pair[1].name],
+                        source="llm" if from_llm else "stub",
+                        lab_id=ctx["lab_id"],
+                    )
+                except Exception as e:
+                    logger.warning(f"Dialog quality eval failed for cross-lab {ctx['lab_id']}: {e}")
 
-            # Inject cross-lab conversation as high-poignancy memory
-            full_text = " | ".join([f"{n}: {u}" for n, u in convo])
-            for agent in pair:
-                self._inject_fl_event(
-                    agent,
-                    f"Collaborazione inter-lab round {fl_round} "
-                    f"({ctx['lab_a']}↔{ctx['lab_b']}): {full_text[:200]}",
-                    poignancy=8,
-                )
+            self.fl_conversations = (self.fl_conversations + new_convos)[-12:]
+            logger.info(f"Generated {len(new_convos)} cross-lab FL conversations for round {fl_round}")
 
-            # Evaluate cross-lab dialog quality
-            role_a = getattr(pair[0], 'role', 'researcher')
-            role_b = getattr(pair[1], 'role', 'researcher')
-            try:
-                self.dialog_monitor.evaluate(
-                    dialog=convo,
-                    fl_context=ctx,
-                    roles={pair[0].name: role_a, pair[1].name: role_b},
-                    expected_speakers=[pair[0].name, pair[1].name],
-                    source="llm" if use_llm else "stub",
-                    lab_id=ctx["lab_id"],
-                )
-            except Exception as e:
-                logger.warning(f"Dialog quality eval failed for cross-lab {ctx['lab_id']}: {e}")
+        # =========================================================================
+        # Simulation Lifecycle
+        # =========================================================================
 
-        self.fl_conversations = (self.fl_conversations + new_convos)[-12:]
-        logger.info(f"Generated {len(new_convos)} cross-lab FL conversations for round {fl_round}")
-
-    # =========================================================================
-    # Simulation Lifecycle
-    # =========================================================================
+        self._generate_fl_dialogs("cross", tasks, _gen, _apply, use_llm)
 
     def start_simulation(self):
         with self._lock:
@@ -958,6 +1057,11 @@ class SimulationController:
             )
             self.simulation_thread.daemon = True
             self.simulation_thread.start()
+
+            fl_clock = Thread(target=self._fl_loop, args=(stop_token,), name="fl-clock")
+            fl_clock.daemon = True
+            fl_clock._fl_clock = True
+            fl_clock.start()
 
         logger.info("Simulation started")
         return True
@@ -1050,7 +1154,13 @@ class SimulationController:
         if not self.fl_system:
             return
 
-        # --- DP budget enforcement: skip round if privacy budget exhausted ---
+        # A new round starts fl_round_interval seconds after the previous one
+        now = time.monotonic()
+        if self._fl_round_started_at and now - self._fl_round_started_at < self.fl_round_interval:
+            return
+
+        # Rounds stop only if the configuration asks for it (enforced privacy
+        # budget, or stop on convergence): by default the federation keeps going
         convergence = self.fl_system.check_convergence()
         if convergence.get("budget_exhausted", False):
             logger.warning(
@@ -1059,7 +1169,7 @@ class SimulationController:
                 f"/ε_total={self.fl_system.dp_epsilon_total:.2f})"
             )
             return
-        if convergence.get("converged", False):
+        if convergence.get("should_stop", False):
             logger.info("FL round skipped: model has converged")
             return
 
@@ -1071,6 +1181,8 @@ class SimulationController:
         self.fl_round_in_progress = True
         self.fl_step_counter = 0
         self.fl_current_phase = "training"
+        self._fl_round_started_at = now
+        self._fl_phase_started_at = now
 
         for lab_id in selected_labs:
             self._assign_fl_task_to_lab_agents(lab_id, "train")
@@ -1089,6 +1201,15 @@ class SimulationController:
     def _check_fl_phase_completion(self):
         if not self.fl_round_in_progress or not self.model:
             return False
+        # Each phase lasts at least a fifth of the round interval, so it can be
+        # seen on screen, and at most twice that: when steps are slow (LLM on)
+        # the agents' progress must not hold the round back.
+        min_phase = self.fl_round_interval / 5.0
+        elapsed = time.monotonic() - self._fl_phase_started_at
+        if elapsed < min_phase:
+            return False
+        if elapsed >= 2 * min_phase:
+            return True
         for lab_id in self.model.get_lab_ids():
             for agent in self.model.get_lab_agents(lab_id):
                 if hasattr(agent, 'fl_task') and agent.fl_task and agent.fl_progress < 1.0:
@@ -1100,6 +1221,7 @@ class SimulationController:
             return
 
         phase = self.fl_current_phase
+        self._fl_phase_started_at = time.monotonic()
 
         if phase == "training":
             self.fl_current_phase = "sending"
@@ -1142,16 +1264,10 @@ class SimulationController:
             self._inject_fl_awareness_events()
 
             # Deposit FL results as thought nodes (persist 72-144h for dialog enrichment)
-            try:
-                self._deposit_fl_thought_nodes()
-            except Exception as e:
-                logger.warning(f"FL thought node deposit failed: {e}")
+            self._write_memory_later("thought_nodes", self._deposit_fl_thought_nodes)
 
             # Trigger lightweight FL reflection (1 agent per lab, template-based)
-            try:
-                self._trigger_fl_reflection()
-            except Exception as e:
-                logger.warning(f"FL reflection failed: {e}")
+            self._write_memory_later("reflection", self._trigger_fl_reflection)
 
             # Generate FL conversations between agent pairs (intra-lab)
             try:
@@ -1202,6 +1318,84 @@ class SimulationController:
                 self._advance_fl_phase()
 
     # =========================================================================
+    # FL clock thread and deferred memory writes
+    # =========================================================================
+
+    @staticmethod
+    def _on_fl_clock() -> bool:
+        """True when running on the FL clock thread."""
+        return getattr(threading.current_thread(), "_fl_clock", False)
+
+    def _write_memory_later(self, kind: str, action):
+        """Run an action that writes into agent memories: now, or (from the FL
+        clock thread) queued for the simulation loop."""
+        if self._on_fl_clock():
+            self._fl_memory_writes.append((kind, action))
+            return
+        try:
+            action()
+        except Exception as e:
+            logger.warning(f"FL memory write ({kind}) failed: {e}")
+
+    def _drain_fl_memory_writes(self):
+        """Perform the queued memory writes (simulation loop thread only).
+
+        Single events are all applied. Whole-round updates (thought nodes,
+        reflection) read the current FL state when they run, so if several
+        piled up while a slow step was running only the latest of each kind
+        is executed.
+        """
+        pending = []
+        while True:
+            try:
+                pending.append(self._fl_memory_writes.popleft())
+            except IndexError:
+                break
+        if not pending:
+            return
+        last_of_kind = {kind: i for i, (kind, _) in enumerate(pending) if kind != "event"}
+        for i, (kind, action) in enumerate(pending):
+            if kind != "event" and last_of_kind[kind] != i:
+                continue
+            try:
+                action()
+            except Exception as e:
+                logger.warning(f"FL memory write ({kind}) failed: {e}")
+
+    def _broadcast_state(self):
+        """Send the current state to the interface (used by the FL clock thread)."""
+        if not self.on_step_callback or not self.model:
+            return
+        try:
+            self.on_step_callback(self._collect_simulation_data())
+        except Exception as e:
+            logger.warning(f"FL state broadcast failed: {e}")
+
+    def _fl_loop(self, stop_token: Event):
+        """Clock of the FL process: advances rounds in wall-clock time,
+        independently of how fast simulation steps are running."""
+        last_view = None
+        while not stop_token.is_set():
+            if not self.paused:
+                try:
+                    with self._fl_logic_lock:
+                        if stop_token.is_set():
+                            break
+                        self._process_fl_logic()
+                        self._apply_pending_fl_dialogs()
+                    view = (
+                        self.fl_current_phase,
+                        self.fl_system.round if self.fl_system else None,
+                        len(self.fl_conversations),
+                    )
+                    if view != last_view:
+                        last_view = view
+                        self._broadcast_state()
+                except Exception:
+                    logger.exception("Error in FL clock")
+            stop_token.wait(0.25)
+
+    # =========================================================================
     # Simulation Loop
     # =========================================================================
 
@@ -1233,8 +1427,9 @@ class SimulationController:
                         break
                     step_count += 1
 
-                    # Process FL logic
-                    self._process_fl_logic()
+                    # The FL process runs on its own clock (_fl_loop); here the
+                    # loop only performs the memory writes that it queued
+                    self._drain_fl_memory_writes()
 
                     # Collect and broadcast data (every 10 steps to avoid flooding Chrome)
                     if step_count % 10 == 0:
@@ -1302,6 +1497,8 @@ class SimulationController:
                     "step_counter": self.fl_step_counter,
                     "steps_per_round": self.fl_steps_per_round,
                     "run_id": self.fl_run_id,
+                    "round_interval": self.fl_round_interval,
+                    "seconds_to_next_round": self._seconds_to_next_fl_round(),
                     "round": fl_state["round"],
                     "algorithm": fl_state.get("algorithm", "fedavg"),
                     "mu": self.fl_system.mu if self.fl_system else 0.01,
@@ -1373,6 +1570,8 @@ class SimulationController:
             self.fl_step_counter = 0
             self.fl_current_phase = None
             self.fl_conversations = []
+            self._fl_round_started_at = 0.0
+            self._fl_phase_started_at = 0.0
 
         # A reset starts a new FL run: the previous run's checkpoint stays on
         # disk in its own folder and is not reloaded.

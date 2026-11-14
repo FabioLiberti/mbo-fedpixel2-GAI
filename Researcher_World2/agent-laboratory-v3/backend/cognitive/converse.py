@@ -338,6 +338,16 @@ def _retrieve_agent_fl_memories(agent, n=2) -> str:
         return ""
 
 
+class Conversation(list):
+    """A list of [agent_name, utterance] turns that also records who wrote it:
+    from_llm is True only when the text really comes from the model, False
+    when it is a template (LLM switched off, or the model call failed)."""
+
+    def __init__(self, turns=(), from_llm: bool = False):
+        super().__init__(turns)
+        self.from_llm = from_llm
+
+
 def generate_fl_conversation(
     agent_a,
     agent_b,
@@ -368,7 +378,7 @@ def generate_fl_conversation(
             memories_a=mem_a, memories_b=mem_b,
         )
     else:
-        return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, fl_context)
+        return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, fl_context))
 
 
 def _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx):
@@ -452,7 +462,7 @@ def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
         return _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx)
     except Exception as e:
         logger.warning(f"FL convo LLM failed: {e}, falling back to stubs")
-        return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx)
+        return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx))
 
 
 def _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx):
@@ -478,7 +488,8 @@ def _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx):
                     convo.append([expected, utterance])
 
     if len(convo) >= 2:
-        return convo[:6]  # Cap at 6 turns
+        return Conversation(convo[:6], from_llm=True)  # Cap at 6 turns
 
-    # Fallback to stubs
-    return _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx)
+    # Fallback to stubs: the model answered nothing usable (or an error string)
+    logger.warning("FL convo: unusable LLM answer, falling back to stubs")
+    return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx))

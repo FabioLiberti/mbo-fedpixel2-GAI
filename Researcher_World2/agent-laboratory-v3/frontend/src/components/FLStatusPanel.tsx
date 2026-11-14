@@ -189,7 +189,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
 
   const rawState = currentState || 'idle';
   const STATE_DISPLAY: Record<string, string> = {
-    idle: 'In attesa',
+    idle: 'Tra due round',
     training: 'Training',
     sending: 'Invio pesi',
     aggregating: 'Aggregazione',
@@ -307,7 +307,7 @@ const FLStatusPanel: React.FC<FLStatusPanelProps> = ({ flStatus, onToggleFL, onA
           {dp?.enabled && (
             <div className="fl-privacy-budget">
               <div className="fl-privacy-header">
-                <span className="fl-privacy-label">Privacy Budget</span>
+                <span className="fl-privacy-label">Privacy budget (nominale)</span>
                 <span className="fl-privacy-value">
                   {dp.exhausted ? (
                     <span className="fl-privacy-exhausted">EXHAUSTED</span>

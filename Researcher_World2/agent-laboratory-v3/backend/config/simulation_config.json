@@ -82,10 +82,15 @@
       }
     },
     "privacy": {
-      "differential_privacy": false,
-      "epsilon": 1.0,
+      "differential_privacy": true,
+      "noise_multiplier": 0.5,
+      "max_grad_norm": 1.0,
+      "epsilon_total": 1000.0,
+      "enforce_budget": false,
       "secure_aggregation": true
     },
+    "round_interval_seconds": 10,
+    "stop_on_convergence": false,
     "convergence_patience": 20
   }
 }
