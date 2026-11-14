@@ -8,6 +8,7 @@ import datetime
 import asyncio
 import logging
 import json
+import uuid
 import numpy as np
 from typing import Dict, List, Any, Optional, Callable
 from threading import Thread, Event, Lock
@@ -29,7 +30,8 @@ class SimulationController:
     def __init__(
         self,
         config_path: str = None,
-        on_step_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        on_step_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        fl_checkpoint_dir: Optional[str] = None
     ):
         if config_path is None:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +57,16 @@ class SimulationController:
         self.fl_current_phase = None
         self.fl_conversations: List[Dict[str, Any]] = []  # post-round FL dialogs
 
+        # FL experiment runs. Each run keeps its checkpoint in its own folder,
+        # <root>/runs/<run_id>/, and <root>/current_run names the run that a
+        # backend restart resumes. A reset opens a new run instead of
+        # reloading the old one. Checkpoint files left directly in <root> by
+        # earlier versions are not read.
+        self.fl_checkpoint_root = (
+            fl_checkpoint_dir or FederatedLearningSystem._DEFAULT_CHECKPOINT_DIR
+        )
+        self.fl_run_id: Optional[str] = None
+
         # Dialog quality monitor
         self.dialog_monitor = DialogQualityMonitor()
 
@@ -65,8 +77,41 @@ class SimulationController:
 
         logger.info(f"Simulation controller initialized with config: {config_path}")
 
-    def initialize_model(self):
-        """Initialize the simulation model, MazeAdapter, and FL system."""
+    def _read_current_fl_run(self) -> Optional[str]:
+        """Return the id of the FL run to resume, or None if there is none."""
+        pointer = os.path.join(self.fl_checkpoint_root, "current_run")
+        try:
+            with open(pointer, "r") as f:
+                run_id = f.read().strip()
+        except OSError:
+            return None
+        # The id is used as a folder name: accept a plain name only.
+        if not run_id or run_id in (".", "..") or os.path.basename(run_id) != run_id:
+            logger.warning(f"Ignoring invalid FL run id in {pointer}")
+            return None
+        return run_id
+
+    def _open_new_fl_run(self) -> str:
+        """Create a new FL run id and record it as the current run."""
+        run_id = (
+            datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            + "-" + uuid.uuid4().hex[:6]
+        )
+        os.makedirs(self.fl_checkpoint_root, exist_ok=True)
+        pointer = os.path.join(self.fl_checkpoint_root, "current_run")
+        tmp_pointer = pointer + ".tmp"
+        with open(tmp_pointer, "w") as f:
+            f.write(run_id + "\n")
+        os.replace(tmp_pointer, pointer)
+        return run_id
+
+    def initialize_model(self, new_fl_run: bool = False):
+        """Initialize the simulation model, MazeAdapter, and FL system.
+
+        With new_fl_run=False the FL system resumes the current run, if one
+        was checkpointed (backend restart). With new_fl_run=True it always
+        starts a new run from round 0 (reset).
+        """
         try:
             self.model = LabEnvironment(self.config_path)
             logger.info(
@@ -74,21 +119,29 @@ class SimulationController:
                 f"maze_adapter ready, sim_time={self.model.sim_time}"
             )
 
-            # Initialize FL system (try to restore from checkpoint)
+            # Initialize FL system: resume the current run, or open a new one
             fl_cfg = (getattr(self.model, "config", None) or {}).get("fl", {})
             patience = fl_cfg.get("convergence_patience", 20)
+            run_id = None if new_fl_run else self._read_current_fl_run()
+            resuming = run_id is not None
+            if run_id is None:
+                run_id = self._open_new_fl_run()
+            self.fl_run_id = run_id
             self.fl_system = FederatedLearningSystem(
                 algorithm="fedavg",
                 aggregation_rounds=5,
                 client_fraction=0.8,
                 model_type="simple_nn",
                 convergence_patience=patience,
+                checkpoint_dir=os.path.join(self.fl_checkpoint_root, "runs", run_id),
             )
             self._register_labs_as_clients()
-            if self.fl_system.load_checkpoint():
-                logger.info(f"FL system restored from checkpoint (round {self.fl_system.round})")
+            if resuming and self.fl_system.load_checkpoint():
+                logger.info(
+                    f"FL run {run_id} restored from checkpoint (round {self.fl_system.round})"
+                )
             else:
-                logger.info("FL system initialized fresh (no checkpoint)")
+                logger.info(f"FL run {run_id} initialized fresh (round 0)")
 
             return True
         except Exception as e:
@@ -1200,6 +1253,7 @@ class SimulationController:
                     "current_phase": self.fl_current_phase,
                     "step_counter": self.fl_step_counter,
                     "steps_per_round": self.fl_steps_per_round,
+                    "run_id": self.fl_run_id,
                     "round": fl_state["round"],
                     "algorithm": fl_state.get("algorithm", "fedavg"),
                     "mu": self.fl_system.mu if self.fl_system else 0.01,
@@ -1227,6 +1281,7 @@ class SimulationController:
                 fl_state = self.fl_system.get_state()
                 state["fl"] = {
                     "enabled": self.fl_enabled,
+                    "run_id": self.fl_run_id,
                     "round": fl_state["round"],
                     "algorithm": fl_state["algorithm"],
                     "round_in_progress": self.fl_round_in_progress,
@@ -1265,8 +1320,12 @@ class SimulationController:
             self.fl_enabled = False
             self.fl_round_in_progress = False
             self.fl_step_counter = 0
+            self.fl_current_phase = None
+            self.fl_conversations = []
 
-        success = self.initialize_model()
+        # A reset starts a new FL run: the previous run's checkpoint stays on
+        # disk in its own folder and is not reloaded.
+        success = self.initialize_model(new_fl_run=True)
         if success and was_running:
             self.start_simulation()
 

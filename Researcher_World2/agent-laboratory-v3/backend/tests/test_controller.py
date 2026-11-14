@@ -150,6 +150,50 @@ def test_fl_event_injection():
     print("PASS: test_fl_event_injection")
 
 
+def test_reset_opens_new_fl_run():
+    """Reset restarts FL from round 0 in a new run; a restart resumes the current run."""
+    import tempfile
+    from simulation.controller import SimulationController
+
+    with tempfile.TemporaryDirectory() as checkpoint_root:
+        controller = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert controller.initialize_model()
+        first_run = controller.fl_run_id
+        assert first_run
+
+        for _ in range(2):
+            updates, metrics = controller._collect_client_updates()
+            controller.fl_system.aggregate_models(updates, client_metrics=metrics)
+        assert controller.fl_system.round == 2
+        assert controller.fl_system.dp_epsilon_spent > 0
+
+        # Backend restart: a new controller resumes the same run
+        restarted = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert restarted.initialize_model()
+        assert restarted.fl_run_id == first_run
+        assert restarted.fl_system.round == 2
+
+        # Reset: new run, FL back to round 0, the old checkpoint stays on disk
+        assert restarted.reset_simulation()
+        second_run = restarted.fl_run_id
+        assert second_run != first_run
+        assert restarted.fl_system.round == 0
+        assert restarted.fl_system.dp_epsilon_spent == 0.0
+        assert restarted.fl_system.metrics["accuracy"] == []
+        assert not restarted.fl_system.check_convergence()["budget_exhausted"]
+        assert os.path.exists(
+            os.path.join(checkpoint_root, "runs", first_run, "fl_state.json")
+        )
+
+        # Restart after a reset resumes the new run, not the old one
+        after_reset = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert after_reset.initialize_model()
+        assert after_reset.fl_run_id == second_run
+        assert after_reset.fl_system.round == 0
+
+    print("PASS: test_reset_opens_new_fl_run")
+
+
 if __name__ == "__main__":
     tests = [
         test_environment_creation,
@@ -159,6 +203,7 @@ if __name__ == "__main__":
         test_get_agent_states,
         test_get_lab_agents,
         test_fl_event_injection,
+        test_reset_opens_new_fl_run,
     ]
 
     passed = 0
