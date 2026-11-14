@@ -79,6 +79,16 @@ function App() {
     }
   }, []);
 
+  // Risposta del backend a ogni comando (simulation_state): stato reale della
+  // simulazione. Arriva anche in pausa, quando i broadcast periodici sono fermi.
+  const handleBackendState = useCallback((message: any) => {
+    const d = message.data;
+    if (!d) return;
+    if (d.running && !d.paused) setSimStatus('running');
+    else if (d.running && d.paused) setSimStatus('paused');
+    else setSimStatus('stopped');
+  }, []);
+
   // Handler per broadcast reali dal backend (simulation_update)
   const handleBackendUpdate = useCallback((message: any) => {
     const d = message.data;
@@ -131,8 +141,8 @@ function App() {
         if (isMounted) {
           setConnected(true);
           
-          // Richiedi lo stato iniziale
-          webSocketService.sendMessage('getSimulationStatus');
+          // Richiedi lo stato iniziale (il backend risponde con simulation_state)
+          webSocketService.sendSimulationCommand('get_state');
         }
       } catch (error) {
         console.error('WebSocket connection failed:', error);
@@ -145,6 +155,7 @@ function App() {
     // Registra i listener
     webSocketService.onMessage('simulationStatus', handleSimulationStatus);
     webSocketService.onMessage('simulation_update', handleBackendUpdate);
+    webSocketService.onMessage('simulation_state', handleBackendState);
     
     // Connettiti al WebSocket
     connectWebSocket();
@@ -157,7 +168,7 @@ function App() {
         setConnected(prev => {
           if (prev !== isConnected) {
             if (isConnected) {
-              webSocketService.sendMessage('getSimulationStatus');
+              webSocketService.sendSimulationCommand('get_state');
             }
             return isConnected;
           }
@@ -172,6 +183,7 @@ function App() {
       clearInterval(connectionCheckInterval);
       webSocketService.offMessage('simulationStatus', handleSimulationStatus);
       webSocketService.offMessage('simulation_update', handleBackendUpdate);
+      webSocketService.offMessage('simulation_state', handleBackendState);
       webSocketService.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,21 +301,21 @@ function App() {
   
   // Gestisci i controlli della simulazione
   const handleSimulationControl = useCallback((action: string) => {
-    // Comando WebSocket nel formato corretto per il backend
+    // Unico canale per i comandi: WebSocket. Il backend risponde con
+    // simulation_state, che riallinea la UI allo stato reale.
     webSocketService.sendSimulationCommand(action);
 
-    // REST fallback (fire-and-forget)
-    fetch(`http://localhost:8091/simulation/${action}`, { method: 'POST' }).catch(() => {});
-
-    // Evento locale per Phaser e simulazione fallback
+    // Evento locale per Phaser e simulazione fallback. Phaser non ha un
+    // evento di ripresa: riprendere equivale a far ripartire le animazioni.
     const customEvent = new CustomEvent('simulation:control', {
-      detail: { action }
+      detail: { action: action === 'resume' ? 'start' : action }
     });
     document.dispatchEvent(customEvent);
 
-    // UI reattiva (stato reale arriva dal backend via simulation_update)
+    // UI reattiva (lo stato reale arriva dal backend subito dopo)
     switch (action) {
       case 'start':
+      case 'resume':
         setSimStatus('running');
         break;
       case 'pause':
@@ -473,10 +485,10 @@ function App() {
                 <h3>Simulazione</h3>
                 <div className="button-group">
                   <button 
-                    onClick={() => handleSimulationControl('start')}
+                    onClick={() => handleSimulationControl(simStatus === 'paused' ? 'resume' : 'start')}
                     disabled={simStatus === 'running' || !connected}
                   >
-                    Avvia Simulazione
+                    {simStatus === 'paused' ? 'Riprendi' : 'Avvia Simulazione'}
                   </button>
                   <button 
                     onClick={() => handleSimulationControl('pause')}

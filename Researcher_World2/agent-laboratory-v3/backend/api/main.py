@@ -27,6 +27,7 @@ sys.path.insert(0, backend_dir)
 class DummySimulationController:
     def __init__(self):
         self.running = False
+        self.paused = False
         self.fl_system = None
         self.fl_enabled = False
         self.fl_round_in_progress = False
@@ -161,7 +162,11 @@ async def get_config():
 @app.post("/simulation/start")
 async def start_simulation():
     if controller.running:
-        return {"status": "already_running"}
+        if not controller.paused:
+            return {"status": "already_running"}
+        # Start on a paused simulation resumes it
+        success = controller.start_simulation()
+        return {"status": "resumed" if success else "error"}
     success = controller.start_simulation()
     return {"status": "started" if success else "error"}
 
@@ -375,6 +380,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     controller.resume_simulation()
                 elif command == "reset":
                     controller.reset_simulation()
+                elif command == "get_state":
+                    pass  # no action: the current state is sent back below
                 elif command == "set_speed":
                     controller.set_speed(params.get("speed", 1.0))
                 elif command == "set_selected_lab":

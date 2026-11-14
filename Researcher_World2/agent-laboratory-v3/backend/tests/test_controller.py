@@ -246,6 +246,58 @@ def test_stop_start_keeps_single_loop():
     print("PASS: test_stop_start_keeps_single_loop")
 
 
+def test_pause_then_resume_or_start():
+    """A paused simulation stops stepping; resume, or start, makes it step again."""
+    import tempfile
+    import threading
+    import time
+    from simulation.controller import SimulationController
+
+    with tempfile.TemporaryDirectory() as checkpoint_root:
+        controller = SimulationController(fl_checkpoint_dir=checkpoint_root)
+        assert controller.initialize_model()
+
+        counters = {"calls": 0}
+        guard = threading.Lock()
+
+        def fast_step(max_workers=4):
+            with guard:
+                counters["calls"] += 1
+
+        def calls():
+            with guard:
+                return counters["calls"]
+
+        controller.model.step_parallel = fast_step
+
+        assert controller.start_simulation()
+        controller.fl_enabled = False
+        time.sleep(0.3)
+        assert calls() > 0
+        loop_thread = controller.simulation_thread
+
+        for wake_up in (controller.resume_simulation, controller.start_simulation):
+            assert controller.pause_simulation()
+            time.sleep(0.2)  # let a step that was already running finish
+            paused_at = calls()
+            time.sleep(0.4)
+            assert calls() == paused_at, "the simulation kept stepping while paused"
+            assert controller.get_simulation_state()["paused"] is True
+
+            assert wake_up()
+            assert controller.get_simulation_state()["paused"] is False
+            time.sleep(0.4)
+            assert calls() > paused_at, f"{wake_up.__name__} did not resume the simulation"
+
+        # Start while running (not paused) is still refused, and no second loop appears
+        assert controller.start_simulation() is False
+        assert controller.simulation_thread is loop_thread
+
+        assert controller.stop_simulation()
+
+    print("PASS: test_pause_then_resume_or_start")
+
+
 if __name__ == "__main__":
     tests = [
         test_environment_creation,
@@ -257,6 +309,7 @@ if __name__ == "__main__":
         test_fl_event_injection,
         test_reset_opens_new_fl_run,
         test_stop_start_keeps_single_loop,
+        test_pause_then_resume_or_start,
     ]
 
     passed = 0

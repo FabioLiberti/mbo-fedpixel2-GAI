@@ -926,6 +926,11 @@ class SimulationController:
     def start_simulation(self):
         with self._lock:
             if self.running:
+                if self.paused:
+                    # Start on a paused simulation resumes it
+                    self.paused = False
+                    logger.info("Simulation resumed (start requested while paused)")
+                    return True
                 logger.warning("Simulation is already running")
                 return False
             if not self.model and not self.initialize_model():
