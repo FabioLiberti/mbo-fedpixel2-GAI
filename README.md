@@ -11,7 +11,7 @@
 **Ricercatori autonomi con architettura cognitiva believable in un ecosistema di Federated Learning distribuito: simulazione multi-agente con pipeline cognitiva completa, sistema di memoria a tre livelli, dialoghi LLM-driven role-aware, navigazione A\*, Differential Privacy e analytics in tempo reale.**
 
 <p align="center">
-  <img src="Researcher_World2/agent-laboratory-v2/frontend/public/logo192.png" width="680" alt="Federated Generative Agents" />
+  <img src="Researcher_World2/agent-laboratory-v3/frontend/public/logo192.png" width="680" alt="Federated Generative Agents" />
 </p>
 
 ---
@@ -544,12 +544,12 @@ ollama serve   # lasciare attivo
 
 # 2. Backend
 conda activate mbo_gai
-cd Researcher_World2/agent-laboratory-v2/backend
+cd Researcher_World2/agent-laboratory-v3/backend
 pip install -r requirements.txt
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8091 --reload
 
 # 3. Frontend (in un altro terminale)
-cd Researcher_World2/agent-laboratory-v2/frontend
+cd Researcher_World2/agent-laboratory-v3/frontend
 npm install
 npm start    # apre http://localhost:3026
 
@@ -576,7 +576,7 @@ Researcher_World3_GAI/
 +-- README.md
 +-- ANALYSIS.md                                  # Analisi architetturale completa
 +-- Researcher_World2/
-|   +-- agent-laboratory-v2/
+|   +-- agent-laboratory-v3/
 |       +-- frontend/                            # React 18 + Phaser 3 (~24,900 righe)
 |       |   +-- src/
 |       |   |   +-- phaser/

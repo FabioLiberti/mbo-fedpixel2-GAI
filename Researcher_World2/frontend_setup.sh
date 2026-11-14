@@ -1,5 +1,5 @@
 # Navigare nella directory frontend
-cd agent-laboratory-v2/frontend
+cd agent-laboratory-v3/frontend
 
 # Inizializzare un progetto React con TypeScript
 npx create-react-app . --template typescript

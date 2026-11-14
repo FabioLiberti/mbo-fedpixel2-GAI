@@ -57,7 +57,7 @@ coverage/
 img_DEVS/
 
 # === Nested git histories (from original forks) ===
-Researcher_World2/agent-laboratory-v2/.git/
+Researcher_World2/agent-laboratory-v3/.git/
 LLM_Generative_Agents/generative_agents/.git/
 
 # === Environment files with secrets ===

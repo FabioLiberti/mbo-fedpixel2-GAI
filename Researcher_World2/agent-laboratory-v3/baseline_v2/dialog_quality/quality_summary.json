@@ -1,0 +1,12 @@
+{
+  "total_evaluated": 105,
+  "average_scores": {
+    "data_grounding": 0.961,
+    "role_differentiation": 0.315,
+    "memory_integration": 0.448,
+    "repetition_score": 0.489,
+    "format_compliance": 0.996,
+    "overall_quality": 0.697
+  },
+  "last_updated": "2026-07-01T22:04:17.911260"
+}
