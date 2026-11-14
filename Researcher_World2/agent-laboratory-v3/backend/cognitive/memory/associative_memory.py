@@ -112,6 +112,14 @@ class AssociativeMemory:
         # Role of the owning agent (set after construction)
         self.agent_role = None
 
+        # Number given to the next node. It only grows: a number is never
+        # reused after its node has been pruned (reusing it overwrote surviving
+        # nodes and broke save()).
+        self._next_node_number = 1
+        # Latest simulated time seen by this memory: the "now" that expirations
+        # are compared against (expirations are in simulated time too).
+        self._clock = None
+
         if f_saved and os.path.isdir(f_saved):
             embeddings_path = os.path.join(f_saved, "embeddings.json")
             if check_if_file_exists(embeddings_path):
@@ -127,13 +135,13 @@ class AssociativeMemory:
                 if not isinstance(nodes_load, dict) or not nodes_load:
                     nodes_load = {}
 
-                for count in range(len(nodes_load.keys())):
-                    node_id = f"node_{count + 1}"
-                    if node_id not in nodes_load:
-                        continue
+                # Every saved node, oldest first, each keeping its own number
+                # (numbers can have gaps where nodes were pruned)
+                for node_id in sorted(nodes_load, key=lambda k: nodes_load[k]["node_count"]):
                     node_details = nodes_load[node_id]
 
                     node_count = node_details["node_count"]
+                    self._next_node_number = max(self._next_node_number, node_count)
                     type_count = node_details["type_count"]
                     node_type = node_details["type"]
                     depth = node_details["depth"]
@@ -187,22 +195,19 @@ class AssociativeMemory:
         if len(seq) <= max_size:
             return
 
-        now = datetime.datetime.now()
-        to_remove = []
+        # Only the excess is removed, never the whole sequence. Expired nodes
+        # go first, then the least important, then the oldest. "Expired" is
+        # judged against the simulated clock: comparing a simulated expiration
+        # with the wall clock made every node look expired and emptied the
+        # memory as soon as it went over its limit.
+        now = self._clock
+        excess = len(seq) - max_size
 
-        # 1) collect expired nodes
-        for node in seq:
-            if node.expiration and node.expiration < now:
-                to_remove.append(node)
+        def removal_order(node):
+            expired = bool(now and node.expiration and node.expiration < now)
+            return (0 if expired else 1, node.poignancy, node.created)
 
-        # 2) if still over limit after removing expired, drop lowest-poignancy
-        remaining = len(seq) - len(to_remove)
-        if remaining > max_size:
-            alive = [n for n in seq if n not in set(to_remove)]
-            # sort by poignancy asc, then oldest first
-            alive.sort(key=lambda n: (n.poignancy, n.created))
-            excess = remaining - max_size
-            to_remove.extend(alive[:excess])
+        to_remove = sorted(seq, key=removal_order)[:excess]
 
         if not to_remove:
             return
@@ -231,9 +236,8 @@ class AssociativeMemory:
         create_folder_if_not_there(out_json + "/nodes.json")
 
         r = dict()
-        for count in range(len(self.id_to_node.keys()), 0, -1):
-            node_id = f"node_{count}"
-            node = self.id_to_node[node_id]
+        for node_id, node in sorted(self.id_to_node.items(),
+                                    key=lambda item: item[1].node_count, reverse=True):
 
             r[node_id] = dict()
             r[node_id]["node_count"] = node.node_count
@@ -276,6 +280,14 @@ class AssociativeMemory:
                 return 2
         return 1
 
+    def _take_node_number(self, created) -> int:
+        """Return the number for a new node and move the simulated clock forward."""
+        number = self._next_node_number
+        self._next_node_number += 1
+        if isinstance(created, datetime.datetime) and (self._clock is None or created > self._clock):
+            self._clock = created
+        return number
+
     def decay_memories(self):
         """Run temporal decay: prune expired nodes from all sequences."""
         self._prune("seq_event", MAX_SEQ_EVENT)
@@ -289,7 +301,7 @@ class AssociativeMemory:
         if expiration is None and created:
             expiration = compute_expiration(created, "event", poignancy)
 
-        node_count = len(self.id_to_node.keys()) + 1
+        node_count = self._take_node_number(created)
         type_count = len(self.seq_event) + 1
         node_type = "event"
         node_id = f"node_{node_count}"
@@ -335,7 +347,7 @@ class AssociativeMemory:
         if expiration is None and created:
             expiration = compute_expiration(created, "thought", poignancy)
 
-        node_count = len(self.id_to_node.keys()) + 1
+        node_count = self._take_node_number(created)
         type_count = len(self.seq_thought) + 1
         node_type = "thought"
         node_id = f"node_{node_count}"
@@ -380,7 +392,7 @@ class AssociativeMemory:
         if expiration is None and created:
             expiration = compute_expiration(created, "chat", poignancy)
 
-        node_count = len(self.id_to_node.keys()) + 1
+        node_count = self._take_node_number(created)
         type_count = len(self.seq_chat) + 1
         node_type = "chat"
         node_id = f"node_{node_count}"
