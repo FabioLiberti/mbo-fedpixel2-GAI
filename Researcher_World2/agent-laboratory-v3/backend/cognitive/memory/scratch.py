@@ -380,18 +380,23 @@ class Scratch:
         if not self.act_address:
             return True
 
-        if self.chatting_with:
-            end_time = self.chatting_end_time
-        else:
+        end_time = self.chatting_end_time if self.chatting_with else None
+        if end_time is None:
+            # Not chatting, or chatting without a scheduled end: the action
+            # lasts for its own duration.
             x = self.act_start_time
             if x and x.second != 0:
                 x = x.replace(second=0)
                 x = x + datetime.timedelta(minutes=1)
-            end_time = (x + datetime.timedelta(minutes=self.act_duration)) if x else None
+            if x and self.act_duration is not None:
+                end_time = x + datetime.timedelta(minutes=self.act_duration)
 
+        # The action is over once the clock has reached its end time. The
+        # check must not require the two instants to coincide: a simulation
+        # step is 10 minutes and the cognitive cycle runs every N steps, so
+        # the clock almost never lands exactly on the end time.
         if end_time and self.curr_time:
-            if end_time.strftime("%H:%M:%S") == self.curr_time.strftime("%H:%M:%S"):
-                return True
+            return self.curr_time >= end_time
         return False
 
     def act_summarize(self):

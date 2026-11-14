@@ -220,8 +220,54 @@ def test_scratch():
     print("  PASS")
 
 
+def test_scratch_action_end_time():
+    """An action is finished once the clock has reached its end, not only at the exact instant."""
+    print("\n=== Test Scratch action end time ===")
+    start = datetime.datetime(2026, 3, 14, 10, 0, 0)
+
+    # Plain action: 60 minutes from 10:00
+    s = Scratch()
+    s.act_address = "FL Research Ecosystem:Mercatorum Lab:Server Room:GPU Cluster"
+    s.act_start_time = start
+    s.act_duration = 60
+    s.curr_time = start + datetime.timedelta(minutes=50)
+    assert not s.act_check_finished()
+    s.curr_time = start + datetime.timedelta(minutes=60)
+    assert s.act_check_finished()
+    # The simulation clock moves in 10-minute steps and the cognitive cycle
+    # runs every N steps: the end instant is usually skipped, not hit
+    s.curr_time = start + datetime.timedelta(minutes=170)
+    assert s.act_check_finished()
+    # Same time of day on a later date is also past the end
+    s.curr_time = start + datetime.timedelta(days=3, minutes=30)
+    assert s.act_check_finished()
+
+    # Conversation: ends at chatting_end_time, whatever the action duration
+    chat = Scratch()
+    chat.act_address = "<persona> Elena Conti"
+    chat.act_start_time = start
+    chat.act_duration = 600
+    chat.chatting_with = "Elena Conti"
+    chat.chatting_end_time = start + datetime.timedelta(minutes=45)
+    chat.curr_time = start + datetime.timedelta(minutes=40)
+    assert not chat.act_check_finished()
+    chat.curr_time = start + datetime.timedelta(minutes=50)
+    assert chat.act_check_finished()
+
+    # Chat partner set without a scheduled end: falls back to the action duration
+    chat.chatting_end_time = None
+    chat.act_duration = 30
+    chat.curr_time = start + datetime.timedelta(minutes=20)
+    assert not chat.act_check_finished()
+    chat.curr_time = start + datetime.timedelta(minutes=40)
+    assert chat.act_check_finished()
+
+    print("  PASS")
+
+
 if __name__ == "__main__":
     test_memory_tree()
     test_associative_memory()
     test_scratch()
+    test_scratch_action_end_time()
     print("\n=== ALL TESTS PASSED ===")
