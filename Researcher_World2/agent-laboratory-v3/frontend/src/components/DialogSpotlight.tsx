@@ -5,7 +5,7 @@
 // Tutto ciò che gli agenti dicono è scritto dal modello sui dati reali del
 // federated learning e arriva dal backend. Questo componente lo mette in fila
 // e lo mostra UNA battuta alla volta, a caratteri molto grandi, per un tempo
-// sufficiente a leggerla (almeno 6 secondi), dicendo alla scena chi si avvicina
+// sufficiente a leggerla (almeno 10 secondi), dicendo alla scena chi si avvicina
 // a chi e chi sta parlando. Non scrive alcuna battuta: se il modello non ha
 // prodotto nulla, non viene mostrato nulla.
 
@@ -35,13 +35,13 @@ interface Shown extends Line {
   remoteLab: string | null;
 }
 
-// Durata a schermo di una battuta: almeno 6 secondi, di più se è lunga
-const MIN_LINE_MS = 6500;
-const MAX_LINE_MS = 10000;
+// Durata a schermo di una battuta: almeno 10 secondi, di più se è lunga
+const MIN_LINE_MS = 10000;
+const MAX_LINE_MS = 13000;
 // Una conversazione parla dei risultati di un certo round: se quando viene il
 // suo turno la simulazione è già più avanti di così, non viene più mostrata
-const MAX_ROUNDS_OLD = 3;
-const GAP_MS = 500;            // pausa tra una battuta e la successiva
+const MAX_ROUNDS_OLD = 5;
+const GAP_MS = 1000;           // pausa tra una battuta e la successiva
 const APPROACH_MS = 3500;      // tempo dato ai due agenti per avvicinarsi
 const MAX_QUEUE = 3;           // oltre, le conversazioni più vecchie si saltano
 
@@ -148,6 +148,8 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
   const seenRef = useRef<Set<string>>(new Set());
   const playingRef = useRef(false);
   const runRef = useRef(0);                 // cambia a ogni arresto: ferma la regia in corso
+  const directorRef = useRef(0);            // una sola regia alla volta: vale l'ultima partita
+  const lastShownAtRef = useRef(0);         // istante in cui è comparso l'ultimo box
   const counterRef = useRef(0);
   const activeRef = useRef(active);
   const rolesRef = useRef<Record<string, { role: string; lab: string }>>({});
@@ -197,12 +199,27 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
 
   const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
+  /**
+   * Dentro un laboratorio si vede ciò che riguarda quel laboratorio: le
+   * conversazioni a cui partecipa almeno uno dei suoi agenti e le proposte dei
+   * suoi agenti. Le decisioni del consorzio si vedono ovunque. Sulla mappa
+   * generale si vede tutto.
+   */
+  const belongsHere = (item: any): boolean => {
+    if ((item.kind || 'conversation') === 'decision') return true;
+    const lab = currentLab();
+    if (!lab) return true;
+    return (item.agents || []).some((name: string) => rolesRef.current[name]?.lab === lab);
+  };
+
   // Regia: un elemento alla volta, una battuta alla volta
   const play = async () => {
     if (playingRef.current) return;
     playingRef.current = true;
     const run = runRef.current;
-    const stopped = () => run !== runRef.current || !activeRef.current;
+    directorRef.current += 1;
+    const director = directorRef.current;
+    const stopped = () => run !== runRef.current || !activeRef.current || director !== directorRef.current;
     try {
       while (queueRef.current.length > 0 && !stopped()) {
         const item = queueRef.current.shift();
@@ -213,6 +230,7 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
         const roundNow = Number(roundRef.current || 0);
         if ((item.kind || 'conversation') !== 'decision'
             && roundNow - Number(item.round || 0) > MAX_ROUNDS_OLD) continue;
+        if (!belongsHere(item)) continue;
 
         const names: string[] = item.agents || [];
         if (item.kind === 'conversation' && names.length === 2) {
@@ -224,6 +242,14 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
         for (let i = 0; i < lines.length && !stopped(); i++) {
           const line = lines[i];
           const duration = lineDuration(line.text);
+          // Qualunque cosa accada, tra la comparsa di un box e quella del
+          // successivo passa almeno il tempo minimo di lettura
+          const sinceLast = Date.now() - lastShownAtRef.current;
+          if (sinceLast < MIN_LINE_MS + GAP_MS) {
+            await sleep(MIN_LINE_MS + GAP_MS - sinceLast);
+            if (stopped()) break;
+          }
+          lastShownAtRef.current = Date.now();
           const info = rolesRef.current[line.speaker];
           const lab = currentLab();
           counterRef.current += 1;
