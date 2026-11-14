@@ -393,14 +393,19 @@ def test_fl_round_pacing_and_dialog_source():
         assert controller.fl_round_in_progress
 
         agents = controller.model.get_lab_agents("mercatorum")
+        # with the model off nothing is said: there are no template dialogs
         convo = generate_fl_conversation(
             agents[0], agents[1],
             {"round": 1, "accuracy": 0.7, "gain": 0.02, "dp_budget": 0.9,
              "lab_id": "mercatorum", "demo": "pazienti"},
             use_llm=False,
         )
-        assert len(convo) >= 2
+        assert list(convo) == []
         assert convo.from_llm is False
+        controller.fl_conversations = []
+        controller._trigger_fl_conversations()
+        controller._trigger_cross_lab_conversations()
+        assert controller.fl_conversations == []
     print("PASS: test_fl_round_pacing_and_dialog_source")
 
 

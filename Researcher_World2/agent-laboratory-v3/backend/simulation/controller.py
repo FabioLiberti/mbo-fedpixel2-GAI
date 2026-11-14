@@ -95,6 +95,9 @@ class SimulationController:
         # the winner is applied (see cognitive/fl_guidance.py)
         self.fl_guidance_enabled = True
         self.fl_guidance_every = 5
+        # Off by default: without the model the agents make no proposal at all.
+        # When on, a silent choice is made by a declared rule (no words).
+        self.fl_guidance_rule_fallback = False
         self.fl_decisions: List[Dict[str, Any]] = []
         self._fl_guidance_turn = 0
 
@@ -170,6 +173,7 @@ class SimulationController:
             guidance_cfg = fl_cfg.get("agent_guidance", {})
             self.fl_guidance_enabled = bool(guidance_cfg.get("enabled", True))
             self.fl_guidance_every = max(1, int(guidance_cfg.get("every_rounds", 5)))
+            self.fl_guidance_rule_fallback = bool(guidance_cfg.get("rule_fallback", False))
             self.fl_decisions = []
             self._fl_guidance_turn = 0
             self.fl_system = FederatedLearningSystem(
@@ -715,7 +719,7 @@ class SimulationController:
         return round(max(0.0, remaining), 1)
 
     def _generate_fl_dialogs(self, kind: str, tasks: list, generate, apply, use_llm: bool,
-                             priority: int = 1, generate_template=None):
+                             priority: int = 1):
         """Generate one batch of post-round dialogs and apply the results.
 
         Without the LLM the texts are instant templates: generated and applied
@@ -732,12 +736,9 @@ class SimulationController:
 
         running = self._fl_dialog_threads.get(kind)
         if running is not None and running.is_alive():
-            # The model is still writing the previous batch: this round gets
-            # template dialogs (if the caller has them) instead of none at all
-            if generate_template is not None:
-                apply([generate_template(task) for task in tasks])
-            else:
-                logger.info(f"FL dialogs ({kind}): previous batch still being written, round skipped")
+            # The model is still writing the previous batch: this round is not
+            # commented (nothing pre-written takes its place)
+            logger.info(f"FL dialogs ({kind}): previous batch still being written, round skipped")
             return
 
         run_id = self.fl_run_id
@@ -776,6 +777,29 @@ class SimulationController:
             except Exception as e:
                 logger.warning(f"FL dialogs ({kind}) could not be applied: {e}")
 
+    def _fl_conversation_turn(self, fl_round: int) -> Optional[str]:
+        """Which conversation, if any, follows this round.
+
+        What is said is shown one line at a time, each long enough to be read:
+        in the time of one decision cycle there is room for the agents'
+        proposals and for one conversation. The conversation follows the first
+        round of each cycle: two cycles out of three inside a lab ("intra"),
+        the third between two labs ("cross")."""
+        every = max(1, self.fl_guidance_every)
+        if fl_round % every != 1 % every:
+            return None
+        return "cross" if (fl_round // every) % 3 == 2 else "intra"
+
+    @staticmethod
+    def _fl_conversation_pair(agents: list, fl_round: int) -> list:
+        """The two agents of a lab that talk after this round: a different pair
+        at every round, so that over time everyone talks with everyone; who
+        opens alternates too."""
+        import itertools
+        pairs = list(itertools.combinations(agents, 2))
+        first, second = pairs[fl_round % len(pairs)]
+        return [first, second] if (fl_round // len(pairs)) % 2 == 0 else [second, first]
+
     def _fl_dialog_figures(self) -> Dict[str, Any]:
         """Real figures of the run that the agents talk about in their dialogs."""
         from cognitive import fl_guidance
@@ -813,48 +837,42 @@ class SimulationController:
         lvg_list = metrics.get("local_vs_global", [])
         lvg = lvg_list[-1] if lvg_list else {}
 
+        # Conversations are written by the model from the real figures of the
+        # run. Nothing is pre-written: with the model off there are none.
         use_llm = is_llm_enabled()
+        if not use_llm:
+            return
+        if self._fl_conversation_turn(fl_round) != "intra":
+            return
 
-        # Prepare tasks: (pair, fl_context) per lab
-        tasks = []
-        for lab_id in self.model.get_lab_ids():
-            agents = self.model.get_lab_agents(lab_id)
-            if len(agents) < 2:
-                continue
+        # A model answer takes several seconds and a session lasts minutes: one
+        # conversation per round, in the lab on screen (otherwise one in turn).
+        lab_ids = [l for l in self.model.get_lab_ids() if len(self.model.get_lab_agents(l)) >= 2]
+        if not lab_ids:
+            return
+        lab_id = getattr(self.model, "selected_lab_id", None)
+        if lab_id not in lab_ids:
+            lab_id = lab_ids[fl_round % len(lab_ids)]
 
-            # A different pair at every round, so that over time every agent
-            # of the lab talks with every other one; who opens alternates too
-            import itertools
-            pairs = list(itertools.combinations(agents, 2))
-            first, second = pairs[fl_round % len(pairs)]
-            pair = [first, second] if (fl_round // len(pairs)) % 2 == 0 else [second, first]
-
-            lab_lvg = lvg.get(lab_id, {})
-            fl_context = {
-                "round": fl_round,
-                "accuracy": lab_lvg.get("global_acc", metrics.get("accuracy", [0])[-1] if metrics.get("accuracy") else 0),
-                "gain": lab_lvg.get("gain", 0),
-                "dp_budget": dp.get("budget_fraction", 1.0),
-                "lab_id": lab_id,
-                "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
-                **self._fl_dialog_figures(),
-            }
-            tasks.append((pair, fl_context))
-
-        # A model answer takes several seconds, and a session lasts minutes:
-        # the model writes the conversation of one lab per round (the one on
-        # screen, otherwise one in turn) and the others use templates.
-        lab_ids = [ctx["lab_id"] for _, ctx in tasks]
-        llm_lab = getattr(self.model, "selected_lab_id", None)
-        if llm_lab not in lab_ids and lab_ids:
-            llm_lab = lab_ids[fl_round % len(lab_ids)]
+        pair = self._fl_conversation_pair(self.model.get_lab_agents(lab_id), fl_round)
+        lab_lvg = lvg.get(lab_id, {})
+        fl_context = {
+            "round": fl_round,
+            "accuracy": metrics.get("accuracy", [0])[-1] if metrics.get("accuracy") else 0,
+            "local_acc": lab_lvg.get("local_acc"),
+            "global_acc": lab_lvg.get("global_acc"),
+            "gain": lab_lvg.get("gain", 0),
+            "dp_budget": dp.get("budget_fraction", 1.0),
+            "lab_id": lab_id,
+            "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
+            **self._fl_dialog_figures(),
+        }
+        tasks = [(pair, fl_context)]
 
         def _gen(args):
             pair, ctx = args
             try:
-                return pair, ctx, generate_fl_conversation(
-                    pair[0], pair[1], ctx, use_llm=use_llm and ctx["lab_id"] == llm_lab
-                )
+                return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=True)
             except Exception as e:
                 logger.warning(f"FL convo for {ctx['lab_id']} failed: {e}")
                 return pair, ctx, None
@@ -865,9 +883,10 @@ class SimulationController:
                 if not convo:
                     continue
 
-                # Who really wrote this text: the model, or a template used
-                # because the LLM is off or its call failed
+                # Only what the model wrote, with verified numbers, is shown
                 from_llm = bool(getattr(convo, "from_llm", False))
+                if not from_llm:
+                    continue
 
                 # Update agent dialog state for WebSocket broadcast
                 for name, utterance in convo[-2:]:
@@ -882,6 +901,7 @@ class SimulationController:
                 role_b = getattr(pair[1], 'role', 'researcher')
 
                 new_convos.append({
+                    "kind": "conversation",
                     "lab_id": ctx["lab_id"],
                     "round": fl_round,
                     "agents": [pair[0].name, pair[1].name],
@@ -925,14 +945,10 @@ class SimulationController:
                     logger.warning(f"Dialog quality eval failed for {ctx['lab_id']}: {e}")
 
             # Store for broadcast (keep last 3 rounds)
-            self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
+            self.fl_conversations = (self.fl_conversations + new_convos)[-20:]
             logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
 
-        def _gen_template(args):
-            pair, ctx = args
-            return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=False)
-
-        self._generate_fl_dialogs("intra", tasks, _gen, _apply, use_llm, generate_template=_gen_template)
+        self._generate_fl_dialogs("intra", tasks, _gen, _apply, use_llm)
 
     def _trigger_cross_lab_conversations(self):
         """Generate cross-lab FL conversations after global aggregation.
@@ -982,9 +998,14 @@ class SimulationController:
                 agent_b = random.choice(candidates_b) if candidates_b else random.choice(agents_b)
                 cross_pairs.append((agent_a, agent_b, lab_a, lab_b))
 
-        # Limit to 2 cross-lab conversations per round
-        if len(cross_pairs) > 2:
-            cross_pairs = random.sample(cross_pairs, 2)
+        # Written by the model only: with the model off there are none
+        if not use_llm:
+            return
+        if self._fl_conversation_turn(fl_round) != "cross":
+            return
+        # One cross-lab conversation per round
+        if len(cross_pairs) > 1:
+            cross_pairs = random.sample(cross_pairs, 1)
 
         tasks = []
         for agent_a, agent_b, lab_a, lab_b in cross_pairs:
@@ -1009,16 +1030,10 @@ class SimulationController:
 
         from cognitive.converse import generate_fl_conversation
 
-        # As for the intra-lab dialogs: the model writes one cross-lab
-        # conversation per round, the other uses a template
-        llm_task = id(tasks[0][1]) if tasks else None
-
         def _gen(args):
             pair, ctx = args
             try:
-                return pair, ctx, generate_fl_conversation(
-                    pair[0], pair[1], ctx, use_llm=use_llm and id(ctx) == llm_task
-                )
+                return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=True)
             except Exception as e:
                 logger.warning(f"Cross-lab convo {ctx['lab_id']} failed: {e}")
                 return pair, ctx, None
@@ -1030,6 +1045,8 @@ class SimulationController:
                     continue
 
                 from_llm = bool(getattr(convo, "from_llm", False))
+                if not from_llm:
+                    continue
 
                 # Update agent dialog state
                 for name, utterance in convo[-2:]:
@@ -1041,6 +1058,7 @@ class SimulationController:
                 pair[1].scratch.chatting_with = pair[0].name
 
                 new_convos.append({
+                    "kind": "conversation",
                     "lab_id": ctx["lab_id"],
                     "round": fl_round,
                     "agents": [pair[0].name, pair[1].name],
@@ -1076,18 +1094,14 @@ class SimulationController:
                 except Exception as e:
                     logger.warning(f"Dialog quality eval failed for cross-lab {ctx['lab_id']}: {e}")
 
-            self.fl_conversations = (self.fl_conversations + new_convos)[-12:]
+            self.fl_conversations = (self.fl_conversations + new_convos)[-20:]
             logger.info(f"Generated {len(new_convos)} cross-lab FL conversations for round {fl_round}")
 
         # =========================================================================
         # Simulation Lifecycle
         # =========================================================================
 
-        def _gen_template(args):
-            pair, ctx = args
-            return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=False)
-
-        self._generate_fl_dialogs("cross", tasks, _gen, _apply, use_llm, generate_template=_gen_template)
+        self._generate_fl_dialogs("cross", tasks, _gen, _apply, use_llm)
 
     def start_simulation(self):
         with self._lock:
@@ -1421,10 +1435,13 @@ class SimulationController:
             if agents:
                 proposers.append(agents[turn % len(agents)])
         use_llm = is_llm_enabled()
+        rule_fallback = self.fl_guidance_rule_fallback
+        if not use_llm and not rule_fallback:
+            return  # the agents' proposals are written by the model, or not made
 
         def _gen(agent):
             try:
-                return fl_guidance.propose(agent, ctx, use_llm)
+                return fl_guidance.propose(agent, ctx, use_llm, rule_fallback)
             except Exception as e:
                 logger.warning(f"FL guidance: proposal of {agent.name} failed: {e}")
                 return None
@@ -1450,13 +1467,27 @@ class SimulationController:
             }
             self.fl_decisions = (self.fl_decisions + [decision])[-20:]
 
-            # Each proposer says its proposal (shown as its box on screen)
+            # What each proposer said (the model's own words), then the outcome
+            # of the vote, enter the dialog feed shown on screen
             by_name = {agent.name: agent for agent in proposers}
+            feed = []
             for p in proposals:
                 agent = by_name.get(p["agent"])
-                if agent is not None:
-                    agent.last_dialog = f"Propongo di {p['option_text']}. {p['reason']}"
-                    agent.dialog_is_llm = bool(p["from_llm"])
+                if agent is not None and p["from_llm"] and p["reason"]:
+                    agent.last_dialog = p["reason"]
+                    agent.dialog_is_llm = True
+                    feed.append({
+                        "kind": "proposal", "lab_id": p["lab_id"], "round": asked_at,
+                        "agents": [p["agent"]], "roles": [p["role"]],
+                        "dialog": [[p["agent"], p["reason"]]], "is_llm": True,
+                        "option_text": p["option_text"],
+                    })
+            feed.append({
+                "kind": "decision", "lab_id": "consorzio", "round": asked_at,
+                "agents": [], "roles": [], "dialog": [], "is_llm": False,
+                "decision": decision,
+            })
+            self.fl_conversations = (self.fl_conversations + feed)[-20:]
 
             # ...and every agent remembers what was decided
             winners = [p["agent"] for p in proposals if p["option"] == option]

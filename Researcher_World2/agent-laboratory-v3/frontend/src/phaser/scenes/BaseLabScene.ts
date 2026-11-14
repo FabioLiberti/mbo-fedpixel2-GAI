@@ -132,10 +132,13 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   private pairInteractionCooldowns: Map<string, number> = new Map();
   private nextSceneInteractionAt: number = 0;
 
-  // Conversazioni generate dal backend e messe in scena in questo laboratorio:
-  // una alla volta; se ne arriva un'altra mentre una è in corso, si tiene la più recente
-  private conversationPlaying: boolean = false;
-  private pendingConversation: any | null = null;
+  // Messa in scena delle battute scritte dal modello. La sequenza e i tempi li
+  // decide l'interfaccia (un solo flusso, una battuta alla volta): la scena
+  // esegue, facendo avvicinare gli agenti e mostrando il fumetto di chi parla.
+  private stagedSpeeds: Map<Agent, number> = new Map();
+  private stagedAgents: Agent[] = [];
+  // La scena si anima solo a simulazione avviata
+  private wasSimulationActive: boolean = false;
 
   // Listener registrati da questa scena sull'emettitore globale del gioco:
   // vengono rimossi uno per uno alla chiusura della scena (vedi teardownScene)
@@ -161,11 +164,14 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     // init() viene eseguito a ogni avvio della scena. 'once' evita accumuli.
     this.events.once('shutdown', this.teardownScene, this);
 
-    // Le conversazioni scritte dal backend (per tipo di agente, sui dati reali
-    // del round) vengono recitate dagli agenti di questo laboratorio
-    this.conversationPlaying = false;
-    this.pendingConversation = null;
-    this.onGameEvent('analytics-fl-conversation', (convo: any) => this.queueBackendConversation(convo));
+    // Indicazioni di scena dall'interfaccia: chi si avvicina a chi, chi dice
+    // che cosa e per quanto, e quando la conversazione è finita
+    this.stagedSpeeds = new Map();
+    this.stagedAgents = [];
+    this.wasSimulationActive = false;
+    this.onGameEvent('stage-approach', (d: any) => this.stageApproach(d));
+    this.onGameEvent('stage-line', (d: any) => this.stageLine(d));
+    this.onGameEvent('stage-end', () => this.stageEnd());
 
     console.log(`BaseLabScene initialized: ${this.scene.key}`);
   }
@@ -231,8 +237,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.zoneIconCooldowns.clear();
     this.pairInteractionCooldowns.clear();
     this.nextSceneInteractionAt = 0;
-    this.conversationPlaying = false;
-    this.pendingConversation = null;
+    this.stagedSpeeds.clear();
+    this.stagedAgents = [];
     this.isZoomed = false;
     this.zoomBackBtn = null;
   }
@@ -312,7 +318,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   }
 
   // ------------------------------------------------------------------
-  // Conversazioni del backend messe in scena
+  // Messa in scena delle battute scritte dal modello
   // ------------------------------------------------------------------
 
   private findAgentByName(name: string | undefined): Agent | undefined {
@@ -321,94 +327,73 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     return this.agents.find(a => a && a.name && a.name.trim().toLowerCase() === wanted);
   }
 
-  /** Riceve una conversazione dal backend: la recita subito o la tiene per dopo. */
-  private queueBackendConversation(convo: any): void {
+  /** I due agenti di una conversazione, se sono in questo laboratorio, si vengono incontro. */
+  private stageApproach(d: { agents?: string[] }): void {
     try {
-      if (!convo || !Array.isArray(convo.dialog) || !Array.isArray(convo.agents)) return;
-      if (!this.scene.isActive() || this.agents.length === 0) return;
-      // Riguarda questo laboratorio solo se almeno uno dei due agenti è qui
-      if (!convo.agents.some((n: string) => !!this.findAgentByName(n))) return;
-      if (this.conversationPlaying) {
-        this.pendingConversation = convo;
-        return;
-      }
-      this.playBackendConversation(convo);
-    } catch (error) {
-      console.error('[BaseLabScene] queueBackendConversation error:', error);
-    }
-  }
-
-  /**
-   * I due agenti si avvicinano e si scambiano le battute una alla volta. Se uno
-   * dei due lavora in un altro laboratorio (conversazione tra laboratori), le
-   * sue battute compaiono solo nel pop-up, come voce in collegamento.
-   */
-  private playBackendConversation(convo: any): void {
-    const dialogs = this.agentController?.getDialogController();
-    if (!dialogs) return;
-    this.conversationPlaying = true;
-
-    const names: string[] = convo.agents;
-    const a = this.findAgentByName(names[0]);
-    const b = this.findAgentByName(names[1]);
-    const here = [a, b].filter((x): x is Agent => !!x);
-
-    let delay = 300;
-    const usualSpeed = new Map<Agent, number>();
-    if (a && b) {
-      // Si incontrano a metà strada, uno di fronte all'altro, a passo svelto:
-      // la conversazione comincia quando sono vicini
+      if (!this.scene.isActive() || !Array.isArray(d?.agents)) return;
+      const a = this.findAgentByName(d.agents[0]);
+      const b = this.findAgentByName(d.agents[1]);
+      this.stagedAgents = [a, b].filter((x): x is Agent => !!x);
+      if (!a || !b) return;
       const APPROACH_SPEED = 95;
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
-      [a, b].forEach(agent => { usualSpeed.set(agent, agent.speed); agent.speed = APPROACH_SPEED; });
+      [a, b].forEach(agent => {
+        if (!this.stagedSpeeds.has(agent)) this.stagedSpeeds.set(agent, agent.speed);
+        agent.setBubbleActive(false);
+        agent.speed = APPROACH_SPEED;
+      });
       a.moveTo(mx - 24, my);
       b.moveTo(mx + 24, my);
-      const distance = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
-      delay = Phaser.Math.Clamp(Math.round((distance / 2 / APPROACH_SPEED) * 1000 * 1.5) + 400, 900, 6000);
+    } catch (error) {
+      console.error('[BaseLabScene] stageApproach error:', error);
     }
+  }
 
-    const lines: Array<[string, string]> = convo.dialog;
-    lines.forEach(([speakerName, text], index) => {
-      const duration = Phaser.Math.Clamp(2600 + String(text).length * 45, 3400, 7500);
-      this.time.delayedCall(delay, () => {
-        const speaker = this.findAgentByName(speakerName);
-        const listenerName = names.find(n => n !== speakerName);
-        const listener = this.findAgentByName(listenerName);
-        here.forEach(agent => agent.setBubbleActive(true)); // restano fermi mentre parlano
-
-        if (speaker) {
-          dialogs.createDialog({
-            sourceId: speaker.getId(),
-            targetId: listener ? listener.getId() : undefined,
-            targetName: listenerName,
-            type: FLDialogType.RESEARCH,
-            text: String(text),
-            isLLMDialog: !!convo.is_llm,
-            isResponse: index % 2 === 1,
-            priority: 8,
-            duration,
-          });
-        } else {
-          // Chi parla è in un altro laboratorio: solo nel pop-up
-          this.game.events.emit('dialog-shown', {
-            kind: 'speech', remote: true,
-            speakerName, targetName: listenerName ?? null,
-            text: String(text), isLLM: !!convo.is_llm, duration,
-          });
-        }
+  /** Una battuta: se chi parla è in questo laboratorio compare il suo fumetto. */
+  private stageLine(d: {
+    speakerName?: string; listenerName?: string | null; text?: string;
+    duration?: number; isLLM?: boolean; index?: number;
+  }): void {
+    try {
+      if (!this.scene.isActive() || !d?.text) return;
+      const dialogs = this.agentController?.getDialogController();
+      const speaker = this.findAgentByName(d.speakerName);
+      if (!dialogs || !speaker) return;
+      const listener = this.findAgentByName(d.listenerName ?? undefined);
+      // chi parla e chi ascolta restano fermi per la durata della battuta
+      [speaker, listener].forEach(agent => { if (agent) agent.setBubbleActive(true); });
+      if (!this.stagedAgents.includes(speaker)) this.stagedAgents.push(speaker);
+      dialogs.createDialog({
+        sourceId: speaker.getId(),
+        targetId: listener ? listener.getId() : undefined,
+        targetName: d.listenerName ?? undefined,
+        type: FLDialogType.RESEARCH,
+        text: String(d.text),
+        isLLMDialog: !!d.isLLM,
+        isResponse: (d.index ?? 0) % 2 === 1,
+        priority: 8,
+        duration: d.duration,
       });
-      delay += duration + 350;
-    });
+    } catch (error) {
+      console.error('[BaseLabScene] stageLine error:', error);
+    }
+  }
 
-    this.time.delayedCall(delay + 200, () => {
-      here.forEach(agent => { if (agent.scene) agent.setBubbleActive(false); });
-      usualSpeed.forEach((speed, agent) => { agent.speed = speed; });
-      this.conversationPlaying = false;
-      const next = this.pendingConversation;
-      this.pendingConversation = null;
-      if (next) this.playBackendConversation(next);
-    });
+  /** Fine della conversazione (o arresto): gli agenti tornano alle loro attività. */
+  private stageEnd(clearBubbles: boolean = false): void {
+    try {
+      this.stagedSpeeds.forEach((speed, agent) => { if (agent.scene) agent.speed = speed; });
+      this.stagedSpeeds.clear();
+      this.stagedAgents.forEach(agent => { if (agent.scene) agent.setBubbleActive(false); });
+      this.stagedAgents = [];
+      if (clearBubbles) {
+        const dialogs = this.agentController?.getDialogController();
+        if (dialogs) dialogs.removeAllBubbles();
+      }
+    } catch (error) {
+      console.error('[BaseLabScene] stageEnd error:', error);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -469,10 +454,22 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     console.log('Creating test agents (base - override in subclass)');
   }
 
+  /** True quando la simulazione è avviata e non in pausa (lo dice l'interfaccia). */
+  protected isSimulationActive(): boolean {
+    return this.game.registry.get('simulationActive') === true;
+  }
+
   protected updateAgents(time: number, delta: number): void {
-    this.agents.forEach(agent => {
-      if (agent && typeof agent.update === 'function') agent.update(time, delta);
-    });
+    // Prima di "Avvia Simulazione" (e in pausa o ad arresto) la scena è ferma:
+    // gli agenti non si muovono e non dicono nulla
+    const active = this.isSimulationActive();
+    if (!active && this.wasSimulationActive) this.stageEnd(true);
+    this.wasSimulationActive = active;
+    if (active) {
+      this.agents.forEach(agent => {
+        if (agent && typeof agent.update === 'function') agent.update(time, delta);
+      });
+    }
     // I box dei dialoghi seguono gli agenti mentre si muovono
     const dialogs = this.agentController?.getDialogController();
     if (dialogs) dialogs.update(time, delta);
@@ -503,25 +500,10 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     }
   }
 
-  protected handleAgentInteraction(agent1: Agent, agent2: Agent): void {
-    // Questo metodo viene chiamato a ogni fotogramma finché due agenti sono a
-    // contatto: senza freno la stessa coppia avvierebbe decine di interazioni
-    // al secondo.
-    if (this.conversationPlaying) return; // è in corso una conversazione messa in scena
-    const now = this.time.now;
-    const pairKey = [agent1.getId(), agent2.getId()].sort().join('|');
-    if ((this.pairInteractionCooldowns.get(pairKey) ?? 0) > now) return;
-    if (now < this.nextSceneInteractionAt) return;
-
-    // La coppia entra in pausa anche se il sorteggio non avvia nulla, così il
-    // sorteggio non viene ripetuto a ogni fotogramma
-    this.pairInteractionCooldowns.set(pairKey, now + BaseLabScene.PAIR_INTERACTION_COOLDOWN_MS);
-    if (Math.random() < 0.8) {
-      this.nextSceneInteractionAt = now + BaseLabScene.SCENE_INTERACTION_GAP_MS;
-      this.game.events.emit('agent-interaction', {
-        agentId1: agent1.getId(), agentId2: agent2.getId(), type: 'proximity'
-      });
-    }
+  protected handleAgentInteraction(_agent1: Agent, _agent2: Agent): void {
+    // Due agenti vicini non avviano più dialoghi per conto loro: quei dialoghi
+    // erano frasi preimpostate. Ogni battuta in scena è scritta dal modello
+    // sui dati reali del federated learning (vedi stageLine).
   }
 
   protected handleZoneInteraction(_agent: Agent, _zone: Phaser.GameObjects.Zone): void {
@@ -541,33 +523,6 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     walking: '🚶',
     discussing: '💬',
   };
-
-  // Contextual phrases triggered after state icons (round-robin per key)
-  private static STATE_PHRASES: Record<string, Record<string, string[]>> = {
-    working: {
-      professor_office: ['Sto rivedendo i risultati...', 'Preparo il prossimo esperimento.', 'Analizzo i dati del round precedente.'],
-      privacy_lab:      ['Verifico le garanzie di privacy.', 'Testo il protocollo di anonimizzazione.', 'Controllo il budget epsilon.'],
-      research_area:    ['Implemento il nuovo algoritmo.', 'Ottimizzo i parametri del modello.', 'Scrivo il codice di training.'],
-      server_room:      ['Monitoro le risorse del cluster.', 'Aggiorno la configurazione del server.', 'Verifico i log di aggregazione.'],
-      _default:         ['Sto lavorando...', 'Ci sono progressi.', 'Quasi finito con questa parte.'],
-    },
-    walking: {
-      professor_office: ['Devo verificare i parametri del modello.', 'Vado a rivedere il protocollo sperimentale.', 'Devo aggiornare la documentazione.'],
-      privacy_lab:      ['Voglio controllare i log di privacy.', 'Devo verificare il budget epsilon corrente.', 'Vado a testare il nuovo meccanismo di anonimizzazione.'],
-      research_area:    ['Ho un\'idea per ottimizzare l\'aggregazione.', 'Devo controllare i risultati dell\'ultimo round.', 'Vado a implementare la nuova strategia di sampling.'],
-      server_room:      ['Devo verificare lo stato del cluster.', 'Vado a controllare i tempi di aggregazione.', 'I log del server mostrano qualcosa di interessante.'],
-      break_room:       ['Una pausa mi aiuterà a pensare meglio.', 'Devo riflettere sull\'approccio da usare.', 'Vado a prendere un caffè e ragionare.'],
-      meeting_room:     ['Devo preparare i grafici per la riunione.', 'Voglio discutere i risultati con il team.', 'È ora di aggiornarci sui progressi.'],
-      _default:         ['Devo verificare una cosa importante.', 'Ho avuto un\'intuizione, vado a controllare.', 'Voglio confrontare i dati con quelli precedenti.'],
-    },
-    // discussing and meeting: no icon phrases — the dialog system handles speech bubbles
-    discussing: {},
-    meeting: {},
-    presenting: {
-      _default: ['Ecco i risultati del round.', 'Guardate questi grafici.', 'Vi mostro i dati.'],
-    },
-  };
-  private statePhrasesIndexes: Map<string, number> = new Map();
 
   /** Determine which room an agent is in based on interaction zones. */
   private getAgentRoom(agent: Agent): string | null {
@@ -615,35 +570,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         onComplete: () => t.destroy(),
       });
 
-      // After icon fades a bit, show contextual phrase as small speech bubble
-      const phrases = BaseLabScene.STATE_PHRASES[state];
-      if (phrases) {
-        const pool = (room && phrases[room]) || phrases._default;
-        if (pool && pool.length > 0) {
-          const phraseKey = `${state}_${room || '_'}`;
-          const idx = this.statePhrasesIndexes.get(phraseKey) ?? 0;
-          const phrase = pool[idx % pool.length];
-          this.statePhrasesIndexes.set(phraseKey, idx + 1);
-
-          this.time.delayedCall(1200, () => {
-            // Track state phrase in analytics
-            this.game.events.emit('analytics-dialog', {
-              speakerId: agent.getId(), text: phrase,
-              category: 'state_phrase', isLLM: false,
-            });
-            // La frase passa dallo stesso sistema di box degli altri dialoghi
-            // (un box per agente, che lo segue): niente più testo disegnato a
-            // parte. Se l'agente sta già mostrando qualcosa, la frase si salta.
-            const dialogs = this.agentController?.getDialogController();
-            if (!dialogs || !agent.scene || dialogs.isAgentBusy(agent.getId())) return;
-            dialogs.createCognitiveProcess({
-              sourceId: agent.getId(), type: FLDialogType.GENERAL, text: phrase,
-              cognitiveType: CognitiveProcessType.THINKING,
-              isLLMDialog: false, priority: 2, duration: 4500,
-            });
-          });
-        }
-      }
+      // Solo l'icona: nessuna frase preimpostata accompagna il cambio di stato
     });
   }
 
@@ -1089,11 +1016,11 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
           if (resp.ok) {
             const data = await resp.json();
             if (data.llm_enabled && data.ollama_reachable) {
-              drawDot(0x44cc44); label.setText('LLM attivo'); label.setColor('#44cc44');
+              drawDot(0x44cc44); label.setText('Modello attivo'); label.setColor('#44cc44');
             } else if (data.llm_enabled) {
-              drawDot(0xcc4444); label.setText('LLM non raggiungibile'); label.setColor('#cc4444');
+              drawDot(0xcc4444); label.setText('Modello non raggiungibile'); label.setColor('#cc4444');
             } else {
-              drawDot(0xcccc00); label.setText('Dialoghi preimpostati'); label.setColor('#cccc00');
+              drawDot(0x999999); label.setText('Modello spento'); label.setColor('#bbbbbb');
             }
           } else {
             drawDot(0xcc4444); label.setText('Offline'); label.setColor('#cc4444');

@@ -159,6 +159,19 @@ async def get_config():
     }
 
 
+def _turn_on_llm_with_simulation():
+    """START turns on the whole process: the federation and the model that
+    writes what the agents say about it. There is no separate step to enable
+    the model (it can still be switched off afterwards)."""
+    from cognitive.prompts.run_gpt_prompt import set_llm_enabled, is_cognitive_llm_enabled
+    set_llm_enabled(True)
+    interval = 100 if is_cognitive_llm_enabled() else 10
+    if controller.model:
+        for agent in controller.model.schedule.agents:
+            if hasattr(agent, 'cognitive_step_interval'):
+                agent.cognitive_step_interval = interval
+
+
 @app.post("/simulation/start")
 async def start_simulation():
     if controller.running:
@@ -167,6 +180,7 @@ async def start_simulation():
         # Start on a paused simulation resumes it
         success = controller.start_simulation()
         return {"status": "resumed" if success else "error"}
+    _turn_on_llm_with_simulation()
     success = controller.start_simulation()
     return {"status": "started" if success else "error"}
 
@@ -333,7 +347,7 @@ async def get_llm_status():
     from cognitive.prompts.run_gpt_prompt import is_llm_enabled
     llm_on = is_llm_enabled()
     ollama_ok = False
-    if llm_on:
+    if True:  # reachability is reported whether or not the switch is on
         try:
             import httpx
             async with httpx.AsyncClient(timeout=5) as client:
@@ -372,6 +386,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 params = message.get("params", {})
 
                 if command == "start":
+                    if not controller.running:
+                        _turn_on_llm_with_simulation()
                     controller.start_simulation()
                 elif command == "stop":
                     controller.stop_simulation()

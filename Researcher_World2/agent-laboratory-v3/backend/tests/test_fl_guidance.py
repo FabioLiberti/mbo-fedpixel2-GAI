@@ -45,8 +45,8 @@ def test_rule_based_choice():
     good = _ctx(recent_mean=0.88, accuracy=0.88, trend=0.0)
     assert G.rule_based_choice("doctor", good)["option"] == G.NOISE_UP
     assert G.rule_based_choice("student", good)["option"] == G.KEEP
-    # every proposal comes with a reason
-    assert len(G.rule_based_choice("researcher", _ctx())["reason"]) > 10
+    # the rule makes a choice only: an agent's words always come from the model
+    assert G.rule_based_choice("researcher", _ctx())["reason"] == ""
     print("PASS: test_rule_based_choice")
 
 
@@ -59,7 +59,6 @@ def test_rule_undoes_a_change_that_made_things_worse():
     }])
     choice = G.rule_based_choice("professor", worse)
     assert choice["option"] == G.NOISE_DOWN
-    assert "86%" in choice["reason"] and "72%" in choice["reason"]
 
     # a change that helped is not undone
     better = _ctx(trend=0.05, history=[{
@@ -128,14 +127,24 @@ def test_controller_applies_the_agents_decision():
         assert controller.initialize_model()
         fl = controller.fl_system
         assert controller.fl_guidance_enabled and controller.fl_guidance_every == 5
+        assert controller.fl_guidance_rule_fallback is False
 
         # five rounds with a flat accuracy: the training is stalled
         fl.round = 5
         fl.metrics["accuracy"] = [0.60, 0.61, 0.60, 0.61, 0.60]
         noise_before = fl.dp_noise_multiplier
 
+        # with the model off the agents make no proposal: nothing is decided
+        controller._run_agent_guidance()
+        assert controller.fl_decisions == [] and fl.dp_noise_multiplier == noise_before
+
+        # the rest of this test exercises the vote and its application with the
+        # silent rule switched on
+        controller.fl_guidance_rule_fallback = True
         controller._run_agent_guidance()
         assert len(controller.fl_decisions) == 1
+        # a silent choice puts no words on screen: only the decision enters the feed
+        assert [item["kind"] for item in controller.fl_conversations] == ["decision"]
         decision = controller.fl_decisions[0]
         assert decision["round"] == 5
         assert len(decision["proposals"]) == 3                       # one agent per lab
@@ -175,8 +184,49 @@ def test_controller_applies_the_agents_decision():
     print("PASS: test_controller_applies_the_agents_decision")
 
 
+def test_proposals_are_the_models_own_words_with_real_numbers():
+    """A proposal is kept only if the model names an option and every number
+    in its reason is a real figure; otherwise the agent makes no proposal."""
+    from cognitive import fl_guidance as G
+    from cognitive.prompts import gpt_structure
+
+    class Agent:
+        name, role, lab_id = "Elena Conti", "professor", "mercatorum"
+
+    answers = []
+    original = gpt_structure.ollama_chat_request
+    gpt_structure.ollama_chat_request = lambda prompt, **kwargs: answers.pop(0)
+    try:
+        ctx = _ctx()
+        # a usable answer: kept as it is, marked as the model's
+        answers[:] = ["SCELTA: A\nMOTIVO: Propongo di ridurre il rumore perché siamo fermi al 64%."]
+        p = G.propose(Agent(), ctx, use_llm=True)
+        assert p["from_llm"] and p["option"] == G.NOISE_DOWN
+        assert p["reason"] == "Propongo di ridurre il rumore perché siamo fermi al 64%."
+
+        # an invented number: asked again, and the second answer is good
+        answers[:] = ["SCELTA: A\nMOTIVO: Propongo di ridurre il rumore per arrivare al 90%.",
+                      "SCELTA: C\nMOTIVO: Propongo più epoche locali, ora sono 5."]
+        p = G.propose(Agent(), ctx, use_llm=True)
+        assert p["from_llm"] and p["option"] == G.EPOCHS_UP and "90" not in p["reason"]
+
+        # never a usable answer: no proposal, and nothing pre-written in its place
+        answers[:] = ["SCELTA: A\nMOTIVO: Arriveremo al 95% di sicuro.", "Non saprei."]
+        assert G.propose(Agent(), ctx, use_llm=True) is None
+
+        # model off: no proposal either
+        assert G.propose(Agent(), ctx, use_llm=False) is None
+        # only with the explicit fallback a silent choice is made by the rule
+        silent = G.propose(Agent(), ctx, use_llm=False, rule_fallback=True)
+        assert silent["from_llm"] is False and silent["reason"] == "" and silent["option"] == G.NOISE_DOWN
+    finally:
+        gpt_structure.ollama_chat_request = original
+    print("PASS: test_proposals_are_the_models_own_words_with_real_numbers")
+
+
 if __name__ == "__main__":
     tests = [
+        test_proposals_are_the_models_own_words_with_real_numbers,
         test_available_options_respect_limits,
         test_rule_based_choice,
         test_rule_undoes_a_change_that_made_things_worse,

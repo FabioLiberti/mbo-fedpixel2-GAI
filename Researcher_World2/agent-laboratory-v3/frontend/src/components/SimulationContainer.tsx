@@ -25,6 +25,10 @@ interface SimulationContainerProps {
   onFLUpdate?: (data: FLGlobalMetrics) => void;
   backendConnected?: boolean;
   backendSimData?: any; // Dati raw dal backend (simulation_update)
+  /** Simulazione avviata e non in pausa: solo allora la scena si anima */
+  simulationActive?: boolean;
+  /** Il modello che scrive i dialoghi è acceso e raggiungibile */
+  modelReady?: boolean;
 }
 
 // Definiamo un tipo per gli agenti FL
@@ -47,7 +51,9 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   selectedLab,
   onFLUpdate,
   backendConnected = false,
-  backendSimData
+  backendSimData,
+  simulationActive = false,
+  modelReady = false
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameReadyFiredRef = useRef<boolean>(false);
@@ -57,6 +63,16 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   // Ultimi dati del backend, leggibili dai listener registrati una volta sola
   const backendSimDataRef = useRef<any>(null);
   backendSimDataRef.current = backendSimData;
+
+  const simulationActiveRef = useRef(simulationActive);
+  simulationActiveRef.current = simulationActive;
+
+  // La scena si anima solo a simulazione avviata: lo stato viene messo nel
+  // registro del gioco, dove le scene lo leggono a ogni fotogramma
+  useEffect(() => {
+    const game = getGameInstance();
+    if (game) game.registry.set('simulationActive', simulationActive);
+  }, [simulationActive]);
   const [llmPanelVisible, setLlmPanelVisible] = useState<boolean>(false);
   
   // Timer per simulare aggiornamenti dello stato FL
@@ -228,6 +244,8 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           console.log('Agent selected:', agentData?.name);
           setSelectedAgent(agentData);
         });
+
+        gameInstance.registry.set('simulationActive', simulationActiveRef.current);
 
         // Clic su un agente nella scena: apre l'ispettore con lo stato che
         // quell'agente ha nel backend (ritrovato per nome)
@@ -650,7 +668,11 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
 
         {/* Pop-up grande con la battuta in corso e le decisioni del consorzio */}
         <ErrorBoundary name="DialogSpotlight">
-          <DialogSpotlight backendSimData={backendSimData} />
+          <DialogSpotlight
+            backendSimData={backendSimData}
+            active={simulationActive}
+            modelReady={modelReady}
+          />
         </ErrorBoundary>
 
         {/* Pannello di controllo FL - sempre montato, gestisce internamente la visibilità */}

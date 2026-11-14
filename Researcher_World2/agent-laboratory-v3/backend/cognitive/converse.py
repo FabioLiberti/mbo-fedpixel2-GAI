@@ -261,17 +261,21 @@ def agent_chat_v2(maze, init_persona, target_persona):
 # ==========================================================================
 
 _FL_CONVO_SYSTEM = (
-    "Genera un dialogo realistico in italiano tra due ricercatori che discutono "
-    "i risultati dell'ultimo round di Federated Learning. "
+    "Scrivi un breve dialogo in italiano tra due persone che lavorano a un progetto di "
+    "Federated Learning e commentano i risultati reali dell'ultimo round.\n"
     "REGOLE:\n"
-    "- Ogni battuta: UNA frase breve (massimo 22 parole), naturale, coerente col ruolo\n"
-    "- Ogni personaggio parla nel modo indicato accanto al suo nome\n"
-    "- Il dialogo deve riflettere le competenze specifiche di ciascun ruolo\n"
-    "- Usa solo i DATI REALI forniti, senza inventare numeri\n"
-    "- Se ci sono RICORDI degli agenti, integra quei pensieri nel dialogo\n"
-    "- Rispondi SOLO con il dialogo, formato: NomeAgente: battuta\n"
-    "- Esattamente 4 battute alternate"
+    "- Esattamente 3 battute alternate, formato: Nome: battuta\n"
+    "- Ogni battuta è UNA frase completa di massimo 20 parole\n"
+    "- Ognuno parla dal proprio punto di vista, indicato accanto al suo nome\n"
+    "- Usa SOLO i numeri elencati nei DATI REALI, scritti in CIFRE esattamente come sono "
+    "(mai in lettere); non scrivere nessun altro numero, nemmeno approssimato o calcolato\n"
+    "- Attribuisci ogni numero alla grandezza a cui si riferisce nei DATI REALI\n"
+    "- Non inventare fatti, esperimenti o risultati che non sono nei DATI REALI\n"
+    "- Rispondi solo con le 3 battute"
 )
+
+# A turn longer than this is a ramble, not a line of dialog: it is not shown
+_MAX_TURN_WORDS = 30
 
 # Role-specific conversation style hints for richer LLM prompts
 _ROLE_CONVO_HINTS = {
@@ -284,34 +288,6 @@ _ROLE_CONVO_HINTS = {
     "sw_engineer": "discute implementazione, performance del sistema, scalabilità",
     "engineer": "si concentra sull'infrastruttura, comunicazione tra nodi, efficienza",
     "student_postdoc": "analisi approfondita, propone miglioramenti metodologici",
-}
-
-_FL_CONVO_STUBS = {
-    "professor": [
-        "I risultati di questo round mostrano come la diversità dei dati influenzi la convergenza.",
-        "La federazione ci permette di generalizzare su fasce demografiche che non osserviamo localmente.",
-        "Dobbiamo monitorare attentamente il trade-off tra privacy e utilità del modello.",
-    ],
-    "privacy_specialist": [
-        "Il rumore differenziale sta proteggendo i gradienti senza compromettere troppo l'accuracy.",
-        "Il budget di privacy si sta consumando come previsto, dobbiamo gestirlo con attenzione.",
-        "Nessun dato grezzo è stato condiviso tra i laboratori — solo parametri del modello.",
-    ],
-    "researcher": [
-        "L'accuracy globale sta migliorando grazie alla collaborazione tra i tre laboratori.",
-        "Il modello federato riesce a generalizzare meglio del modello locale su dati non visti.",
-        "Dovremmo analizzare il delta tra accuracy locale e globale per capire il contributo di ogni lab.",
-    ],
-    "student": [
-        "È interessante vedere come il modello migliora usando dati che non abbiamo mai visto.",
-        "Ho notato che il nostro dataset locale ha un bias per la fascia di età dei nostri pazienti.",
-        "Il federated learning sembra davvero utile per la ricerca medica collaborativa.",
-    ],
-    "doctor": [
-        "Dal punto di vista clinico, la diversità dei dati è fondamentale per un modello affidabile.",
-        "Ogni ospedale ha pazienti con caratteristiche diverse — la federazione colma queste lacune.",
-        "È rassicurante sapere che i dati dei pazienti non lasciano mai il nostro laboratorio.",
-    ],
 }
 
 
@@ -340,9 +316,12 @@ def _retrieve_agent_fl_memories(agent, n=2) -> str:
 
 
 class Conversation(list):
-    """A list of [agent_name, utterance] turns that also records who wrote it:
-    from_llm is True only when the text really comes from the model, False
-    when it is a template (LLM switched off, or the model call failed)."""
+    """A list of [agent_name, utterance] turns written by the model.
+
+    from_llm is True when the turns come from the model and every number in
+    them is a real figure of the run. Otherwise the list is empty: there are
+    no template conversations, so when the model is off, does not answer or
+    writes a number it was not given, nothing is said."""
 
     def __init__(self, turns=(), from_llm: bool = False):
         super().__init__(turns)
@@ -354,130 +333,139 @@ def generate_fl_conversation(
     agent_b,
     fl_context: dict,
     use_llm: bool = False,
-) -> list:
-    """Generate a short FL-specific conversation between two agents.
+) -> Conversation:
+    """Conversation between two agents about the real state of the federation,
+    each from the point of view of its kind of agent, written by the model.
 
     Args:
         agent_a, agent_b: agent objects with .name, .role, .lab_id, .scratch attributes
-        fl_context: dict with keys like round, accuracy, gain, dp_budget, lab_id, demo
-        use_llm: if True, call LLM; otherwise use role-based stubs
+        fl_context: real figures of the run (see SimulationController._fl_dialog_figures)
+        use_llm: False returns an empty conversation (nothing is pre-written)
 
     Returns:
-        List of [agent_name, utterance] pairs (4 turns)
+        Conversation: [agent_name, utterance] turns, empty if nothing verified was produced
     """
+    if not use_llm:
+        return Conversation()
+
     name_a = agent_a.name
     name_b = agent_b.name
     role_a = getattr(agent_a, 'role', 'researcher')
     role_b = getattr(agent_b, 'role', 'researcher')
-
-    if use_llm:
-        # Retrieve FL memories for richer context (quick, ~0s for stubs)
-        mem_a = _retrieve_agent_fl_memories(agent_a)
-        mem_b = _retrieve_agent_fl_memories(agent_b)
-        return _generate_fl_convo_llm(
-            name_a, name_b, role_a, role_b, fl_context,
-            memories_a=mem_a, memories_b=mem_b,
-        )
-    else:
-        return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, fl_context))
+    return _generate_fl_convo_llm(
+        name_a, name_b, role_a, role_b, fl_context,
+        memories_a=_retrieve_agent_fl_memories(agent_a),
+        memories_b=_retrieve_agent_fl_memories(agent_b),
+    )
 
 
-def _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx):
-    """Template conversation, personalised by the kind of agent that speaks
-    and grounded in the real figures of the run (see cognitive/role_dialogs.py)."""
-    from . import role_dialogs
-    return role_dialogs.generate(name_a, name_b, role_a, role_b, ctx)
+def build_fl_facts(ctx: dict) -> str:
+    """The real figures of the run, as the lines given to the model. These are
+    the only numbers the model may use (see cognitive/fact_check.py)."""
+    def pct(value):
+        return f"{float(value):.0%}"
+
+    lines = [f"- round completati: {ctx.get('round', 0)}"]
+    lines.append(f"- accuracy del modello globale sul test comune: {pct(ctx.get('accuracy', 0))}")
+    if ctx.get("local_acc") is not None and ctx.get("global_acc") is not None and not ctx.get("cross_lab"):
+        lines.append(
+            f"- sui dati di {ctx.get('lab_id', 'questo laboratorio')} ({ctx.get('demo', 'pazienti')}): "
+            f"modello locale {pct(ctx['local_acc'])}, modello globale {pct(ctx['global_acc'])}")
+    elif ctx.get("demo"):
+        lines.append(f"- laboratori coinvolti: {ctx.get('lab_id', '')} ({ctx['demo']})")
+    if ctx.get("recent_mean") is not None:
+        lines.append(
+            f"- media dell'accuracy negli ultimi 3 round: {pct(ctx['recent_mean'])}; "
+            f"nei 3 round precedenti: {pct(ctx.get('previous_mean', ctx['recent_mean']))}")
+    if ctx.get("noise") is not None:
+        lines.append(f"- rumore di privacy applicato: {float(ctx['noise']):.2f}")
+    if ctx.get("epochs") is not None:
+        lines.append(f"- epoche di addestramento locale: {ctx['epochs']}")
+    decision = ctx.get("last_decision")
+    if decision and decision.get("changed"):
+        line = f"- ultima decisione del consorzio: al round {decision['round']}, {decision['option_text']}"
+        if decision.get("accuracy_after") is not None:
+            line += (f"; accuracy media prima {pct(decision['accuracy_before'])}, "
+                     f"dopo {pct(decision['accuracy_after'])}")
+        lines.append(line)
+    if ctx.get("next_decision_round"):
+        lines.append(f"- prossima decisione del consorzio: al round {ctx['next_decision_round']}")
+    return "\n".join(lines)
 
 
 def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
                            memories_a="", memories_b=""):
-    """Generate an FL conversation via LLM call with agent memories."""
+    """Ask the model for the conversation; keep it only if it is well formed
+    and every number in it is one of the real figures it was given."""
     from .prompts.gpt_structure import ollama_chat_request
+    from . import role_dialogs, fact_check
 
-    rnd = ctx.get("round", 0)
-    acc = ctx.get("accuracy", 0)
-    gain = ctx.get("gain", 0)
-    dp_budget = ctx.get("dp_budget", 1.0)
-    lab = ctx.get("lab_id", "")
-    demo = ctx.get("demo", "pazienti")
+    def character(name, role):
+        fam = role_dialogs.family(role)
+        return (f"- {name}, {role_dialogs.FAMILY_LABEL[fam]}: {role_dialogs.ROLE_VOICE[fam]}; "
+                f"{_ROLE_CONVO_HINTS.get(role, 'discute i risultati')}")
 
-    from . import role_dialogs
-    hint_a = (f"{role_dialogs.ROLE_VOICE[role_dialogs.family(role_a)]}; "
-              f"{_ROLE_CONVO_HINTS.get(role_a, 'discute i risultati FL')}")
-    hint_b = (f"{role_dialogs.ROLE_VOICE[role_dialogs.family(role_b)]}; "
-              f"{_ROLE_CONVO_HINTS.get(role_b, 'discute i risultati FL')}")
-    figures = role_dialogs.values(ctx)
-    decision = ctx.get("last_decision")
-    decision_note = ""
-    if decision and decision.get("changed"):
-        decision_note = (f"- Ultima decisione del consorzio (round {figures['d_round']}): "
-                         f"{figures['d_text']}; {figures['d_effect']}\n")
-
-    # Build memory section only if available
-    mem_section = ""
+    facts = "DATI REALI:\n" + build_fl_facts(ctx)
+    memories = ""
     if memories_a:
-        mem_section += f"\nRicordi recenti di {name_a}:\n{memories_a}\n"
+        memories += f"\nRICORDI DI {name_a}:\n{memories_a}"
     if memories_b:
-        mem_section += f"\nRicordi recenti di {name_b}:\n{memories_b}\n"
+        memories += f"\nRICORDI DI {name_b}:\n{memories_b}"
+    characters = f"PERSONAGGI:\n{character(name_a, role_a)}\n{character(name_b, role_b)}"
+    # Everything the model is told as a fact: its numbers are the allowed ones
+    allowed_source = facts + memories
 
-    # Gain interpretation
-    if gain > 0.02:
-        gain_note = f"La federazione migliora l'accuracy di {gain:+.1%} rispetto al modello locale"
-    elif gain < -0.02:
-        gain_note = f"Il modello locale è ancora migliore di {abs(gain):.1%} — il globale deve convergere"
-    else:
-        gain_note = "Modello locale e globale hanno performance simili"
-
-    prompt = (
-        f"{_FL_CONVO_SYSTEM}\n\n"
-        f"DATI ROUND:\n"
-        f"- Lab: {lab} (specializzato in {demo})\n"
-        f"- Round completato: {rnd}\n"
-        f"- Accuracy modello globale: {acc:.1%}\n"
-        f"- {gain_note}\n"
-        f"- Media degli ultimi 3 round: {figures['recent']} (i 3 precedenti: {figures['previous']})\n"
-        f"- Rumore di privacy: {figures['noise']}; epoche locali: {figures['epochs']}\n"
-        f"{decision_note}"
-        f"{mem_section}\n"
-        f"PERSONAGGI:\n"
-        f"- {name_a} ({role_a}): {hint_a}\n"
-        f"- {name_b} ({role_b}): {hint_b}\n\n"
-        f"Dialogo (4 battute: {name_a}, {name_b}, {name_a}, {name_b}):"
+    base_prompt = (
+        f"/no_think\n{_FL_CONVO_SYSTEM}\n\n{facts}{memories}\n\n{characters}\n\n"
+        f"Dialogo ({name_a}, {name_b}, {name_a}):"
     )
+    reminder = ("\n\nATTENZIONE: nella risposta precedente c'erano numeri che non sono nei DATI REALI. "
+                "Riscrivi usando solo quei numeri, oppure nessun numero.")
 
-    try:
-        response = ollama_chat_request(prompt, max_tokens=250)
-        return _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx)
-    except Exception as e:
-        logger.warning(f"FL convo LLM failed: {e}, falling back to stubs")
-        return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx))
+    for attempt in range(2):
+        prompt = base_prompt if attempt == 0 else base_prompt + reminder
+        try:
+            response = ollama_chat_request(prompt, temperature=0.2, max_tokens=220)
+        except Exception as e:
+            logger.warning(f"FL convo LLM failed: {e}")
+            return Conversation()
+        convo = _parse_fl_convo_response(response, name_a, name_b, role_a, role_b)
+        # Keep the turns up to the first one that cannot be shown: a number
+        # that is not a real figure, a sentence cut short, or a ramble
+        kept = []
+        for name, line in convo:
+            invented = fact_check.unverified_numbers(line, allowed_source)
+            if invented:
+                logger.warning(f"FL convo: turn discarded, numbers not in the real data {invented[:5]}")
+                break
+            if len(line.split()) > _MAX_TURN_WORDS or line[-1:] not in ".?!":
+                logger.warning("FL convo: turn discarded, too long or cut short")
+                break
+            kept.append([name, line])
+        if len(kept) >= 2:
+            return Conversation(kept, from_llm=True)
+        logger.warning("FL convo: nothing usable in the model's answer")
+    return Conversation()
 
 
-def _parse_fl_convo_response(response, name_a, name_b, role_a, role_b, ctx):
-    """Parse LLM response into conversation list. Falls back to stubs on failure."""
-    lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
+def _parse_fl_convo_response(response, name_a, name_b, role_a, role_b):
+    """Parse the model's answer into [name, utterance] turns (at most 4).
+    Lines that are not attributed to one of the two agents are ignored."""
     convo = []
-
-    for line in lines:
-        # Try to parse "Name: utterance" format
-        if ":" in line:
-            parts = line.split(":", 1)
-            speaker = parts[0].strip()
-            utterance = parts[1].strip()
-            if utterance:
-                # Map speaker to actual agent name
-                if name_a.lower() in speaker.lower() or role_a.lower() in speaker.lower():
-                    convo.append([name_a, utterance])
-                elif name_b.lower() in speaker.lower() or role_b.lower() in speaker.lower():
-                    convo.append([name_b, utterance])
-                else:
-                    # Alternate assignment
-                    expected = name_a if len(convo) % 2 == 0 else name_b
-                    convo.append([expected, utterance])
-
-    if len(convo) >= 2:
-        return Conversation(convo[:6], from_llm=True)  # Cap at 6 turns
-
-    # Fallback to stubs: the model answered nothing usable (or an error string)
-    logger.warning("FL convo: unusable LLM answer, falling back to stubs")
-    return Conversation(_generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx))
+    if not response or "OLLAMA" in response.upper()[:20]:
+        return convo
+    first_a, first_b = name_a.split()[0].lower(), name_b.split()[0].lower()
+    for raw in response.strip().split("\n"):
+        line = raw.strip().lstrip("*-• ").strip()
+        if ":" not in line:
+            continue
+        speaker, utterance = line.split(":", 1)
+        speaker = speaker.strip().strip("*").lower()
+        utterance = utterance.strip().strip('"«»“” ').strip()
+        if len(utterance) < 4:
+            continue
+        if name_a.lower() in speaker or speaker == first_a:
+            convo.append([name_a, utterance])
+        elif name_b.lower() in speaker or speaker == first_b:
+            convo.append([name_b, utterance])
+    return convo[:3]

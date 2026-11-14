@@ -138,13 +138,16 @@ def available_options(ctx: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 def rule_based_choice(role: str, ctx: Dict[str, Any]) -> Dict[str, str]:
-    """Proposal made without the LLM: a simple, declared rule.
+    """A choice made without the model, by a simple declared rule. It is used
+    only if the configuration asks for it (fl.agent_guidance.rule_fallback),
+    and it carries no words: an agent's words always come from the model.
 
     - model good and stable: who protects the data asks for more privacy,
       the others leave things as they are;
     - model not yet good and no longer improving: who looks at performance
       asks for less noise (or more local training), who protects the data
       asks for more local training, which costs no privacy;
+    - a change after which the accuracy fell is undone;
     - otherwise nothing is changed.
     """
     options = available_options(ctx)
@@ -158,45 +161,39 @@ def rule_based_choice(role: str, ctx: Dict[str, Any]) -> Dict[str, str]:
                 return option
         return KEEP
 
-    # Learn from the last change: if the accuracy fell after it, go back.
-    # (Who puts privacy first accepts the price of more noise while the model
-    # stays good.)
     past = last_measured_change(ctx)
     if past and past["accuracy_after"] < past["accuracy_before"] - WORSE_THRESHOLD:
         undo = OPPOSITE.get(past["option"])
         accepted_price = privacy_first and past["option"] == NOISE_UP and good
         if undo in options and not accepted_price:
-            return {"option": undo, "reason": (
-                f"Dopo la decisione del round {past['round']} l'accuracy media è scesa "
-                f"dal {past['accuracy_before']:.0%} al {past['accuracy_after']:.0%}: tornerei indietro.")}
+            return {"option": undo, "reason": ""}
 
     if good:
-        if privacy_first:
-            option = pick(NOISE_UP)
-            reason = (f"Con un'accuracy media del {ctx['recent_mean']:.0%} possiamo permetterci "
-                      f"più protezione dei dati.")
-        else:
-            option = KEEP
-            reason = f"Il modello è al {ctx['recent_mean']:.0%} e stabile: non cambierei nulla."
+        option = pick(NOISE_UP) if privacy_first else KEEP
     elif stalled:
-        if privacy_first:
-            option = pick(EPOCHS_UP)
-            reason = ("L'accuracy non migliora più: proverei con più addestramento locale, "
-                      "che non costa privacy.")
-        else:
-            option = pick(NOISE_DOWN, EPOCHS_UP)
-            reason = (f"L'accuracy è ferma attorno al {ctx['recent_mean']:.0%}: "
-                      f"il rumore di privacy sta frenando l'apprendimento.")
+        option = pick(EPOCHS_UP) if privacy_first else pick(NOISE_DOWN, EPOCHS_UP)
     else:
         option = KEEP
-        reason = f"L'accuracy sta salendo ({ctx['trend']:+.0%} sugli ultimi round): lascerei tutto com'è."
-
-    if option == KEEP and not reason:
-        reason = "Non cambierei nulla."
-    return {"option": option, "reason": reason}
+    return {"option": option, "reason": ""}
 
 
-def build_prompt(name: str, role: str, lab_id: str, ctx: Dict[str, Any], options: List[str]) -> str:
+def build_facts(ctx: Dict[str, Any]) -> str:
+    """The real figures an agent decides on. They are the only numbers the
+    model may write in its answer (see cognitive/fact_check.py)."""
+    return (
+        f"DATI REALI:\n"
+        f"- round completati: {ctx['round']}\n"
+        f"- accuracy del modello globale sul test: {ctx['accuracy']:.0%}\n"
+        f"- media degli ultimi 3 round: {ctx['recent_mean']:.0%} "
+        f"(i 3 precedenti: {ctx['previous_mean']:.0%})\n"
+        f"- rumore di privacy attuale: {ctx['noise']:.2f}\n"
+        f"- epoche di addestramento locale: {ctx['epochs']}\n"
+        + _history_text(ctx)
+    )
+
+
+def build_prompt(name: str, role: str, lab_id: str, ctx: Dict[str, Any], options: List[str],
+                 reminder: bool = False) -> str:
     letters = "ABCDE"
     lines = [f"{letters[i]}) {OPTION_TEXT[option]}" for i, option in enumerate(options)]
     stance = ("Per te la protezione dei dati viene prima di tutto."
@@ -206,18 +203,15 @@ def build_prompt(name: str, role: str, lab_id: str, ctx: Dict[str, Any], options
         f"/no_think\n"
         f"Sei {name}, {ROLE_TEXT.get(role, role)} del laboratorio {lab_id}. {stance}\n"
         f"Il consorzio federato deve decidere come proseguire l'addestramento.\n\n"
-        f"DATI REALI:\n"
-        f"- round completati: {ctx['round']}\n"
-        f"- accuracy del modello globale sul test: {ctx['accuracy']:.0%}\n"
-        f"- media degli ultimi 3 round: {ctx['recent_mean']:.0%} "
-        f"(i 3 precedenti: {ctx['previous_mean']:.0%})\n"
-        f"- rumore di privacy attuale: {ctx['noise']:.2f}\n"
-        f"- epoche di addestramento locale: {ctx['epochs']}\n"
-        + _history_text(ctx) +
+        + build_facts(ctx) +
         f"\nOPZIONI:\n" + "\n".join(lines) + "\n\n"
         f"Rispondi esattamente in questo formato, senza altro testo:\n"
         f"SCELTA: <lettera>\n"
-        f"MOTIVO: <una frase in prima persona, usando solo i numeri sopra>"
+        f"MOTIVO: <una frase in prima persona che dice che cosa proponi e perché, dal tuo punto di vista>\n"
+        f"Nel motivo usa SOLO i numeri dei DATI REALI, scritti in CIFRE esattamente come sono "
+        f"(mai in lettere), oppure nessun numero. Massimo 25 parole."
+        + ("\nATTENZIONE: la risposta precedente conteneva numeri che non sono nei DATI REALI."
+           if reminder else "")
     )
 
 
@@ -258,30 +252,53 @@ def parse_llm_answer(answer: str, options: List[str]) -> Optional[Dict[str, str]
     return {"option": options[choice], "reason": reason[:220]}
 
 
-def propose(agent, ctx: Dict[str, Any], use_llm: bool) -> Dict[str, Any]:
-    """One agent's proposal. With the LLM the choice and its reason are written
-    by the model; if the model gives no usable answer the declared rule is used
-    and the proposal is marked accordingly."""
+def propose(agent, ctx: Dict[str, Any], use_llm: bool,
+            rule_fallback: bool = False) -> Optional[Dict[str, Any]]:
+    """One agent's proposal: the choice and the words are the model's.
+
+    The answer is kept only if it names one of the options and every number in
+    its reason is a real figure of the run; otherwise the agent is asked once
+    more, and then it simply makes no proposal (returns None). Nothing is
+    pre-written. Only with rule_fallback (off by default) a silent choice is
+    made by the declared rule, with no words attached.
+    """
     role = getattr(agent, "role", "researcher")
     proposal: Optional[Dict[str, str]] = None
-    from_llm = False
 
     if use_llm:
-        try:
-            from cognitive.prompts.gpt_structure import ollama_chat_request
-            options = available_options(ctx)
-            answer = ollama_chat_request(
-                build_prompt(agent.name, role, getattr(agent, "lab_id", ""), ctx, options),
-                max_tokens=90,
-            )
-            proposal = parse_llm_answer(answer, options)
-            from_llm = proposal is not None
-            if not from_llm:
-                logger.warning(f"FL guidance: unusable LLM answer for {agent.name}, using the rule")
-        except Exception as e:
-            logger.warning(f"FL guidance: LLM call failed for {agent.name}: {e}")
+        from cognitive.prompts.gpt_structure import ollama_chat_request
+        from cognitive import fact_check
+        options = available_options(ctx)
+        facts = build_facts(ctx)
+        for attempt in range(2):
+            try:
+                answer = ollama_chat_request(
+                    build_prompt(agent.name, role, getattr(agent, "lab_id", ""), ctx, options,
+                                 reminder=attempt > 0),
+                    temperature=0.2, max_tokens=90,
+                )
+            except Exception as e:
+                logger.warning(f"FL guidance: LLM call failed for {agent.name}: {e}")
+                break
+            parsed = parse_llm_answer(answer, options)
+            if parsed is None:
+                logger.warning(f"FL guidance: unusable LLM answer for {agent.name}")
+                continue
+            if len(parsed["reason"].split()) > 32:
+                logger.warning(f"FL guidance: {agent.name}'s reason discarded, too long")
+                continue
+            invented = fact_check.unverified_numbers(parsed["reason"], facts)
+            if invented:
+                logger.warning(f"FL guidance: {agent.name}'s reason discarded, "
+                               f"numbers not in the real data {invented[:5]}")
+                continue
+            proposal = parsed
+            break
 
+    from_llm = proposal is not None
     if proposal is None:
+        if not rule_fallback:
+            return None
         proposal = rule_based_choice(role, ctx)
 
     return {

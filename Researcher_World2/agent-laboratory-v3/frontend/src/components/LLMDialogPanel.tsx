@@ -217,7 +217,7 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     }
 
     const fresh = convos.filter((c: any) => {
-      const key = `${c.round}|${c.lab_id}|${(c.agents || []).join('+')}`;
+      const key = `${c.kind || 'conversation'}|${c.round}|${c.lab_id}|${(c.agents || []).join('+')}`;
       if (seenConvosRef.current.has(key)) return false;
       seenConvosRef.current.add(key);
       return true;
@@ -231,8 +231,9 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
     const newEntries: DialogEntry[] = [];
 
     for (const convo of fresh) {
-      const dialog = convo.dialog as [string, string][];
-      const roles = convo.roles as string[];
+      // Conversazioni e proposte hanno battute; la decisione del consorzio no
+      const dialog = (convo.dialog || []) as [string, string][];
+      const roles = (convo.roles || []) as string[];
       for (let i = 0; i < dialog.length; i++) {
         const [name, utterance] = dialog[i];
         const role = name === convo.agents[0] ? roles[0] : roles[1];

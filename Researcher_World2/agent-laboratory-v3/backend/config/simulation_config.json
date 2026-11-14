@@ -89,7 +89,7 @@
       "enforce_budget": false,
       "secure_aggregation": true
     },
-    "round_interval_seconds": 10,
+    "round_interval_seconds": 12,
     "agent_guidance": {
       "enabled": true,
       "every_rounds": 5

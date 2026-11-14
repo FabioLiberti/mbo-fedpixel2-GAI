@@ -72,6 +72,8 @@ function App() {
   // Stato LLM (Qwen 3.5 via Ollama)
   const [llmEnabled, setLlmEnabled] = useState<boolean>(false);
   const [llmToggling, setLlmToggling] = useState<boolean>(false);
+  // Ollama risponde? Senza il modello gli agenti non dicono nulla
+  const [llmReachable, setLlmReachable] = useState<boolean>(false);
   // Dati raw dal backend per SimulationContainer (FL + agent states)
   const [backendSimData, setBackendSimData] = useState<any>(null);
 
@@ -393,13 +395,29 @@ function App() {
     }
   }, [llmEnabled]);
 
-  // Carica stato LLM iniziale dal backend
-  useEffect(() => {
+  // Stato del modello dal backend: acceso? raggiungibile? "Avvia Simulazione"
+  // lo accende insieme al federated learning, quindi va riletto dopo l'avvio
+  const refreshLlmStatus = useCallback(() => {
     fetch('http://localhost:8091/llm/status')
       .then(r => r.json())
-      .then(data => setLlmEnabled(data.llm_enabled))
+      .then(data => {
+        setLlmEnabled(Boolean(data.llm_enabled));
+        setLlmReachable(Boolean(data.ollama_reachable));
+      })
       .catch(() => {}); // backend potrebbe non essere ancora attivo
   }, []);
+
+  useEffect(() => {
+    refreshLlmStatus();
+    const timer = setInterval(refreshLlmStatus, 8000);
+    return () => clearInterval(timer);
+  }, [refreshLlmStatus]);
+
+  // Subito dopo un cambio di stato della simulazione (es. Avvia)
+  useEffect(() => {
+    const timer = setTimeout(refreshLlmStatus, 700);
+    return () => clearTimeout(timer);
+  }, [simStatus, refreshLlmStatus]);
 
   // Funzione per verificare se mostrare lo splash
   const shouldShowSplash = useCallback(() => {
@@ -449,6 +467,8 @@ function App() {
                 selectedLab={currentLab}
                 backendConnected={connected}
                 backendSimData={backendSimData}
+                simulationActive={simStatus === 'running'}
+                modelReady={llmEnabled && llmReachable}
                 onFLUpdate={(data) => {
                   // Aggiorna sidebar FL solo se backend non connesso (fallback locale)
                   if (!connected) {
@@ -548,12 +568,17 @@ function App() {
                       width: '10px',
                       height: '10px',
                       borderRadius: '50%',
-                      backgroundColor: llmEnabled ? '#4caf50' : '#888',
+                      backgroundColor: llmEnabled && llmReachable ? '#4caf50' : llmEnabled ? '#d9534f' : '#888',
                     }}
-                    title={llmEnabled ? 'Ollama connesso — chiamate LLM reali' : 'Modalità stub — risposte predefinite'}
                   />
-                  <span style={{ fontSize: '12px', color: '#aaa' }}>
-                    {llmEnabled ? 'Ollama attivo' : 'Stub mode'}
+                  <span style={{ fontSize: '12px', color: '#666' }}>
+                    {llmEnabled && llmReachable
+                      ? 'scrive i dialoghi sui dati reali'
+                      : llmEnabled
+                        ? 'Ollama non raggiungibile: nessun dialogo'
+                        : simStatus === 'stopped'
+                          ? 'si accende con Avvia Simulazione'
+                          : 'spento: gli agenti non parlano'}
                   </span>
                 </div>
                 <button

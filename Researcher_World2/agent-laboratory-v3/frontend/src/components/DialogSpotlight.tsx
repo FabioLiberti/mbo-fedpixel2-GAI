@@ -1,28 +1,52 @@
 // frontend/src/components/DialogSpotlight.tsx
 //
-// Pop-up grande sopra la scena: mostra a caratteri molto grandi chi sta
-// parlando, a chi, e che cosa dice, nello stesso istante in cui il fumetto
-// compare sull'agente. Mostra allo stesso modo le decisioni del consorzio.
-// Serve a far seguire la dinamica della scena anche da lontano.
+// Pop-up grande sopra la scena e regia delle battute.
+//
+// Tutto ciò che gli agenti dicono è scritto dal modello sui dati reali del
+// federated learning e arriva dal backend. Questo componente lo mette in fila
+// e lo mostra UNA battuta alla volta, a caratteri molto grandi, per un tempo
+// sufficiente a leggerla (almeno 6 secondi), dicendo alla scena chi si avvicina
+// a chi e chi sta parlando. Non scrive alcuna battuta: se il modello non ha
+// prodotto nulla, non viene mostrato nulla.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { getGameInstance } from '../phaser/game';
 
 interface SpotlightProps {
   backendSimData?: any;
+  /** Simulazione avviata e non in pausa: solo allora le battute scorrono */
+  active: boolean;
+  /** Il modello è acceso e raggiungibile */
+  modelReady: boolean;
 }
 
-interface SpotlightItem {
-  key: number;
+interface Line {
   kind: 'speech' | 'decision';
   speaker: string;
-  role: string;          // tipo di agente (famiglia)
-  target: string | null;
+  listener: string | null;
   text: string;
+  detail?: string;
   isLLM: boolean;
+}
+
+interface Shown extends Line {
+  key: number;
+  role: string;
   remoteLab: string | null;
-  atTop: boolean;        // posizione del pop-up: in alto se chi parla è in basso
-  until: number;
+}
+
+// Durata a schermo di una battuta: almeno 6 secondi, di più se è lunga
+const MIN_LINE_MS = 6500;
+const MAX_LINE_MS = 10000;
+// Una conversazione parla dei risultati di un certo round: se quando viene il
+// suo turno la simulazione è già più avanti di così, non viene più mostrata
+const MAX_ROUNDS_OLD = 3;
+const GAP_MS = 500;            // pausa tra una battuta e la successiva
+const APPROACH_MS = 3500;      // tempo dato ai due agenti per avvicinarsi
+const MAX_QUEUE = 3;           // oltre, le conversazioni più vecchie si saltano
+
+function lineDuration(text: string): number {
+  return Math.max(MIN_LINE_MS, Math.min(MAX_LINE_MS, MIN_LINE_MS + (text.length - 80) * 40));
 }
 
 // Tipo di agente → famiglia (come nel backend: cognitive/role_dialogs.py)
@@ -46,6 +70,9 @@ const FAMILY_STYLE: Record<string, { label: string; icon: string; color: string 
 const LAB_LABEL: Record<string, string> = {
   mercatorum: 'Mercatorum', blekinge: 'Blekinge', opbg: 'OPBG',
 };
+const SCENE_LAB: Record<string, string> = {
+  MercatorumLabScene: 'mercatorum', BlekingeLabScene: 'blekinge', OPBGLabScene: 'opbg',
+};
 
 const STYLE_ID = 'dialog-spotlight-style';
 const CSS = `
@@ -55,7 +82,7 @@ const CSS = `
   100% { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 .dialog-spotlight {
-  position: absolute; left: 50%; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   width: 88%; max-width: 1000px; z-index: 40; pointer-events: none;
   background: rgba(14, 20, 40, 0.93); color: #fff; border-radius: 20px;
   padding: 16px 26px 20px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
@@ -64,14 +91,17 @@ const CSS = `
 }
 .dialog-spotlight-who { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
 .dialog-spotlight-name { font-size: 28px; font-weight: 800; line-height: 1.1; }
-.dialog-spotlight-chip {
-  font-size: 16px; font-weight: 700; padding: 3px 12px; border-radius: 999px; color: #fff;
-}
+.dialog-spotlight-chip { font-size: 16px; font-weight: 700; padding: 3px 12px; border-radius: 999px; color: #fff; }
 .dialog-spotlight-to { font-size: 20px; color: #c9d2ea; font-weight: 600; }
-.dialog-spotlight-ai {
-  font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 6px; background: #3b6fd4; color: #fff;
-}
+.dialog-spotlight-ai { font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 6px; background: #3b6fd4; color: #fff; }
 .dialog-spotlight-text { font-weight: 700; line-height: 1.22; }
+.dialog-spotlight-detail { font-size: 20px; color: #c9d2ea; font-weight: 600; margin-top: 8px; }
+.dialog-spotlight-wait {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 39;
+  pointer-events: none; background: rgba(14, 20, 40, 0.78); color: #dfe6fa; border-radius: 999px;
+  padding: 7px 18px; font-size: 15px; font-weight: 600; white-space: nowrap;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
 `;
 
 /** Dimensione del testo: enorme per le battute brevi, un po' meno per le lunghe. */
@@ -82,15 +112,49 @@ function textSize(text: string): number {
   return 27;
 }
 
-const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData }) => {
-  const [item, setItem] = useState<SpotlightItem | null>(null);
-  const counterRef = useRef(0);
-  const rolesRef = useRef<Record<string, { role: string; lab: string }>>({});
-  const lockedUntilRef = useRef(0);        // una decisione resta a schermo per un tempo minimo
-  const seenDecisionRef = useRef<number | null>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+/** Le battute di un elemento del flusso del backend (conversazione, proposta, decisione). */
+function linesOf(item: any): Line[] {
+  if (item.kind === 'decision' && item.decision) {
+    const d = item.decision;
+    const winners = (d.proposals || []).filter((p: any) => p.option === d.option).map((p: any) => p.agent);
+    const change = d.changed
+      ? (d.before.noise !== d.after.noise
+        ? `da ${Number(d.before.noise).toFixed(2)} a ${Number(d.after.noise).toFixed(2)}`
+        : `da ${d.before.epochs} a ${d.after.epochs}`)
+      : '';
+    return [{
+      kind: 'decision',
+      speaker: `Decisione del round ${d.round}`,
+      listener: null,
+      text: d.changed ? `Si è deciso di ${d.option_text}, ${change}.` : 'Si è deciso di non cambiare nulla.',
+      detail: winners.length ? `Voto: ${winners.join(', ')}` : undefined,
+      isLLM: false,
+    }];
+  }
+  const names: string[] = item.agents || [];
+  return (item.dialog || []).map(([speaker, text]: [string, string]) => ({
+    kind: 'speech' as const,
+    speaker,
+    listener: names.find(n => n !== speaker) || null,
+    text: String(text),
+    detail: item.kind === 'proposal' ? `Proposta per il round ${item.round}: ${item.option_text}` : undefined,
+    isLLM: Boolean(item.is_llm),
+  }));
+}
 
-  // Stile (una sola volta)
+const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, modelReady }) => {
+  const [shown, setShown] = useState<Shown | null>(null);
+  const queueRef = useRef<any[]>([]);
+  const seenRef = useRef<Set<string>>(new Set());
+  const playingRef = useRef(false);
+  const runRef = useRef(0);                 // cambia a ogni arresto: ferma la regia in corso
+  const counterRef = useRef(0);
+  const activeRef = useRef(active);
+  const rolesRef = useRef<Record<string, { role: string; lab: string }>>({});
+  const roundRef = useRef<number>(0);
+  activeRef.current = active;
+  roundRef.current = Number(backendSimData?.fl?.round || 0);
+
   useEffect(() => {
     if (document.getElementById(STYLE_ID)) return;
     const el = document.createElement('style');
@@ -110,128 +174,151 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData }) => {
     rolesRef.current = map;
   }, [backendSimData?.agent_states]);
 
-  const show = (next: Omit<SpotlightItem, 'key' | 'until'>, duration: number) => {
-    const now = Date.now();
-    if (next.kind === 'speech' && now < lockedUntilRef.current) return;
-    counterRef.current += 1;
-    const until = now + duration;
-    if (next.kind === 'decision') lockedUntilRef.current = now + Math.min(duration, 6000);
-    setItem({ ...next, key: counterRef.current, until });
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    const key = counterRef.current;
-    hideTimerRef.current = setTimeout(() => {
-      setItem(current => (current && current.key === key ? null : current));
-    }, duration);
+  const emit = (event: string, data?: any) => {
+    try {
+      const game = getGameInstance();
+      if (game) game.events.emit(event, data);
+    } catch (err) {
+      console.error(`[DialogSpotlight] ${event} error:`, err);
+    }
   };
 
-  // Battute: lo stesso evento che fa comparire il fumetto sull'agente
-  useEffect(() => {
-    let attached: any = null;
-    let retry: ReturnType<typeof setInterval> | null = null;
-
-    const onDialog = (d: any) => {
-      if (!d || d.kind !== 'speech' || !d.text) return;
-      const info = rolesRef.current[d.speakerName] || { role: d.speakerRole || 'researcher', lab: '' };
-      show({
-        kind: 'speech',
-        speaker: d.speakerName || 'Agente',
-        role: ROLE_FAMILY[info.role] || 'researcher',
-        target: d.targetName || null,
-        text: String(d.text),
-        isLLM: Boolean(d.isLLM),
-        remoteLab: d.remote ? (LAB_LABEL[info.lab] || info.lab || 'altro laboratorio') : null,
-        atTop: typeof d.y === 'number' && typeof d.sceneHeight === 'number'
-          ? d.y > d.sceneHeight * 0.5
-          : false,
-      }, Math.max(2500, Math.min(Number(d.duration) || 4500, 9000)));
-    };
-
-    const attach = () => {
+  const currentLab = (): string | null => {
+    try {
       const game = getGameInstance();
-      if (!game) return false;
-      game.events.on('dialog-shown', onDialog);
-      attached = game;
-      return true;
-    };
-    if (!attach()) {
-      retry = setInterval(() => { if (attach() && retry) { clearInterval(retry); retry = null; } }, 500);
-    }
-    return () => {
-      if (retry) clearInterval(retry);
-      if (attached) attached.events.off('dialog-shown', onDialog);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      const scenes = game ? game.scene.getScenes(true) : [];
+      for (const sc of scenes) {
+        const lab = SCENE_LAB[sc.scene.key];
+        if (lab) return lab;
+      }
+    } catch { /* nessuna scena attiva */ }
+    return null;
+  };
 
-  // Decisioni del consorzio: ogni nuova decisione compare a tutto schermo
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+  // Regia: un elemento alla volta, una battuta alla volta
+  const play = async () => {
+    if (playingRef.current) return;
+    playingRef.current = true;
+    const run = runRef.current;
+    const stopped = () => run !== runRef.current || !activeRef.current;
+    try {
+      while (queueRef.current.length > 0 && !stopped()) {
+        const item = queueRef.current.shift();
+        const lines = linesOf(item);
+        if (lines.length === 0) continue;
+        // Una conversazione rimasta troppo in coda parlerebbe di numeri che a
+        // schermo non ci sono più: si salta (le decisioni si mostrano sempre)
+        const roundNow = Number(roundRef.current || 0);
+        if ((item.kind || 'conversation') !== 'decision'
+            && roundNow - Number(item.round || 0) > MAX_ROUNDS_OLD) continue;
+
+        const names: string[] = item.agents || [];
+        if (item.kind === 'conversation' && names.length === 2) {
+          emit('stage-approach', { agents: names });
+          await sleep(APPROACH_MS);
+          if (stopped()) break;
+        }
+
+        for (let i = 0; i < lines.length && !stopped(); i++) {
+          const line = lines[i];
+          const duration = lineDuration(line.text);
+          const info = rolesRef.current[line.speaker];
+          const lab = currentLab();
+          counterRef.current += 1;
+          setShown({
+            ...line,
+            key: counterRef.current,
+            role: line.kind === 'decision' ? 'consortium' : (ROLE_FAMILY[info?.role || ''] || 'researcher'),
+            remoteLab: line.kind === 'speech' && info && lab && info.lab !== lab
+              ? (LAB_LABEL[info.lab] || info.lab)
+              : null,
+          });
+          if (line.kind === 'speech') {
+            emit('stage-line', {
+              speakerName: line.speaker, listenerName: line.listener,
+              text: line.text, duration, isLLM: line.isLLM, index: i,
+            });
+          }
+          await sleep(duration);
+          if (stopped()) break;
+          setShown(null);
+          await sleep(GAP_MS);
+        }
+        emit('stage-end');
+      }
+    } finally {
+      playingRef.current = false;
+      if (stopped()) setShown(null);
+    }
+  };
+
+  // Nuovi elementi dal backend entrano in coda (una sola volta ciascuno)
   useEffect(() => {
-    const decisions = backendSimData?.fl?.decisions;
-    if (!Array.isArray(decisions) || decisions.length === 0) {
-      seenDecisionRef.current = null;
-      return;
+    const feed = backendSimData?.fl?.conversations;
+    if (!Array.isArray(feed)) return;
+    if (feed.length === 0) { seenRef.current = new Set(); return; }
+    for (const item of feed) {
+      const key = `${item.kind || 'conversation'}|${item.round}|${item.lab_id}|${(item.agents || []).join('+')}`;
+      if (seenRef.current.has(key)) continue;
+      seenRef.current.add(key);
+      if (!activeRef.current) continue;       // a simulazione ferma non si accoda nulla
+      queueRef.current.push(item);
     }
-    const last = decisions[decisions.length - 1];
-    if (seenDecisionRef.current === last.round) return;
-    const first = seenDecisionRef.current === null && decisions.length > 1;
-    seenDecisionRef.current = last.round;
-    if (first) return; // pagina appena aperta su una sessione già avviata: niente arretrati
-
-    const winners = (last.proposals || [])
-      .filter((p: any) => p.option === last.option)
-      .map((p: any) => p.agent);
-    const change = last.changed
-      ? (last.before.noise !== last.after.noise
-        ? `da ${Number(last.before.noise).toFixed(2)} a ${Number(last.after.noise).toFixed(2)}`
-        : `da ${last.before.epochs} a ${last.after.epochs}`)
-      : '';
-    const text = last.changed
-      ? `Si è deciso di ${last.option_text}, ${change}.`
-      : 'Dopo la discussione si è deciso di non cambiare nulla.';
-    show({
-      kind: 'decision',
-      speaker: `Decisione del round ${last.round}`,
-      role: 'consortium',
-      target: winners.length ? `su proposta di ${winners.join(' e ')}` : null,
-      text,
-      isLLM: (last.proposals || []).some((p: any) => p.from_llm),
-      remoteLab: null,
-      atTop: false,
-    }, 7000);
+    // Se il modello produce più in fretta di quanto si riesca a leggere, le
+    // conversazioni più vecchie si saltano; proposte e decisioni restano
+    while (queueRef.current.length > MAX_QUEUE) {
+      const idx = queueRef.current.findIndex(q => (q.kind || 'conversation') === 'conversation');
+      queueRef.current.splice(idx >= 0 ? idx : 0, 1);
+    }
+    if (activeRef.current) play();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendSimData?.fl?.decisions]);
+  }, [backendSimData?.fl?.conversations]);
 
-  if (!item) return null;
-  const style = FAMILY_STYLE[item.role] || FAMILY_STYLE.researcher;
+  // Arresto o pausa: la regia si ferma e la scena si svuota
+  useEffect(() => {
+    if (active) { play(); return; }
+    runRef.current += 1;
+    queueRef.current = [];
+    setShown(null);
+    emit('stage-end');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
+  if (!shown) {
+    if (!active) return null;
+    const round = backendSimData?.fl?.round;
+    return (
+      <div className="dialog-spotlight-wait">
+        {modelReady
+          ? `💭 Il modello sta scrivendo la prossima conversazione${round ? ` sui risultati del round ${round}` : ''}…`
+          : '⚠️ Modello non disponibile: il federated learning prosegue, ma gli agenti non parlano'}
+      </div>
+    );
+  }
+
+  const style = FAMILY_STYLE[shown.role] || FAMILY_STYLE.researcher;
   return (
-    <div
-      key={item.key}
-      className="dialog-spotlight"
-      style={{
-        ...(item.atTop ? { top: 14 } : { bottom: 14 }),
-        border: `5px solid ${style.color}`,
-      }}
-    >
+    <div key={shown.key} className="dialog-spotlight" style={{ border: `5px solid ${style.color}` }}>
       <div className="dialog-spotlight-who">
         <span style={{ fontSize: 34 }}>{style.icon}</span>
-        <span className="dialog-spotlight-name" style={{ color: style.color }}>{item.speaker}</span>
+        <span className="dialog-spotlight-name" style={{ color: style.color }}>{shown.speaker}</span>
         <span className="dialog-spotlight-chip" style={{ background: style.color }}>{style.label}</span>
-        {item.remoteLab && (
+        {shown.remoteLab && (
           <span className="dialog-spotlight-chip" style={{ background: '#555d75' }}>
-            in collegamento da {item.remoteLab}
+            in collegamento da {shown.remoteLab}
           </span>
         )}
-        {item.target && (
-          <span className="dialog-spotlight-to">
-            {item.kind === 'decision' ? item.target : `→ a ${item.target}`}
-          </span>
+        {shown.kind === 'speech' && shown.listener && (
+          <span className="dialog-spotlight-to">→ a {shown.listener}</span>
         )}
-        {item.isLLM && <span className="dialog-spotlight-ai">AI</span>}
+        {shown.isLLM && <span className="dialog-spotlight-ai">AI</span>}
       </div>
-      <div className="dialog-spotlight-text" style={{ fontSize: textSize(item.text) }}>
-        {item.text}
+      <div className="dialog-spotlight-text" style={{ fontSize: textSize(shown.text) }}>
+        {shown.text}
       </div>
+      {shown.detail && <div className="dialog-spotlight-detail">{shown.detail}</div>}
     </div>
   );
 };

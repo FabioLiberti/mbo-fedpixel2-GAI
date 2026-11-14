@@ -170,191 +170,16 @@ export class DialogEventHandler {
 
   // ── Agent interaction ─────────────────────────────────────────────
 
-  private async handleAgentInteraction(data: {
+  private handleAgentInteraction(_data: {
     agentId1: string; agentId2: string; type: string;
     llm?: boolean; isSimulated?: boolean; counted?: boolean;
-  }): Promise<void> {
-    const s = this.state;
-    if (s.debugMode) console.log(`[DialogEventHandler] Interaction: ${data.agentId1} ↔ ${data.agentId2}`);
-
-    // Tag LLM source for both agents
-    if (data.llm === undefined) {
-      const isLLM = s.dialogSources.get(data.agentId1) === 'llm' || s.dialogSources.get(data.agentId2) === 'llm';
-      if (isLLM) { data.llm = true; data.isSimulated = false; if (!data.counted) { s.scene.game.events.emit('dialog-created', { type: 'llm', isLLMGenerated: true }); data.counted = true; } }
-    } else if (data.llm === true && !data.counted) {
-      s.scene.game.events.emit('dialog-created', { type: data.isSimulated ? 'simulated' : 'llm', isLLMGenerated: !data.isSimulated });
-      data.counted = true;
-    }
-
-    try {
-      const agent1 = s.getAgentDetails(data.agentId1);
-      const agent2 = s.getAgentDetails(data.agentId2);
-      if (!agent1 || !agent2) { console.warn('[DialogEventHandler] Missing agent details'); return; }
-
-      const flState = s.getCurrentFLState();
-      if (!s.isLLMAvailable) await s.checkLLMAvailability();
-
-      if (s.isLLMAvailable) {
-        try {
-          // Agent 1 thinking
-          const t1 = await api.generateAgentThinking({
-            agentId: agent1.id, agentName: agent1.name, agentRole: agent1.role,
-            agentSpecialization: agent1.specialization || 'general',
-            targetAgentId: agent2.id, targetAgentName: agent2.name, targetAgentRole: agent2.role,
-            interactionType: data.type, labType: s.getLabTypeString(), flState,
-          });
-          s.scene.game.events.emit('api-dialog-response', { agentId: agent1.id, response: t1 });
-          if (t1.thinking) {
-            this.creator.createCognitiveProcess({
-              sourceId: agent1.id, type: DialogType.GENERAL, text: t1.thinking,
-              cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, showEffect: false, duration: 3000, priority: 5,
-            });
-            this.bridgeToPanel(agent1.id, t1.thinking, true, 'thinking');
-          }
-
-          // Agent 1 dialog (after delay)
-          setTimeout(async () => {
-            const d1 = await api.generateAgentDialog({
-              agentId: agent1.id, agentName: agent1.name, agentRole: agent1.role,
-              agentSpecialization: agent1.specialization || 'general',
-              targetAgentId: agent2.id, targetAgentName: agent2.name, targetAgentRole: agent2.role,
-              interactionType: data.type, labType: s.getLabTypeString(), flState,
-            });
-            s.scene.game.events.emit('api-dialog-response', { agentId: agent1.id, response: d1 });
-            this.creator.createDialog({
-              sourceId: agent1.id, targetId: agent2.id,
-              type: s.getDialogTypeForRole(agent1.role), text: d1.dialog,
-              isLLMDialog: true, showEffect: true, priority: 7,
-            });
-            this.bridgeToPanel(agent1.id, d1.dialog, true, 'dialog');
-            s.scene.game.events.emit('analytics-dialog', {
-              speakerId: agent1.id, targetId: agent2.id,
-              text: d1.dialog, category: 'llm', isResponse: false, isLLM: true,
-            });
-          }, 3000);
-
-          // Agent 2 thinking + dialog (after longer delay)
-          setTimeout(async () => {
-            const t2 = await api.generateAgentThinking({
-              agentId: agent2.id, agentName: agent2.name, agentRole: agent2.role,
-              agentSpecialization: agent2.specialization || 'general',
-              targetAgentId: agent1.id, targetAgentName: agent1.name, targetAgentRole: agent1.role,
-              interactionType: data.type, labType: s.getLabTypeString(), flState,
-            });
-            s.scene.game.events.emit('api-dialog-response', { agentId: agent2.id, response: t2 });
-            if (t2.thinking) {
-              this.creator.createCognitiveProcess({
-                sourceId: agent2.id, type: DialogType.GENERAL, text: t2.thinking,
-                cognitiveType: CognitiveProcessType.THINKING, isLLMDialog: true, showEffect: false, duration: 3000, priority: 5,
-              });
-              this.bridgeToPanel(agent2.id, t2.thinking, true, 'thinking');
-            }
-            setTimeout(async () => {
-              const d2 = await api.generateAgentDialog({
-                agentId: agent2.id, agentName: agent2.name, agentRole: agent2.role,
-                agentSpecialization: agent2.specialization || 'general',
-                targetAgentId: agent1.id, targetAgentName: agent1.name, targetAgentRole: agent1.role,
-                interactionType: data.type, labType: s.getLabTypeString(), flState,
-              });
-              s.scene.game.events.emit('api-dialog-response', { agentId: agent2.id, response: d2 });
-              this.creator.createDialog({
-                sourceId: agent2.id, targetId: agent1.id,
-                type: s.getDialogTypeForRole(agent2.role), text: d2.dialog,
-                isLLMDialog: true, showEffect: false, priority: 7, isResponse: true,
-              });
-              this.bridgeToPanel(agent2.id, d2.dialog, true, 'dialog');
-              s.scene.game.events.emit('analytics-dialog', {
-                speakerId: agent2.id, targetId: agent1.id,
-                text: d2.dialog, category: 'llm', isResponse: true, isLLM: true,
-              });
-            }, 3000);
-          }, 6000);
-
-          return;
-        } catch (e) {
-          console.error('[DialogEventHandler] LLM interaction error, falling back:', e);
-        }
-      }
-
-      // Fallback: role-pair specific, greeting, coffee break, room-based, or topical
-      const roll = Math.random();
-
-      // 35% chance: role-pair specific dialog (context-aware by profession)
-      const rolePair = (roll < 0.35) ? this.renderer.getRolePairDialog(agent1.role, agent2.role) : null;
-
-      if (rolePair) {
-        // Role-pair dialog: speaker order determined by role match
-        const speaker = rolePair.speakerFirst === 0 ? agent1 : agent2;
-        const responder = rolePair.speakerFirst === 0 ? agent2 : agent1;
-        this.emitDialogPair(speaker, responder, s, rolePair.opener, rolePair.reply, 'role_pair', rolePair.room);
-        if (rolePair.room) {
-          setTimeout(() => {
-            s.scene.game.events.emit('go-to-room', {
-              agentIds: [data.agentId1, data.agentId2], room: rolePair.room,
-            });
-          }, 12000);
-        }
-      } else if (roll < 0.45) {
-        // Greeting
-        const { opener, reply } = this.renderer.getGreetingPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply, 'greeting');
-      } else if (roll < 0.55) {
-        // Coffee break — dialog then both agents move to break room
-        const { opener, reply } = this.renderer.getCoffeeBreakPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply, 'coffee_break', 'break_room');
-        setTimeout(() => {
-          s.scene.game.events.emit('coffee-break', {
-            agentIds: [data.agentId1, data.agentId2],
-          });
-        }, 12000);
-      } else if (roll < 0.65) {
-        // Meeting room — present results
-        const { opener, reply } = this.renderer.getMeetingRoomPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply, 'meeting_room', 'meeting_room');
-        setTimeout(() => {
-          s.scene.game.events.emit('go-to-room', {
-            agentIds: [data.agentId1, data.agentId2], room: 'meeting_room',
-          });
-        }, 12000);
-      } else if (roll < 0.75) {
-        // Server room — check processing
-        const { opener, reply } = this.renderer.getServerRoomPair();
-        this.emitDialogPair(agent1, agent2, s, opener, reply, 'server_room', 'server_room');
-        setTimeout(() => {
-          s.scene.game.events.emit('go-to-room', {
-            agentIds: [data.agentId1, data.agentId2], room: 'server_room',
-          });
-        }, 12000);
-      } else {
-        // Topical dialog (role-individual)
-        const text1 = this.renderer.getPresetDialog(agent1.role, data.type);
-        const text2 = this.renderer.getPresetDialog(agent2.role, data.type);
-        this.creator.createDialog({
-          sourceId: agent1.id, targetId: agent2.id,
-          type: s.getDialogTypeForRole(agent1.role),
-          text: text1, showEffect: true, priority: 5,
-        });
-        s.scene.game.events.emit('analytics-dialog', {
-          speakerId: agent1.id, targetId: agent2.id,
-          text: text1, category: 'topical', isResponse: false, isLLM: false,
-        });
-        setTimeout(() => {
-          this.creator.createDialog({
-            sourceId: agent2.id, targetId: agent1.id,
-            type: s.getDialogTypeForRole(agent2.role),
-            text: text2, showEffect: false, priority: 5, isResponse: true,
-          });
-          s.scene.game.events.emit('analytics-dialog', {
-            speakerId: agent2.id, targetId: agent1.id,
-            text: text2, category: 'topical', isResponse: true, isLLM: false,
-          });
-        }, 5000);
-      }
-      s.scene.game.events.emit('dialog-created', { type: 'standard' });
-      s.scene.game.events.emit('dialog-created', { type: 'standard' });
-    } catch (e) {
-      console.error('[DialogEventHandler] handleAgentInteraction error:', e);
-    }
+  }): void {
+    // Due agenti che si incontrano non producono più dialoghi qui. Quelli che
+    // questa funzione creava erano frasi preimpostate (saluti, pausa caffè,
+    // coppie di ruolo) oppure testi chiesti al modello senza i dati del
+    // federated learning. Ogni battuta in scena arriva ora dal backend, scritta
+    // dal modello sui dati reali del round, e viene mostrata dalla regia
+    // (evento 'stage-line').
   }
 
   /** Emit a dialog pair (opener + reply after 5s) with analytics tracking. */
@@ -404,59 +229,12 @@ export class DialogEventHandler {
     // intentionally empty — see handleBackendAgentDialog
   }
 
-  /** Ultimo istante in cui un testo preimpostato del backend è stato mostrato, per agente. */
-  private lastBackendBubbleAt: Map<string, number> = new Map();
-  private static readonly BACKEND_BUBBLE_MIN_GAP_MS = 12000;
-
-  // ── Backend-broadcast dialog -> thought bubble (unified LLM source) ──
-  // The backend agent's real cognitive-cycle dialog (broadcast in the
-  // simulation state) is shown as a bubble on the matching sprite. No extra
-  // LLM call: the text is the same one displayed in the React dialog panel.
-  private handleBackendAgentDialog(data: { name?: string; text?: string; isLlm?: boolean }): void {
-    try {
-      if (!data?.name || !data?.text) return;
-      const id = this.state.getAgentIdByName(data.name);
-      if (!id) return;
-
-      // Il backend aggiorna lo stato degli agenti più volte al secondo: i
-      // testi preimpostati vengono mostrati con parsimonia (uno ogni tanto per
-      // agente, e solo se l'agente non sta già mostrando altro). I testi
-      // generati dal modello passano sempre.
-      if (!data.isLlm) {
-        const now = Date.now();
-        const last = this.lastBackendBubbleAt.get(id) ?? 0;
-        if (now - last < DialogEventHandler.BACKEND_BUBBLE_MIN_GAP_MS) return;
-        if (this.creator.isAgentBusy(id)) return;
-        this.lastBackendBubbleAt.set(id, now);
-      }
-      const { processedText: rawText, processType } = this.analyzeText(data.text);
-      const processedText = data.isLlm ? rawText : this.tidyPresetText(rawText);
-      if (!processedText) return;
-      this.creator.createCognitiveProcess({
-        sourceId: id, type: DialogType.RESEARCH, text: processedText,
-        cognitiveType: processType || CognitiveProcessType.THINKING,
-        isLLMDialog: !!data.isLlm, priority: 6,
-      });
-      if (data.isLlm) this.bridgeToPanel(id, processedText, true, 'thinking');
-    } catch (e) {
-      console.error('[DialogEventHandler] handleBackendAgentDialog error:', e);
-    }
-  }
-
-  /**
-   * I testi preimpostati del backend sono descrizioni interne dell'attività,
-   * con annotazioni di servizio come "(step 12)" o "(insight: ...)" e
-   * identificativi con il trattino basso. Qui diventano una frase leggibile.
-   */
-  private tidyPresetText(text: string): string {
-    let t = text
-      .replace(/\s*\((?:step|insight)\b[^)]*\)?/gi, '')  // annotazioni, anche troncate
-      .replace(/_/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    if (!t) return '';
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    return t;
+  // ── Backend activity strings ──────────────────────────────────────
+  // Lo stato di attività degli agenti nel backend non viene più mostrato come
+  // fumetto: erano descrizioni preimpostate. Le battute del modello arrivano
+  // dalla regia, una alla volta.
+  private handleBackendAgentDialog(_data: { name?: string; text?: string; isLlm?: boolean }): void {
+    // intenzionalmente vuoto
   }
 
   // ── Agent decision ────────────────────────────────────────────────
