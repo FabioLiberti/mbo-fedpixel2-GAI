@@ -117,15 +117,25 @@ def test_every_agent_of_a_lab_gets_to_talk():
     assert len({frozenset(p) for p in pairs[:6]}) == 6
     assert pairs[6] == list(reversed(pairs[0]))        # then who opens alternates
 
-    # one conversation per decision cycle, after its first round: two cycles
-    # inside a lab, the third between labs
+    # one conversation per decision cycle, after its first round: alternately
+    # inside a lab and between labs
     import tempfile
     with tempfile.TemporaryDirectory() as checkpoint_root:
         controller = SimulationController(fl_checkpoint_dir=checkpoint_root)
         controller.fl_guidance_every = 5
         turns = {rnd: controller._fl_conversation_turn(rnd) for rnd in range(1, 17)}
     assert {r for r, t in turns.items() if t} == {1, 6, 11, 16}
-    assert [turns[1], turns[6], turns[11], turns[16]] == ["intra", "intra", "cross", "intra"]
+    assert [turns[1], turns[6], turns[11], turns[16]] == ["intra", "cross", "intra", "cross"]
+
+    # between labs the model is also given what each lab would have alone
+    from cognitive.converse import build_fl_facts
+    facts = build_fl_facts({
+        "round": 6, "accuracy": 0.74, "cross_lab": True, "lab_id": "mercatorum↔opbg", "demo": "pazienti",
+        "benefit": {"mercatorum": {"alone_common": 0.46, "federated_common": 0.74},
+                    "opbg": {"alone_common": 0.54, "federated_common": 0.74}},
+    })
+    assert "- mercatorum: il modello che addestra da solo, senza la federazione, arriva a 46%" in facts
+    assert "- opbg: il modello che addestra da solo, senza la federazione, arriva a 54%" in facts
     print("PASS: test_every_agent_of_a_lab_gets_to_talk")
 
 

@@ -783,12 +783,12 @@ class SimulationController:
         What is said is shown one line at a time, each long enough to be read:
         in the time of one decision cycle there is room for the agents'
         proposals and for one conversation. The conversation follows the first
-        round of each cycle: two cycles out of three inside a lab ("intra"),
-        the third between two labs ("cross")."""
+        round of each cycle, alternately inside a lab ("intra") and between
+        two labs of the federation ("cross")."""
         every = max(1, self.fl_guidance_every)
         if fl_round % every != 1 % every:
             return None
-        return "cross" if (fl_round // every) % 3 == 2 else "intra"
+        return "cross" if (fl_round // every) % 2 == 1 else "intra"
 
     @staticmethod
     def _fl_conversation_pair(agents: list, fl_round: int) -> list:
@@ -1083,9 +1083,18 @@ class SimulationController:
             return
         if self._fl_conversation_turn(fl_round) != "cross":
             return
-        # One cross-lab conversation per round
+        # One cross-lab conversation per round: with the lab on screen, when
+        # there is one, so that its link with the others is what is seen
+        on_screen = getattr(self.model, "selected_lab_id", None)
+        with_lab_on_screen = [pair for pair in cross_pairs if on_screen in (pair[2], pair[3])]
+        if with_lab_on_screen:
+            cross_pairs = with_lab_on_screen
         if len(cross_pairs) > 1:
             cross_pairs = random.sample(cross_pairs, 1)
+
+        # What each of the two labs gets from the federation (latest round)
+        benefit_history = metrics.get("federation_benefit") or []
+        benefit = benefit_history[-1] if benefit_history else {}
 
         tasks = []
         for agent_a, agent_b, lab_a, lab_b in cross_pairs:
@@ -1104,6 +1113,7 @@ class SimulationController:
                 "cross_lab": True,
                 "lab_a": lab_a,
                 "lab_b": lab_b,
+                "benefit": {lab: benefit[lab] for lab in (lab_a, lab_b) if benefit.get(lab)},
                 **self._fl_dialog_figures(),
             }
             tasks.append(([agent_a, agent_b], fl_context))

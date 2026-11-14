@@ -373,6 +373,12 @@ def build_fl_facts(ctx: dict) -> str:
             f"modello locale {pct(ctx['local_acc'])}, modello globale {pct(ctx['global_acc'])}")
     elif ctx.get("demo"):
         lines.append(f"- laboratori coinvolti: {ctx.get('lab_id', '')} ({ctx['demo']})")
+    # Between labs: what each of them would have alone, against the federation
+    for lab, figures in (ctx.get("benefit") or {}).items():
+        lines.append(
+            f"- {lab}: il modello che addestra da solo, senza la federazione, arriva a "
+            f"{pct(figures['alone_common'])} sui pazienti di test di tutti i laboratori; "
+            f"il modello federato a {pct(figures['federated_common'])}")
     if ctx.get("recent_mean") is not None:
         lines.append(
             f"- media dell'accuracy negli ultimi 3 round: {pct(ctx['recent_mean'])}; "

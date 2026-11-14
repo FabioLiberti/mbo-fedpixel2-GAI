@@ -52,6 +52,14 @@ interface Shown extends Line {
   speakerNote: string;
   listenerNote: string;
   peopleText: Array<{ label: string; text: string }>;
+  /** Conversazione tra due laboratori: i due interlocutori, ciascuno nel suo laboratorio */
+  link: { left: LinkPerson; right: LinkPerson; speaking: 'left' | 'right' } | null;
+}
+
+interface LinkPerson {
+  name: string;
+  role: string;
+  lab: string;
 }
 
 // Durata a schermo di una battuta: almeno 10 secondi, di più se è lunga
@@ -125,6 +133,19 @@ const CSS = `
 .dialog-spotlight-ai { font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 6px; background: #3b6fd4; color: #fff; }
 .dialog-spotlight-text { font-weight: 700; line-height: 1.22; }
 .dialog-spotlight-detail { font-size: 20px; color: #c9d2ea; font-weight: 600; margin-top: 8px; }
+@keyframes link-flow { 0% { background-position: 0 0; } 100% { background-position: 28px 0; } }
+.dialog-link { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-bottom: 10px; }
+.dialog-link-person { display: flex; gap: 10px; align-items: center; border: 3px solid transparent; border-radius: 12px; padding: 6px 10px; background: rgba(255, 255, 255, 0.05); min-width: 0; opacity: 0.72; }
+.dialog-link-person.dialog-link-speaking { background: rgba(255, 255, 255, 0.13); opacity: 1; }
+.dialog-link-face { flex: none; width: 48px; height: 72px; background-repeat: no-repeat; image-rendering: pixelated; }
+.dialog-link-lab { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
+.dialog-link-name { font-size: 24px; font-weight: 800; line-height: 1.1; }
+.dialog-link-role { font-size: 16px; color: #c9d2ea; font-weight: 600; }
+.dialog-link-state { font-size: 14px; font-weight: 700; color: #9aa5c4; }
+.dialog-link-speaking .dialog-link-state { color: #fff; }
+.dialog-link-mid { text-align: center; font-size: 14px; font-weight: 800; color: #c9d2ea; min-width: 120px; }
+.dialog-link-wire { height: 4px; margin-top: 5px; border-radius: 2px; background-image: linear-gradient(90deg, #dfe6fa 50%, transparent 50%); background-size: 14px 4px; animation: link-flow 0.8s linear infinite; }
+.dialog-link-wire.dialog-link-back { animation-direction: reverse; }
 .dialog-assembly { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 10px; }
 .dialog-seat { display: flex; gap: 10px; align-items: center; background: rgba(255, 255, 255, 0.06); border: 3px solid transparent; border-radius: 12px; padding: 8px 10px; min-width: 0; }
 .dialog-seat.dialog-seat-won { background: rgba(123, 216, 143, 0.14); }
@@ -261,6 +282,11 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
     }
   };
 
+  // La fascia della federazione mostra quali laboratori sono in collegamento
+  const announceLink = (labs: string[] | null) => {
+    document.dispatchEvent(new CustomEvent('federation:link', { detail: labs ? { labs } : null }));
+  };
+
   const currentLab = (): string | null => {
     try {
       const game = getGameInstance();
@@ -341,8 +367,26 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
             const role = ROLE_LABEL[who.role] || who.role;
             return withLab ? `(${role}, ${LAB_LABEL[who.lab] || who.lab})` : `(${role})`;
           };
+          // Due persone di laboratori diversi: è un collegamento tra laboratori.
+          // Il laboratorio in cui ci si trova sta a sinistra, l'altro a destra
+          let link: Shown['link'] = null;
+          const from = rolesRef.current[line.speaker];
+          const to = line.listener ? rolesRef.current[line.listener] : undefined;
+          if (line.kind === 'speech' && line.listener && from && to && from.lab !== to.lab) {
+            const speakerSide: LinkPerson = { name: line.speaker, role: from.role, lab: from.lab };
+            const listenerSide: LinkPerson = { name: line.listener, role: to.role, lab: to.lab };
+            const order = (who: LinkPerson) => (who.lab === lab ? -1 : LABS.findIndex(l => l.id === who.lab));
+            const speakerLeft = order(speakerSide) <= order(listenerSide);
+            link = {
+              left: speakerLeft ? speakerSide : listenerSide,
+              right: speakerLeft ? listenerSide : speakerSide,
+              speaking: speakerLeft ? 'left' : 'right',
+            };
+          }
+          announceLink(link ? [link.left.lab, link.right.lab] : null);
           setShown({
             ...line,
+            link,
             key: counterRef.current,
             role: line.kind === 'decision' ? 'consortium' : (ROLE_FAMILY[info?.role || ''] || 'researcher'),
             speakerNote: line.kind === 'speech' ? note(line.speaker) : '',
@@ -363,11 +407,12 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
           setShown(null);
           await sleep(GAP_MS);
         }
+        announceLink(null);
         emit('stage-end');
       }
     } finally {
       playingRef.current = false;
-      if (stopped()) setShown(null);
+      if (stopped()) { setShown(null); announceLink(null); }
     }
   };
 
@@ -399,6 +444,7 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
     runRef.current += 1;
     queueRef.current = [];
     setShown(null);
+    announceLink(null);
     emit('stage-end');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -419,6 +465,55 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
   const assembly = shown.kind === 'decision' && shown.assembly && shown.assembly.length > 0 ? shown.assembly : null;
   return (
     <div key={shown.key} className="dialog-spotlight" style={{ border: `5px solid ${style.color}` }}>
+      {shown.link && (
+        <div className="dialog-link">
+          {(['left', 'right'] as const).map((side, index) => {
+            const who = shown.link![side];
+            const lab = LAB_BY_ID[who.lab];
+            const face = portraitOf(who.name, who.role);
+            const speaking = shown.link!.speaking === side;
+            const person = (
+              <div
+                key={side}
+                className={`dialog-link-person${speaking ? ' dialog-link-speaking' : ''}`}
+                style={{ borderColor: lab?.color || '#3a4568' }}
+              >
+                <div
+                  className="dialog-link-face"
+                  style={{
+                    backgroundImage: `url(${face.url})`,
+                    backgroundSize: face.sheet ? '192px 72px' : 'contain',
+                    backgroundPosition: face.sheet ? '0 0' : 'center',
+                    imageRendering: face.sheet ? 'pixelated' : 'auto',
+                  }}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div className="dialog-link-lab" style={{ color: lab?.color }}>Laboratorio {lab?.label || who.lab}</div>
+                  <div className="dialog-link-name">{who.name}</div>
+                  <div className="dialog-link-role">({ROLE_LABEL[who.role] || who.role})</div>
+                  <div className="dialog-link-state">
+                    {speaking ? '🔊 sta parlando' : 'ascolta'}
+                    {speaking && shown.isLLM && <span className="dialog-spotlight-ai" style={{ marginLeft: 8 }}>AI</span>}
+                  </div>
+                </div>
+              </div>
+            );
+            if (index === 0) {
+              return (
+                <React.Fragment key={side}>
+                  {person}
+                  <div className="dialog-link-mid">
+                    📡 In collegamento
+                    <div className={`dialog-link-wire${shown.link!.speaking === 'right' ? ' dialog-link-back' : ''}`} />
+                  </div>
+                </React.Fragment>
+              );
+            }
+            return person;
+          })}
+        </div>
+      )}
+      {!shown.link && (
       <div className="dialog-spotlight-who">
         <span style={{ fontSize: 34 }}>{style.icon}</span>
         <span className="dialog-spotlight-name" style={{ color: style.color }}>{shown.speaker}</span>
@@ -434,6 +529,7 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
         )}
         {shown.isLLM && <span className="dialog-spotlight-ai">AI</span>}
       </div>
+      )}
       {assembly && (
         <div className="dialog-assembly">
           {assembly.map(seat => {

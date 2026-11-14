@@ -10,7 +10,7 @@
 // da solo. Ogni numero arriva dal backend ed è misurato su pazienti che
 // nessuno ha usato per addestrare.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LABS } from './federationTheme';
 
 interface StripProps {
@@ -67,6 +67,8 @@ const STRIP_STYLES = `
 .fed-lab-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; }
 .fed-lab-name { font-size: 16px; font-weight: 800; }
 .fed-here-chip { font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 999px; color: #14182b; }
+.fed-lab.fed-linked { background: #2a3760; }
+.fed-link-chip { font-size: 11.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: #dfe6fa; color: #14182b; }
 .fed-lab-data { font-size: 12.5px; color: #c9d2ea; }
 .fed-bar-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-top: 3px; }
 .fed-bar-label { width: 58px; flex: none; color: #dfe6fa; font-weight: 600; }
@@ -88,6 +90,14 @@ const FederationStrip: React.FC<StripProps> = ({ backendSimData, active, current
   // Su quali pazienti si confrontano i due modelli: quelli di tutti i
   // laboratori (ciò a cui serve un modello comune) o solo i propri
   const [onOwn, setOnOwn] = useState(false);
+  // Laboratori i cui agenti stanno parlando tra loro in questo momento
+  // (lo comunica il pop-up dei dialoghi)
+  const [linked, setLinked] = useState<string[]>([]);
+  useEffect(() => {
+    const onLink = (event: Event) => setLinked((event as CustomEvent).detail?.labs || []);
+    document.addEventListener('federation:link', onLink);
+    return () => document.removeEventListener('federation:link', onLink);
+  }, []);
 
   const fl = backendSimData?.fl;
   const federation = fl?.federation;
@@ -159,15 +169,18 @@ const FederationStrip: React.FC<StripProps> = ({ backendSimData, active, current
           const federated = benefit ? (onOwn ? benefit.federated_own : benefit.federated_common) : null;
           const gain = alone !== null && federated !== null ? Math.round(federated * 100) - Math.round(alone * 100) : null;
           const count = agentCount(lab.id);
+          const linkedWith = linked.includes(lab.id) ? linked.find(id => id !== lab.id) : undefined;
+          const other = LABS.find(l => l.id === linkedWith);
           return (
             <div
               key={lab.id}
-              className={`fed-lab${here ? ' fed-here' : ''}${phase === 'training' ? ' fed-training' : ''}`}
-              style={{ borderColor: here ? lab.color : undefined }}
+              className={`fed-lab${here ? ' fed-here' : ''}${phase === 'training' ? ' fed-training' : ''}${other ? ' fed-linked' : ''}`}
+              style={{ borderColor: here || other ? lab.color : undefined }}
             >
               <div className="fed-lab-head">
                 <span className="fed-lab-name" style={{ color: lab.color }}>{lab.label}</span>
                 {here && <span className="fed-here-chip" style={{ background: lab.color }}>SEI QUI</span>}
+                {other && <span className="fed-link-chip">📡 in collegamento con {other.label}</span>}
                 <span className="fed-lab-data">
                   {info
                     ? `${info.train_rows} pazienti di ${info.age_min}–${info.age_max} anni`
