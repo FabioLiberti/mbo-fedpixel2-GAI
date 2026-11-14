@@ -26,13 +26,18 @@ interface Line {
   listener: string | null;
   text: string;
   detail?: string;
+  /** Persone citate in fondo al box (es. chi ha votato), con ciò che hanno proposto */
+  people?: Array<{ label: string; names: string[] }>;
   isLLM: boolean;
 }
 
 interface Shown extends Line {
   key: number;
   role: string;
-  remoteLab: string | null;
+  /** Ruolo (e laboratorio, se i laboratori coinvolti sono diversi) accanto a ogni nome */
+  speakerNote: string;
+  listenerNote: string;
+  peopleText: Array<{ label: string; text: string }>;
 }
 
 // Durata a schermo di una battuta: almeno 10 secondi, di più se è lunga
@@ -70,6 +75,14 @@ const FAMILY_STYLE: Record<string, { label: string; icon: string; color: string 
 const LAB_LABEL: Record<string, string> = {
   mercatorum: 'Mercatorum', blekinge: 'Blekinge', opbg: 'OPBG',
 };
+
+// Ruolo di ciascun agente, come compare tra parentesi accanto al nome
+const ROLE_LABEL: Record<string, string> = {
+  student: 'Studente', student_postdoc: 'Ricercatore post-dottorato',
+  professor: 'Professore', professor_senior: 'Professore senior',
+  researcher: 'Ricercatore', privacy_specialist: 'Specialista di privacy',
+  doctor: 'Medico', engineer: 'Ingegnere', sw_engineer: 'Ingegnere del software',
+};
 const SCENE_LAB: Record<string, string> = {
   MercatorumLabScene: 'mercatorum', BlekingeLabScene: 'blekinge', OPBGLabScene: 'opbg',
 };
@@ -92,7 +105,9 @@ const CSS = `
 .dialog-spotlight-who { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
 .dialog-spotlight-name { font-size: 28px; font-weight: 800; line-height: 1.1; }
 .dialog-spotlight-chip { font-size: 16px; font-weight: 700; padding: 3px 12px; border-radius: 999px; color: #fff; }
-.dialog-spotlight-to { font-size: 20px; color: #c9d2ea; font-weight: 600; }
+.dialog-spotlight-note { font-size: 21px; font-weight: 700; }
+.dialog-spotlight-to { font-size: 22px; color: #e3e9fb; font-weight: 700; }
+.dialog-spotlight-to .dialog-spotlight-note { color: #c9d2ea; font-weight: 600; }
 .dialog-spotlight-ai { font-size: 15px; font-weight: 800; padding: 2px 9px; border-radius: 6px; background: #3b6fd4; color: #fff; }
 .dialog-spotlight-text { font-weight: 700; line-height: 1.22; }
 .dialog-spotlight-detail { font-size: 20px; color: #c9d2ea; font-weight: 600; margin-top: 8px; }
@@ -122,12 +137,16 @@ function linesOf(item: any): Line[] {
         ? `da ${Number(d.before.noise).toFixed(2)} a ${Number(d.after.noise).toFixed(2)}`
         : `da ${d.before.epochs} a ${d.after.epochs}`)
       : '';
+    const others = (d.proposals || []).filter((p: any) => p.option !== d.option);
+    const people: Array<{ label: string; names: string[] }> = [];
+    if (winners.length) people.push({ label: 'A favore', names: winners });
+    for (const p of others) people.push({ label: `Proponeva di ${p.option_text}`, names: [p.agent] });
     return [{
       kind: 'decision',
       speaker: `Decisione del round ${d.round}`,
       listener: null,
       text: d.changed ? `Si è deciso di ${d.option_text}, ${change}.` : 'Si è deciso di non cambiare nulla.',
-      detail: winners.length ? `Voto: ${winners.join(', ')}` : undefined,
+      people,
       isLLM: false,
     }];
   }
@@ -253,13 +272,28 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
           const info = rolesRef.current[line.speaker];
           const lab = currentLab();
           counterRef.current += 1;
+          // Ogni nome porta tra parentesi il ruolo; se le persone del box
+          // lavorano in laboratori diversi, anche il laboratorio di ciascuna
+          const everyone = [line.speaker, line.listener, ...(line.people || []).flatMap(g => g.names)]
+            .filter((n): n is string => !!n && !!rolesRef.current[n]);
+          const labs = new Set(everyone.map(n => rolesRef.current[n].lab));
+          const withLab = labs.size > 1 || (!!lab && everyone.some(n => rolesRef.current[n].lab !== lab));
+          const note = (name: string | null): string => {
+            const who = name ? rolesRef.current[name] : undefined;
+            if (!who) return '';
+            const role = ROLE_LABEL[who.role] || who.role;
+            return withLab ? `(${role}, ${LAB_LABEL[who.lab] || who.lab})` : `(${role})`;
+          };
           setShown({
             ...line,
             key: counterRef.current,
             role: line.kind === 'decision' ? 'consortium' : (ROLE_FAMILY[info?.role || ''] || 'researcher'),
-            remoteLab: line.kind === 'speech' && info && lab && info.lab !== lab
-              ? (LAB_LABEL[info.lab] || info.lab)
-              : null,
+            speakerNote: line.kind === 'speech' ? note(line.speaker) : '',
+            listenerNote: note(line.listener),
+            peopleText: (line.people || []).map(group => ({
+              label: group.label,
+              text: group.names.map(n => `${n} ${note(n)}`.trim()).join(', '),
+            })),
           });
           if (line.kind === 'speech') {
             emit('stage-line', {
@@ -330,14 +364,15 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
       <div className="dialog-spotlight-who">
         <span style={{ fontSize: 34 }}>{style.icon}</span>
         <span className="dialog-spotlight-name" style={{ color: style.color }}>{shown.speaker}</span>
-        <span className="dialog-spotlight-chip" style={{ background: style.color }}>{style.label}</span>
-        {shown.remoteLab && (
-          <span className="dialog-spotlight-chip" style={{ background: '#555d75' }}>
-            in collegamento da {shown.remoteLab}
-          </span>
+        {shown.kind === 'decision' ? (
+          <span className="dialog-spotlight-chip" style={{ background: style.color }}>{style.label}</span>
+        ) : (
+          <span className="dialog-spotlight-note" style={{ color: style.color }}>{shown.speakerNote}</span>
         )}
         {shown.kind === 'speech' && shown.listener && (
-          <span className="dialog-spotlight-to">→ a {shown.listener}</span>
+          <span className="dialog-spotlight-to">
+            → a {shown.listener} <span className="dialog-spotlight-note">{shown.listenerNote}</span>
+          </span>
         )}
         {shown.isLLM && <span className="dialog-spotlight-ai">AI</span>}
       </div>
@@ -345,6 +380,11 @@ const DialogSpotlight: React.FC<SpotlightProps> = ({ backendSimData, active, mod
         {shown.text}
       </div>
       {shown.detail && <div className="dialog-spotlight-detail">{shown.detail}</div>}
+      {shown.peopleText.map(group => (
+        <div key={group.label} className="dialog-spotlight-detail">
+          {group.label}: {group.text}
+        </div>
+      ))}
     </div>
   );
 };

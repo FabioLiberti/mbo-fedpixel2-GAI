@@ -166,6 +166,10 @@ class ResearcherAgent(Agent):
         # --- Dialog (for frontend ThoughtBubble) ---
         self.last_dialog = None
         self.dialog_is_llm = False
+        # What the agent is thinking, written by the model from the real
+        # figures of the run (empty until the model has produced one)
+        self.current_thought = ""
+        self.thought_round = 0
 
         logger.info(
             f"Created {role} agent '{self.name}' (ID: {unique_id}, lab: {lab_id}) "
@@ -536,6 +540,8 @@ class ResearcherAgent(Agent):
             "act_address": self.scratch.act_address,
             "current_schedule_task": schedule_summary,
             "chatting_with": self.scratch.chatting_with,
+            "thought": self.current_thought,
+            "thought_round": self.thought_round,
             "reflection_count": len(self.a_mem.seq_thought) if hasattr(self.a_mem, 'seq_thought') else 0,
             "memory_event_count": len(self.a_mem.seq_event) if hasattr(self.a_mem, 'seq_event') else 0,
             # FL state

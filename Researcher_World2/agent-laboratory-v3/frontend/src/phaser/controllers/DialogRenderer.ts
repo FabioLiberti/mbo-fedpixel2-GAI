@@ -240,7 +240,8 @@ export class DialogRenderer {
 
     try {
       let bubble;
-      const baseOpts = { width: 140, padding: 6, isLLMGenerated: dialog.isLLMDialog || false };
+      // I pensieri sono box piccoli, accanto all'agente
+      const baseOpts = { width: 118, padding: 5, isLLMGenerated: dialog.isLLMDialog || false };
 
       switch (dialog.cognitiveType) {
         case CognitiveProcessType.THINKING:

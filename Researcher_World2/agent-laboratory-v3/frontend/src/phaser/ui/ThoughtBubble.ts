@@ -12,7 +12,9 @@ export interface ThoughtBubbleOptions {
 // Max bubble size as fraction of camera
 const MAX_WIDTH_RATIO = 0.16;
 const MAX_HEIGHT_RATIO = 0.20;
-const MAX_TEXT_LENGTH = 80;
+// Un pensiero scritto dal modello arriva già entro questo limite (backend/cognitive/thoughts.py):
+// qui non viene mai tagliato a metà
+const MAX_TEXT_LENGTH = 120;
 
 // Shared color palette (same as SpeechBubble / DecisionBubble)
 function getTypeColor(type: DialogType): { fill: number; border: number } {

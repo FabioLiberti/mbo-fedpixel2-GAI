@@ -67,6 +67,19 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const simulationActiveRef = useRef(simulationActive);
   simulationActiveRef.current = simulationActive;
 
+  // Ciò che ogni agente sta pensando (scritto dal modello nel backend): la
+  // scena lo mostra in un piccolo box accanto all'agente quando si attiva
+  useEffect(() => {
+    const agents = backendSimData?.agent_states;
+    const game = getGameInstance();
+    if (!game || !Array.isArray(agents)) return;
+    const thoughts: Record<string, { text: string; round: number }> = {};
+    for (const a of agents) {
+      if (a?.name && a.thought) thoughts[a.name] = { text: String(a.thought), round: Number(a.thought_round || 0) };
+    }
+    game.registry.set('agentThoughts', thoughts);
+  }, [backendSimData?.agent_states]);
+
   // La scena si anima solo a simulazione avviata: lo stato viene messo nel
   // registro del gioco, dove le scene lo leggono a ogni fotogramma
   useEffect(() => {

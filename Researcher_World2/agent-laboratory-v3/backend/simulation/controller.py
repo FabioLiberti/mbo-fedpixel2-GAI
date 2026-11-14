@@ -816,6 +816,59 @@ class SimulationController:
             "next_decision_round": (self.fl_system.round // every + 1) * every,
         }
 
+    def _trigger_agent_thoughts(self):
+        """Once per decision cycle, ask the model what the agents of one lab
+        (the one on screen, otherwise one in turn) are thinking about the real
+        state of the federation. With the model off there are no thoughts."""
+        if not self.model or not self.fl_system:
+            return
+        from cognitive.prompts.run_gpt_prompt import is_llm_enabled
+        if not is_llm_enabled():
+            return
+        fl_round = self.fl_system.round
+        every = max(1, self.fl_guidance_every)
+        if fl_round % every != 3 % every:
+            return
+
+        lab_ids = [l for l in self.model.get_lab_ids() if self.model.get_lab_agents(l)]
+        if not lab_ids:
+            return
+        lab_id = getattr(self.model, "selected_lab_id", None)
+        if lab_id not in lab_ids:
+            lab_id = lab_ids[(fl_round // every) % len(lab_ids)]
+        agents = list(self.model.get_lab_agents(lab_id))
+
+        from cognitive import thoughts
+        from cognitive.converse import build_fl_facts
+        metrics = self.fl_system.metrics
+        lvg_list = metrics.get("local_vs_global", [])
+        lab_lvg = (lvg_list[-1] if lvg_list else {}).get(lab_id, {})
+        facts = build_fl_facts({
+            "round": fl_round,
+            "accuracy": metrics.get("accuracy", [0])[-1] if metrics.get("accuracy") else 0,
+            "local_acc": lab_lvg.get("local_acc"),
+            "global_acc": lab_lvg.get("global_acc"),
+            "lab_id": lab_id,
+            "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
+            **self._fl_dialog_figures(),
+        })
+
+        def _gen(lab_agents):
+            return thoughts.generate(lab_agents, facts)
+
+        def _apply(results):
+            by_name = {agent.name: agent for agent in agents}
+            for result in results:
+                for name, text in (result or {}).items():
+                    agent = by_name.get(name)
+                    if agent is not None:
+                        agent.current_thought = text
+                        agent.thought_round = fl_round
+            logger.info(f"Agent thoughts for {lab_id} at round {fl_round}")
+
+        # Lowest priority: proposals and conversations come first
+        self._generate_fl_dialogs("thoughts", [agents], _gen, _apply, True, priority=0)
+
     def _trigger_fl_conversations(self):
         """Generate post-round FL conversations between agent pairs in each lab.
 
@@ -1368,6 +1421,12 @@ class SimulationController:
                 self._run_agent_guidance()
             except Exception as e:
                 logger.warning(f"FL agent guidance failed: {e}")
+
+            # What the agents of the lab on screen are thinking
+            try:
+                self._trigger_agent_thoughts()
+            except Exception as e:
+                logger.warning(f"Agent thoughts failed: {e}")
 
             logger.info("FL round completed")
 

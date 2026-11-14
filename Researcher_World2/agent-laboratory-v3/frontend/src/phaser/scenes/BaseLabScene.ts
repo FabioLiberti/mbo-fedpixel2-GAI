@@ -239,6 +239,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.nextSceneInteractionAt = 0;
     this.stagedSpeeds.clear();
     this.stagedAgents = [];
+    this.shownThoughtRound.clear();
     this.isZoomed = false;
     this.zoomBackBtn = null;
   }
@@ -343,8 +344,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         agent.setBubbleActive(false);
         agent.speed = APPROACH_SPEED;
       });
-      a.moveTo(mx - 24, my);
-      b.moveTo(mx + 24, my);
+      a.moveTo(mx - 28, my);
+      b.moveTo(mx + 28, my);
     } catch (error) {
       console.error('[BaseLabScene] stageApproach error:', error);
     }
@@ -454,6 +455,51 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     console.log('Creating test agents (base - override in subclass)');
   }
 
+  // Distanza minima tra due agenti: sotto questa gli sprite si coprirebbero
+  private static readonly AGENT_MIN_DISTANCE = 46;
+
+  /**
+   * Gli sprite non si sovrappongono mai: due agenti più vicini della distanza
+   * minima vengono allontanati lungo la retta che li unisce. Chi sta parlando
+   * resta fermo e si sposta solo l'altro.
+   */
+  private separateAgents(): void {
+    const min = BaseLabScene.AGENT_MIN_DISTANCE;
+    const cam = this.cameras.main;
+    const frozen = (agent: Agent) => this.stagedAgents.includes(agent);
+    for (let i = 0; i < this.agents.length; i++) {
+      for (let j = i + 1; j < this.agents.length; j++) {
+        const a = this.agents[i];
+        const b = this.agents[j];
+        if (!a || !b) continue;
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance >= min) continue;
+        if (distance < 0.5) {
+          // stessa posizione: una direzione fissa per la coppia, così non oscillano
+          const angle = ((i * 7 + j * 13) % 12) * (Math.PI / 6);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const push = (min - distance);
+        const ux = dx / distance;
+        const uy = dy / distance;
+        const shareA = frozen(a) && !frozen(b) ? 0 : frozen(b) && !frozen(a) ? 1 : 0.5;
+        a.x -= ux * push * shareA;
+        a.y -= uy * push * shareA;
+        b.x += ux * push * (1 - shareA);
+        b.y += uy * push * (1 - shareA);
+        // restano dentro la scena
+        for (const agent of [a, b]) {
+          agent.x = Phaser.Math.Clamp(agent.x, 40, cam.width - 40);
+          agent.y = Phaser.Math.Clamp(agent.y, 60, cam.height - 40);
+        }
+      }
+    }
+  }
+
   /** True quando la simulazione è avviata e non in pausa (lo dice l'interfaccia). */
   protected isSimulationActive(): boolean {
     return this.game.registry.get('simulationActive') === true;
@@ -470,6 +516,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         if (agent && typeof agent.update === 'function') agent.update(time, delta);
       });
     }
+    this.separateAgents();
+
     // I box dei dialoghi seguono gli agenti mentre si muovono
     const dialogs = this.agentController?.getDialogController();
     if (dialogs) dialogs.update(time, delta);
@@ -570,8 +618,35 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
         onComplete: () => t.destroy(),
       });
 
-      // Solo l'icona: nessuna frase preimpostata accompagna il cambio di stato
+      // Dopo l'icona, il pensiero dell'agente in un piccolo box accanto a lui.
+      // Il testo è scritto dal modello nel backend, sui dati reali del round e
+      // dal punto di vista di quell'agente; ogni pensiero si mostra una volta
+      // sola, e se il modello non ne ha prodotti non compare nulla.
+      this.time.delayedCall(1100, () => this.showAgentThought(agent));
     });
+  }
+
+  private shownThoughtRound: Map<string, number> = new Map();
+
+  private showAgentThought(agent: Agent): void {
+    try {
+      if (!agent.scene || !this.isSimulationActive()) return;
+      const thoughts = this.game.registry.get('agentThoughts') as
+        Record<string, { text: string; round: number }> | undefined;
+      const thought = thoughts ? thoughts[agent.name] : undefined;
+      if (!thought || !thought.text) return;
+      if (this.shownThoughtRound.get(agent.name) === thought.round) return;
+      const dialogs = this.agentController?.getDialogController();
+      if (!dialogs || dialogs.isAgentBusy(agent.getId())) return;
+      this.shownThoughtRound.set(agent.name, thought.round);
+      dialogs.createCognitiveProcess({
+        sourceId: agent.getId(), type: FLDialogType.GENERAL, text: thought.text,
+        cognitiveType: CognitiveProcessType.THINKING,
+        isLLMDialog: true, priority: 2, duration: 6000,
+      });
+    } catch (error) {
+      console.error('[BaseLabScene] showAgentThought error:', error);
+    }
   }
 
   /** Initialize dialog analytics system and expose on window for console access. */
