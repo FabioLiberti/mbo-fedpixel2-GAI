@@ -21,6 +21,9 @@ export class WorldMapScene extends BaseScene {
   private navigationButtons!: Phaser.GameObjects.Container;
   private infoPanel!: Phaser.GameObjects.Container;
   private connectionGraphics!: Phaser.GameObjects.Graphics;
+  private aggregatorNode?: Phaser.GameObjects.Arc;
+  private aggregatorIcon?: Phaser.GameObjects.Text;
+  private aggregatorLabel?: Phaser.GameObjects.Text;
   private mercatorumMiniature!: LabMiniature;
   private blekingeMiniature!: LabMiniature;
   private opbgMiniature!: LabMiniature;
@@ -173,8 +176,8 @@ export class WorldMapScene extends BaseScene {
   }
 
   update(time: number, delta: number): void {
-    // Aggiorna le connessioni per mantenerle fluide
-    this.updateConnections();
+    // Ridisegna la federazione sulla fase del round in corso
+    this.updateConnections(time);
     
     // Correzione dell'errore TS2802 usando Array.from
     Array.from(this.labMiniatures.values()).forEach(miniature => {
@@ -501,45 +504,26 @@ export class WorldMapScene extends BaseScene {
   }
 
   private createLabConnections(): void {
-    // Pulisci le grafiche precedenti
-    this.connectionGraphics.clear();
-    
     if (!this.mercatorumMiniature || !this.blekingeMiniature || !this.opbgMiniature) {
       console.warn("One or more lab miniatures are not initialized!");
       return;
     }
-    
-    // Ottieni le posizioni dalle miniature
-    const mercatorumPos = new Phaser.Math.Vector2(
-      this.mercatorumMiniature.x,
-      this.mercatorumMiniature.y
-    );
-    
-    const blekingePos = new Phaser.Math.Vector2(
-      this.blekingeMiniature.x,
-      this.blekingeMiniature.y
-    );
-    
-    const opbgPos = new Phaser.Math.Vector2(
-      this.opbgMiniature.x,
-      this.opbgMiniature.y
-    );
-    
-    // Debug: Log positions
-    console.log("Lab positions for connections:");
-    console.log(`Mercatorum: (${mercatorumPos.x}, ${mercatorumPos.y})`);
-    console.log(`Blekinge: (${blekingePos.x}, ${blekingePos.y})`);
-    console.log(`OPBG: (${opbgPos.x}, ${opbgPos.y})`);
-    
-    // Disegna le connessioni aggiornate con linee tratteggiate più visibili
-    this.drawDashedLine(this.connectionGraphics, mercatorumPos.x, mercatorumPos.y, blekingePos.x, blekingePos.y, 0x2080ff, 15, 8, 3);
-    this.drawDashedLine(this.connectionGraphics, blekingePos.x, blekingePos.y, opbgPos.x, opbgPos.y, 0x2080ff, 15, 8, 3);
-    this.drawDashedLine(this.connectionGraphics, opbgPos.x, opbgPos.y, mercatorumPos.x, mercatorumPos.y, 0x2080ff, 15, 8, 3);
-    
-    // Aggiunta di icone di "data exchange" lungo le connessioni
-    this.createDataExchangeVisuals(mercatorumPos, blekingePos);
-    this.createDataExchangeVisuals(blekingePos, opbgPos);
-    this.createDataExchangeVisuals(opbgPos, mercatorumPos);
+
+    // L'aggregatore della federazione, al centro tra i tre laboratori: i
+    // laboratori non si scambiano nulla direttamente, ognuno parla solo con lui
+    const node = this.add.circle(0, 0, 26, 0x1b2440, 1);
+    node.setStrokeStyle(3, 0xf08a3c, 1);
+    node.setDepth(5);
+    this.aggregatorNode = node;
+    this.aggregatorIcon = this.add.text(0, 0, 'Σ', {
+      fontSize: '26px', color: '#f08a3c', fontStyle: 'bold', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(6);
+    this.aggregatorLabel = this.add.text(0, 0, 'Aggregatore', {
+      fontSize: '13px', color: '#ffffff', fontFamily: 'Arial', align: 'center',
+      backgroundColor: '#0e1428', padding: { x: 8, y: 4 },
+    }).setOrigin(0.5, 1).setDepth(6);
+
+    this.updateConnections(0);
   }
 
   /**
@@ -594,28 +578,6 @@ export class WorldMapScene extends BaseScene {
   }
 
   /**
-   * Crea gli elementi visuali semplificati per rappresentare lo scambio di dati tra i laboratori
-   */
-  private createDataExchangeVisuals(start: Phaser.Math.Vector2, end: Phaser.Math.Vector2): void {
-    // Calcola il punto centrale tra i due punti
-    const midX = (start.x + end.x) / 2;
-    const midY = (start.y + end.y) / 2;
-    
-    // Debug: Mark data exchange position
-    if (this.debugMode) {
-      this.debugGraphics.fillStyle(0xFFAA00, 1);
-      this.debugGraphics.fillCircle(midX, midY, 8);
-    }
-    
-    // Crea un simbolo semplice per rappresentare lo scambio dati
-    const dataCircle = this.add.circle(midX, midY, 8, 0x3498db, 0.9);
-    dataCircle.setStrokeStyle(2, 0xFFFFFF, 0.7);
-    
-    // Non aggiungiamo effetti particellari o animazioni complesse
-    // per evitare l'effetto "fuochi d'artificio"
-  }
-
-  /**
    * Aggiunge un effetto di brillantezza alle connessioni attive
    */
   private addConnectionGlow(): void {
@@ -626,33 +588,57 @@ export class WorldMapScene extends BaseScene {
   }
 
   /**
-   * Aggiorna le connessioni tra i laboratori
+   * Disegna la federazione: ogni laboratorio collegato all'aggregatore, e sui
+   * collegamenti ciò che sta accadendo nel round in corso. La fase arriva dal
+   * backend (registro 'federation'): durante l'invio i pesi salgono dai
+   * laboratori all'aggregatore, durante l'aggregazione l'aggregatore pulsa,
+   * poi il modello globale torna ai laboratori.
    */
-  private updateConnections(): void {
-    if (this.connectionGraphics && this.mercatorumMiniature && this.blekingeMiniature && this.opbgMiniature) {
-      // Pulisci le grafiche precedenti
-      this.connectionGraphics.clear();
-      
-      // Ottieni le posizioni aggiornate usando x e y direttamente
-      const mercatorumPos = new Phaser.Math.Vector2(
-        this.mercatorumMiniature.x,
-        this.mercatorumMiniature.y
-      );
-      
-      const blekingePos = new Phaser.Math.Vector2(
-        this.blekingeMiniature.x,
-        this.blekingeMiniature.y
-      );
-      
-      const opbgPos = new Phaser.Math.Vector2(
-        this.opbgMiniature.x,
-        this.opbgMiniature.y
-      );
-      
-      // Disegna le connessioni aggiornate
-      this.drawDashedLine(this.connectionGraphics, mercatorumPos.x, mercatorumPos.y, blekingePos.x, blekingePos.y, 0x2080ff, 15, 8, 3);
-      this.drawDashedLine(this.connectionGraphics, blekingePos.x, blekingePos.y, opbgPos.x, opbgPos.y, 0x2080ff, 15, 8, 3);
-      this.drawDashedLine(this.connectionGraphics, opbgPos.x, opbgPos.y, mercatorumPos.x, mercatorumPos.y, 0x2080ff, 15, 8, 3);
+  private updateConnections(time: number = 0): void {
+    if (!this.connectionGraphics || !this.mercatorumMiniature || !this.blekingeMiniature || !this.opbgMiniature) return;
+    const g = this.connectionGraphics;
+    g.clear();
+
+    const labs = [
+      { x: this.mercatorumMiniature.x, y: this.mercatorumMiniature.y, color: 0xc48626 },
+      { x: this.blekingeMiniature.x, y: this.blekingeMiniature.y, color: 0x4a90d9 },
+      { x: this.opbgMiniature.x, y: this.opbgMiniature.y, color: 0x3aa56c },
+    ];
+    const cx = (labs[0].x + labs[1].x + labs[2].x) / 3;
+    const cy = (labs[0].y + labs[1].y + labs[2].y) / 3;
+
+    const federation = this.game.registry.get('federation') || {};
+    const phase: string | null = federation.phase || null;
+
+    for (const lab of labs) {
+      this.drawDashedLine(g, lab.x, lab.y, cx, cy, 0x2080ff, 15, 8, 3);
+    }
+
+    // Ciò che viaggia: i pesi verso l'aggregatore, il modello globale verso i laboratori
+    if (phase === 'sending' || phase === 'receiving') {
+      for (const lab of labs) {
+        for (let k = 0; k < 3; k++) {
+          const t = ((time / 1300) + k / 3) % 1;
+          const along = phase === 'sending' ? t : 1 - t;
+          const px = lab.x + (cx - lab.x) * along;
+          const py = lab.y + (cy - lab.y) * along;
+          g.fillStyle(0xffffff, 1);
+          g.fillCircle(px, py, 8);
+          g.fillStyle(phase === 'sending' ? lab.color : 0xf08a3c, 1);
+          g.fillCircle(px, py, 6);
+        }
+      }
+    }
+
+    if (this.aggregatorNode && this.aggregatorLabel && this.aggregatorIcon) {
+      const pulse = phase === 'aggregating' ? 1 + 0.14 * Math.sin(time / 130) : 1;
+      this.aggregatorNode.setPosition(cx, cy).setScale(pulse);
+      this.aggregatorIcon.setPosition(cx, cy).setScale(pulse);
+      const round = Number(federation.round || 0);
+      const accuracy = typeof federation.accuracy === 'number' ? ` · ${Math.round(federation.accuracy * 100)}%` : '';
+      const text = round > 0 ? `Aggregatore\nround ${round}${accuracy}` : 'Aggregatore';
+      if (this.aggregatorLabel.text !== text) this.aggregatorLabel.setText(text);
+      this.aggregatorLabel.setPosition(cx, cy - 34);
     }
   }
 

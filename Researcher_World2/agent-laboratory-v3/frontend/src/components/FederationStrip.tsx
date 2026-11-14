@@ -201,9 +201,9 @@ const FederationStrip: React.FC<StripProps> = ({ backendSimData, active, current
                   <div className="fed-bar-row">
                     <span className="fed-bar-label">Federato</span>
                     <span className="fed-bar-track">
-                      <span className="fed-bar-fill" style={{ display: 'block', width: pct(federated), background: '#f08a3c' }} />
+                      <span className="fed-bar-fill" style={{ display: 'block', width: pct(federated), background: '#f2f4fb' }} />
                     </span>
-                    <span className="fed-bar-value" style={{ color: '#f08a3c' }}>{pct(federated)}</span>
+                    <span className="fed-bar-value">{pct(federated)}</span>
                   </div>
                   <div className="fed-gain" style={{ color: gain! > 0 ? '#7bd88f' : gain! < 0 ? '#ff9c8a' : '#c9d2ea' }}>
                     {gain! > 0 && `La federazione dà ${gain} punti in più`}

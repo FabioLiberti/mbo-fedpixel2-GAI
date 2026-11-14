@@ -11,9 +11,10 @@ export interface LabTheme {
 }
 
 export const LABS: LabTheme[] = [
-  { id: 'mercatorum', label: 'Mercatorum', color: '#e0a030' },
-  { id: 'blekinge',   label: 'Blekinge',   color: '#4f9be8' },
-  { id: 'opbg',       label: 'OPBG',       color: '#45b97c' },
+  // Colori distinguibili tra loro anche con una visione ridotta dei colori, su fondo scuro
+  { id: 'mercatorum', label: 'Mercatorum', color: '#c48626' },
+  { id: 'blekinge',   label: 'Blekinge',   color: '#4a90d9' },
+  { id: 'opbg',       label: 'OPBG',       color: '#3aa56c' },
 ];
 
 export const LAB_BY_ID: Record<string, LabTheme> = Object.fromEntries(LABS.map(lab => [lab.id, lab]));

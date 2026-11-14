@@ -4,6 +4,7 @@ import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
 import DialogSpotlight from './DialogSpotlight';
 import FederationStrip from './FederationStrip';
+import FederationChart from './FederationChart';
 import AgentInspectorPanel from './AgentInspectorPanel';
 import LLMDialogPanel from './LLMDialogPanel';
 import ErrorBoundary from './ErrorBoundary';
@@ -80,6 +81,20 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
     }
     game.registry.set('agentThoughts', thoughts);
   }, [backendSimData?.agent_states]);
+
+  // La mappa generale disegna la federazione (laboratori, aggregatore, flussi)
+  // sulla fase reale del round: la legge dal registro del gioco
+  useEffect(() => {
+    const game = getGameInstance();
+    if (!game) return;
+    const fl = backendSimData?.fl;
+    const history: number[] = fl?.metrics?.accuracy || [];
+    game.registry.set('federation', {
+      phase: simulationActive ? (fl?.current_phase ?? null) : null,
+      round: fl?.round ?? 0,
+      accuracy: history.length ? history[history.length - 1] : null,
+    });
+  }, [backendSimData?.fl?.current_phase, backendSimData?.fl?.round, simulationActive]);
 
   // La scena si anima solo a simulazione avviata: lo stato viene messo nel
   // registro del gioco, dove le scene lo leggono a ogni fotogramma
@@ -731,6 +746,11 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           />
         </ErrorBoundary>
       </div>
+
+      {/* Andamento della federazione: modello federato e modelli "da soli", con le decisioni degli agenti */}
+      <ErrorBoundary name="FederationChart">
+        <FederationChart backendSimData={backendSimData} />
+      </ErrorBoundary>
 
       {/* LLM Dialog Panel - sotto la mappa, larghezza piena */}
       <ErrorBoundary name="LLMDialogPanel">
