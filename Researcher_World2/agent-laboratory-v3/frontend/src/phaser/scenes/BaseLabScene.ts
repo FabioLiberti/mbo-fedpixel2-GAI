@@ -132,6 +132,11 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   private pairInteractionCooldowns: Map<string, number> = new Map();
   private nextSceneInteractionAt: number = 0;
 
+  // Conversazioni generate dal backend e messe in scena in questo laboratorio:
+  // una alla volta; se ne arriva un'altra mentre una è in corso, si tiene la più recente
+  private conversationPlaying: boolean = false;
+  private pendingConversation: any | null = null;
+
   // Listener registrati da questa scena sull'emettitore globale del gioco:
   // vengono rimossi uno per uno alla chiusura della scena (vedi teardownScene)
   private gameEventListeners: Array<[string, (...args: any[]) => void]> = [];
@@ -155,6 +160,12 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     // laboratori ridefiniscono create() senza chiamare super.create(), mentre
     // init() viene eseguito a ogni avvio della scena. 'once' evita accumuli.
     this.events.once('shutdown', this.teardownScene, this);
+
+    // Le conversazioni scritte dal backend (per tipo di agente, sui dati reali
+    // del round) vengono recitate dagli agenti di questo laboratorio
+    this.conversationPlaying = false;
+    this.pendingConversation = null;
+    this.onGameEvent('analytics-fl-conversation', (convo: any) => this.queueBackendConversation(convo));
 
     console.log(`BaseLabScene initialized: ${this.scene.key}`);
   }
@@ -220,6 +231,8 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.zoneIconCooldowns.clear();
     this.pairInteractionCooldowns.clear();
     this.nextSceneInteractionAt = 0;
+    this.conversationPlaying = false;
+    this.pendingConversation = null;
     this.isZoomed = false;
     this.zoomBackBtn = null;
   }
@@ -296,6 +309,106 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
     console.log(`BaseLabScene ${this.scene.key} setup complete`);
     // La chiusura della scena è gestita da teardownScene(), registrato in init()
+  }
+
+  // ------------------------------------------------------------------
+  // Conversazioni del backend messe in scena
+  // ------------------------------------------------------------------
+
+  private findAgentByName(name: string | undefined): Agent | undefined {
+    if (!name) return undefined;
+    const wanted = name.trim().toLowerCase();
+    return this.agents.find(a => a && a.name && a.name.trim().toLowerCase() === wanted);
+  }
+
+  /** Riceve una conversazione dal backend: la recita subito o la tiene per dopo. */
+  private queueBackendConversation(convo: any): void {
+    try {
+      if (!convo || !Array.isArray(convo.dialog) || !Array.isArray(convo.agents)) return;
+      if (!this.scene.isActive() || this.agents.length === 0) return;
+      // Riguarda questo laboratorio solo se almeno uno dei due agenti è qui
+      if (!convo.agents.some((n: string) => !!this.findAgentByName(n))) return;
+      if (this.conversationPlaying) {
+        this.pendingConversation = convo;
+        return;
+      }
+      this.playBackendConversation(convo);
+    } catch (error) {
+      console.error('[BaseLabScene] queueBackendConversation error:', error);
+    }
+  }
+
+  /**
+   * I due agenti si avvicinano e si scambiano le battute una alla volta. Se uno
+   * dei due lavora in un altro laboratorio (conversazione tra laboratori), le
+   * sue battute compaiono solo nel pop-up, come voce in collegamento.
+   */
+  private playBackendConversation(convo: any): void {
+    const dialogs = this.agentController?.getDialogController();
+    if (!dialogs) return;
+    this.conversationPlaying = true;
+
+    const names: string[] = convo.agents;
+    const a = this.findAgentByName(names[0]);
+    const b = this.findAgentByName(names[1]);
+    const here = [a, b].filter((x): x is Agent => !!x);
+
+    let delay = 300;
+    const usualSpeed = new Map<Agent, number>();
+    if (a && b) {
+      // Si incontrano a metà strada, uno di fronte all'altro, a passo svelto:
+      // la conversazione comincia quando sono vicini
+      const APPROACH_SPEED = 95;
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      [a, b].forEach(agent => { usualSpeed.set(agent, agent.speed); agent.speed = APPROACH_SPEED; });
+      a.moveTo(mx - 24, my);
+      b.moveTo(mx + 24, my);
+      const distance = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y);
+      delay = Phaser.Math.Clamp(Math.round((distance / 2 / APPROACH_SPEED) * 1000 * 1.5) + 400, 900, 6000);
+    }
+
+    const lines: Array<[string, string]> = convo.dialog;
+    lines.forEach(([speakerName, text], index) => {
+      const duration = Phaser.Math.Clamp(2600 + String(text).length * 45, 3400, 7500);
+      this.time.delayedCall(delay, () => {
+        const speaker = this.findAgentByName(speakerName);
+        const listenerName = names.find(n => n !== speakerName);
+        const listener = this.findAgentByName(listenerName);
+        here.forEach(agent => agent.setBubbleActive(true)); // restano fermi mentre parlano
+
+        if (speaker) {
+          dialogs.createDialog({
+            sourceId: speaker.getId(),
+            targetId: listener ? listener.getId() : undefined,
+            targetName: listenerName,
+            type: FLDialogType.RESEARCH,
+            text: String(text),
+            isLLMDialog: !!convo.is_llm,
+            isResponse: index % 2 === 1,
+            priority: 8,
+            duration,
+          });
+        } else {
+          // Chi parla è in un altro laboratorio: solo nel pop-up
+          this.game.events.emit('dialog-shown', {
+            kind: 'speech', remote: true,
+            speakerName, targetName: listenerName ?? null,
+            text: String(text), isLLM: !!convo.is_llm, duration,
+          });
+        }
+      });
+      delay += duration + 350;
+    });
+
+    this.time.delayedCall(delay + 200, () => {
+      here.forEach(agent => { if (agent.scene) agent.setBubbleActive(false); });
+      usualSpeed.forEach((speed, agent) => { agent.speed = speed; });
+      this.conversationPlaying = false;
+      const next = this.pendingConversation;
+      this.pendingConversation = null;
+      if (next) this.playBackendConversation(next);
+    });
   }
 
   // ------------------------------------------------------------------
@@ -394,6 +507,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     // Questo metodo viene chiamato a ogni fotogramma finché due agenti sono a
     // contatto: senza freno la stessa coppia avvierebbe decine di interazioni
     // al secondo.
+    if (this.conversationPlaying) return; // è in corso una conversazione messa in scena
     const now = this.time.now;
     const pairKey = [agent1.getId(), agent2.getId()].sort().join('|');
     if ((this.pairInteractionCooldowns.get(pairKey) ?? 0) > now) return;

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { initGame, getGameInstance, SCENE_KEYS } from '../phaser/game';
 import FLStatusPanel from './FLStatusPanel';
 import FLStatusConnector from './FLStatusConnector';
+import DialogSpotlight from './DialogSpotlight';
 import AgentInspectorPanel from './AgentInspectorPanel';
 import LLMDialogPanel from './LLMDialogPanel';
 import ErrorBoundary from './ErrorBoundary';
@@ -53,6 +54,9 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
   const [flEnabled, setFLEnabled] = useState<boolean>(true); // Default a true per mostrare il pannello
   const [flStatus, setFLStatus] = useState<FLStatusData | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<CognitiveAgentState | null>(null);
+  // Ultimi dati del backend, leggibili dai listener registrati una volta sola
+  const backendSimDataRef = useRef<any>(null);
+  backendSimDataRef.current = backendSimData;
   const [llmPanelVisible, setLlmPanelVisible] = useState<boolean>(false);
   
   // Timer per simulare aggiornamenti dello stato FL
@@ -225,6 +229,15 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           setSelectedAgent(agentData);
         });
 
+        // Clic su un agente nella scena: apre l'ispettore con lo stato che
+        // quell'agente ha nel backend (ritrovato per nome)
+        gameInstance.events.on('agent-clicked', (clicked: { name?: string }) => {
+          const agents = backendSimDataRef.current?.agent_states;
+          if (!clicked?.name || !Array.isArray(agents)) return;
+          const state = agents.find((a: any) => a?.name === clicked.name);
+          if (state) setSelectedAgent(state as CognitiveAgentState);
+        });
+
         // Connetti i pulsanti UI ai metodi Phaser
         setupSimulationControls(gameInstance);
       } catch (error) {
@@ -237,6 +250,7 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
       const gameInstance = getGameInstance();
       if (gameInstance) {
         gameInstance.events.off('agentSelected');
+        gameInstance.events.off('agent-clicked');
       }
     };
   }, [onGameReady]);
@@ -633,6 +647,11 @@ const SimulationContainer: React.FC<SimulationContainerProps> = ({
           ref={gameContainerRef}
           style={{ width: '100%', height: '600px', backgroundColor: '#1a1a1a' }}
         />
+
+        {/* Pop-up grande con la battuta in corso e le decisioni del consorzio */}
+        <ErrorBoundary name="DialogSpotlight">
+          <DialogSpotlight backendSimData={backendSimData} />
+        </ErrorBoundary>
 
         {/* Pannello di controllo FL - sempre montato, gestisce internamente la visibilità */}
         <ErrorBoundary name="FLStatusPanel">

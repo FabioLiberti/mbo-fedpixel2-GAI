@@ -18,6 +18,8 @@ import type { IAgentScene } from '../types/IAgentScene';
 export interface DialogConfig {
   sourceId: string;
   targetId?: string;
+  /** Nome del destinatario quando non è un agente di questa scena (es. altro laboratorio) */
+  targetName?: string;
   type: DialogType;
   text: string;
   duration?: number;

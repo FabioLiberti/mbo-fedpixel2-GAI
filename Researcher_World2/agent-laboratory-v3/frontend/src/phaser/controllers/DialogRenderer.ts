@@ -117,6 +117,25 @@ export class DialogRenderer {
       : Math.min(8000 + dialog.text.length * 50, 18000);
     const duration = dialog.duration || defaultDuration;
 
+    // Annuncia ciò che è comparso: l'interfaccia lo mostra nel pop-up grande
+    if (!isSystem) {
+      const speaker = s.getAgentDetails(id);
+      const target = dialog.targetId ? s.getAgentDetails(dialog.targetId) : null;
+      const cam = this.scene.cameras.main;
+      this.scene.game.events.emit('dialog-shown', {
+        kind: dialog.cognitiveType ? 'thought' : 'speech',
+        speakerName: speaker?.name ?? null,
+        speakerRole: speaker?.role ?? null,
+        targetName: target?.name ?? dialog.targetName ?? null,
+        text: dialog.text,
+        isLLM: !!dialog.isLLMDialog,
+        duration,
+        y: sourcePosition.y - cam.worldView.y,
+        sceneHeight: cam.worldView.height || cam.height,
+      });
+      if (!dialog.cognitiveType) this.showSpeakerRing(id, sourcePosition);
+    }
+
     const timer = this.scene.time.delayedCall(duration, () => {
       this.activeTimers.delete(id);
       this.removeBubble(id);
@@ -128,6 +147,32 @@ export class DialogRenderer {
       }
     });
     this.activeTimers.set(id, timer);
+  }
+
+  /** Anello pulsante sotto l'agente che sta parlando, per riconoscerlo a colpo d'occhio. */
+  private speakerRings: Map<string, Phaser.GameObjects.Arc> = new Map();
+
+  private showSpeakerRing(agentId: string, pos: { x: number; y: number }): void {
+    this.hideSpeakerRing(agentId);
+    try {
+      const ring = this.scene.add.circle(pos.x, pos.y + 14, 20);
+      ring.setStrokeStyle(4, 0xffd23f, 1);
+      ring.setDepth(900);
+      this.scene.tweens.add({
+        targets: ring, scale: 1.45, alpha: 0.25, duration: 620,
+        yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+      this.speakerRings.set(agentId, ring);
+    } catch { /* l'anello è solo un aiuto visivo */ }
+  }
+
+  private hideSpeakerRing(agentId: string): void {
+    const ring = this.speakerRings.get(agentId);
+    if (ring) {
+      this.scene.tweens.killTweensOf(ring);
+      ring.destroy();
+      this.speakerRings.delete(agentId);
+    }
   }
 
   /** Ingombro a schermo di un box (riquadro del testo più il margine del fondo). */
@@ -278,6 +323,7 @@ export class DialogRenderer {
     if (timer) { timer.remove(false); this.activeTimers.delete(agentId); }
     this.activePriority.delete(agentId);
     this.bubbleOffset.delete(agentId);
+    this.hideSpeakerRing(agentId);
 
     const bubble = this.state.activeBubbles.get(agentId);
     if (bubble) {
@@ -294,6 +340,7 @@ export class DialogRenderer {
     this.activePriority.clear();
     this.bubbleOffset.clear();
     this.pendingByAgent.clear();
+    Array.from(this.speakerRings.keys()).forEach((agentId) => this.hideSpeakerRing(agentId));
     this.state.activeBubbles.forEach((b) => b.destroy());
     this.state.activeBubbles.clear();
     this.state.dialogQueue = [];
@@ -330,6 +377,8 @@ export class DialogRenderer {
         const offset = this.bubbleOffset.get(agentId) ?? DialogRenderer.PLACEMENTS[0];
         bubble.updatePosition(pos.x + offset.dx, pos.y - DialogRenderer.BASE_OFFSET_Y - offset.lift);
       }
+      const ring = this.speakerRings.get(agentId);
+      if (pos && ring) ring.setPosition(pos.x, pos.y + 14);
     });
 
     // Gli agenti si muovono: ogni tanto si ricontrolla che un box non sia

@@ -715,7 +715,7 @@ class SimulationController:
         return round(max(0.0, remaining), 1)
 
     def _generate_fl_dialogs(self, kind: str, tasks: list, generate, apply, use_llm: bool,
-                             priority: int = 1):
+                             priority: int = 1, generate_template=None):
         """Generate one batch of post-round dialogs and apply the results.
 
         Without the LLM the texts are instant templates: generated and applied
@@ -732,7 +732,12 @@ class SimulationController:
 
         running = self._fl_dialog_threads.get(kind)
         if running is not None and running.is_alive():
-            logger.info(f"FL dialogs ({kind}): previous batch still being written, round skipped")
+            # The model is still writing the previous batch: this round gets
+            # template dialogs (if the caller has them) instead of none at all
+            if generate_template is not None:
+                apply([generate_template(task) for task in tasks])
+            else:
+                logger.info(f"FL dialogs ({kind}): previous batch still being written, round skipped")
             return
 
         run_id = self.fl_run_id
@@ -771,6 +776,22 @@ class SimulationController:
             except Exception as e:
                 logger.warning(f"FL dialogs ({kind}) could not be applied: {e}")
 
+    def _fl_dialog_figures(self) -> Dict[str, Any]:
+        """Real figures of the run that the agents talk about in their dialogs."""
+        from cognitive import fl_guidance
+        ctx = fl_guidance.build_context(self.fl_system, self.fl_decisions)
+        changed = [d for d in self.fl_decisions if d.get("changed")]
+        every = max(1, self.fl_guidance_every)
+        return {
+            "recent_mean": ctx["recent_mean"],
+            "previous_mean": ctx["previous_mean"],
+            "trend": ctx["trend"],
+            "noise": ctx["noise"],
+            "epochs": ctx["epochs"],
+            "last_decision": changed[-1] if changed else None,
+            "next_decision_round": (self.fl_system.round // every + 1) * every,
+        }
+
     def _trigger_fl_conversations(self):
         """Generate post-round FL conversations between agent pairs in each lab.
 
@@ -801,16 +822,12 @@ class SimulationController:
             if len(agents) < 2:
                 continue
 
-            # Select two agents with different roles
-            roles_seen = set()
-            pair = []
-            for agent in agents:
-                role = getattr(agent, 'role', 'researcher')
-                if role not in roles_seen and len(pair) < 2:
-                    roles_seen.add(role)
-                    pair.append(agent)
-            if len(pair) < 2:
-                pair = [agents[0], agents[1]]
+            # A different pair at every round, so that over time every agent
+            # of the lab talks with every other one; who opens alternates too
+            import itertools
+            pairs = list(itertools.combinations(agents, 2))
+            first, second = pairs[fl_round % len(pairs)]
+            pair = [first, second] if (fl_round // len(pairs)) % 2 == 0 else [second, first]
 
             lab_lvg = lvg.get(lab_id, {})
             fl_context = {
@@ -820,6 +837,7 @@ class SimulationController:
                 "dp_budget": dp.get("budget_fraction", 1.0),
                 "lab_id": lab_id,
                 "demo": self._LAB_DEMOGRAPHICS.get(lab_id, "pazienti"),
+                **self._fl_dialog_figures(),
             }
             tasks.append((pair, fl_context))
 
@@ -910,7 +928,11 @@ class SimulationController:
             self.fl_conversations = (self.fl_conversations + new_convos)[-9:]
             logger.info(f"Generated {len(new_convos)} FL conversations for round {fl_round}")
 
-        self._generate_fl_dialogs("intra", tasks, _gen, _apply, use_llm)
+        def _gen_template(args):
+            pair, ctx = args
+            return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=False)
+
+        self._generate_fl_dialogs("intra", tasks, _gen, _apply, use_llm, generate_template=_gen_template)
 
     def _trigger_cross_lab_conversations(self):
         """Generate cross-lab FL conversations after global aggregation.
@@ -976,9 +998,12 @@ class SimulationController:
                     f"{self._LAB_DEMOGRAPHICS.get(lab_a, 'pazienti')} ({lab_a}) e "
                     f"{self._LAB_DEMOGRAPHICS.get(lab_b, 'pazienti')} ({lab_b})"
                 ),
+                # short form for the template dialogs (the long one names both labs)
+                "demo_short": "pazienti",
                 "cross_lab": True,
                 "lab_a": lab_a,
                 "lab_b": lab_b,
+                **self._fl_dialog_figures(),
             }
             tasks.append(([agent_a, agent_b], fl_context))
 
@@ -1058,7 +1083,11 @@ class SimulationController:
         # Simulation Lifecycle
         # =========================================================================
 
-        self._generate_fl_dialogs("cross", tasks, _gen, _apply, use_llm)
+        def _gen_template(args):
+            pair, ctx = args
+            return pair, ctx, generate_fl_conversation(pair[0], pair[1], ctx, use_llm=False)
+
+        self._generate_fl_dialogs("cross", tasks, _gen, _apply, use_llm, generate_template=_gen_template)
 
     def start_simulation(self):
         with self._lock:

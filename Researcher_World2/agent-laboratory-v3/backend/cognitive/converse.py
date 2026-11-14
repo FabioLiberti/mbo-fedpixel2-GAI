@@ -264,9 +264,10 @@ _FL_CONVO_SYSTEM = (
     "Genera un dialogo realistico in italiano tra due ricercatori che discutono "
     "i risultati dell'ultimo round di Federated Learning. "
     "REGOLE:\n"
-    "- Ogni battuta: 1-2 frasi, naturale, coerente col ruolo\n"
+    "- Ogni battuta: UNA frase breve (massimo 22 parole), naturale, coerente col ruolo\n"
+    "- Ogni personaggio parla nel modo indicato accanto al suo nome\n"
     "- Il dialogo deve riflettere le competenze specifiche di ciascun ruolo\n"
-    "- Usa i DATI REALI forniti (accuracy, gain, budget privacy)\n"
+    "- Usa solo i DATI REALI forniti, senza inventare numeri\n"
     "- Se ci sono RICORDI degli agenti, integra quei pensieri nel dialogo\n"
     "- Rispondi SOLO con il dialogo, formato: NomeAgente: battuta\n"
     "- Esattamente 4 battute alternate"
@@ -382,33 +383,10 @@ def generate_fl_conversation(
 
 
 def _generate_fl_convo_stub(name_a, name_b, role_a, role_b, ctx):
-    """Generate a stub FL conversation using role-based templates."""
-    import random
-
-    rnd = ctx.get("round", 0)
-    acc = ctx.get("accuracy", 0)
-    gain = ctx.get("gain", 0)
-    dp_budget = ctx.get("dp_budget", 1.0)
-    lab = ctx.get("lab_id", "")
-
-    lines_a = _FL_CONVO_STUBS.get(role_a, _FL_CONVO_STUBS["researcher"])
-    lines_b = _FL_CONVO_STUBS.get(role_b, _FL_CONVO_STUBS["researcher"])
-
-    # Pick a line for each and add context
-    rng = random.Random(rnd * 7 + hash(name_a) % 100)
-    utt_a1 = rng.choice(lines_a)
-    utt_b1 = rng.choice(lines_b)
-
-    # Add round-specific details
-    utt_a2 = f"Al round {rnd}, l'accuracy globale è {acc:.0%} con un gain di {gain:+.1%} per {lab}."
-    utt_b2 = f"Il budget privacy è al {dp_budget:.0%}. {'Dobbiamo fare attenzione.' if dp_budget < 0.3 else 'Procediamo bene.'}"
-
-    return [
-        [name_a, utt_a1],
-        [name_b, utt_b1],
-        [name_a, utt_a2],
-        [name_b, utt_b2],
-    ]
+    """Template conversation, personalised by the kind of agent that speaks
+    and grounded in the real figures of the run (see cognitive/role_dialogs.py)."""
+    from . import role_dialogs
+    return role_dialogs.generate(name_a, name_b, role_a, role_b, ctx)
 
 
 def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
@@ -423,8 +401,17 @@ def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
     lab = ctx.get("lab_id", "")
     demo = ctx.get("demo", "pazienti")
 
-    hint_a = _ROLE_CONVO_HINTS.get(role_a, "discute i risultati FL")
-    hint_b = _ROLE_CONVO_HINTS.get(role_b, "discute i risultati FL")
+    from . import role_dialogs
+    hint_a = (f"{role_dialogs.ROLE_VOICE[role_dialogs.family(role_a)]}; "
+              f"{_ROLE_CONVO_HINTS.get(role_a, 'discute i risultati FL')}")
+    hint_b = (f"{role_dialogs.ROLE_VOICE[role_dialogs.family(role_b)]}; "
+              f"{_ROLE_CONVO_HINTS.get(role_b, 'discute i risultati FL')}")
+    figures = role_dialogs.values(ctx)
+    decision = ctx.get("last_decision")
+    decision_note = ""
+    if decision and decision.get("changed"):
+        decision_note = (f"- Ultima decisione del consorzio (round {figures['d_round']}): "
+                         f"{figures['d_text']}; {figures['d_effect']}\n")
 
     # Build memory section only if available
     mem_section = ""
@@ -448,8 +435,9 @@ def _generate_fl_convo_llm(name_a, name_b, role_a, role_b, ctx,
         f"- Round completato: {rnd}\n"
         f"- Accuracy modello globale: {acc:.1%}\n"
         f"- {gain_note}\n"
-        f"- Budget privacy (DP-SGD): {dp_budget:.0%} rimanente"
-        f"{' — ATTENZIONE: quasi esaurito!' if dp_budget < 0.2 else ''}\n"
+        f"- Media degli ultimi 3 round: {figures['recent']} (i 3 precedenti: {figures['previous']})\n"
+        f"- Rumore di privacy: {figures['noise']}; epoche locali: {figures['epochs']}\n"
+        f"{decision_note}"
         f"{mem_section}\n"
         f"PERSONAGGI:\n"
         f"- {name_a} ({role_a}): {hint_a}\n"

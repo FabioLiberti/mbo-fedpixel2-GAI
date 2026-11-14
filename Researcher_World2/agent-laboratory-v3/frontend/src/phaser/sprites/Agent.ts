@@ -98,6 +98,8 @@ export class Agent extends Phaser.GameObjects.Sprite {
     // Click to show name briefly
     this.setInteractive({ useHandCursor: true });
     this.on('pointerdown', () => {
+      // L'interfaccia apre l'ispettore dell'agente cliccato
+      this.getGameEvents().emit('agent-clicked', { name: this.name });
       this.nameText.setVisible(true);
       this.nameText.setAlpha(1);
       const s = this.scene as unknown as Phaser.Scene;

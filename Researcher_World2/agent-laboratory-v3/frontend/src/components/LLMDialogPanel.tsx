@@ -205,19 +205,32 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
   }, [appendEntries]);
 
   // 3) FL post-round conversations
-  const lastFlRoundRef = useRef<number>(-1);
+  // Ogni conversazione viene elaborata una sola volta, quando compare: quelle
+  // scritte dal modello arrivano più tardi delle altre e a volte per un round
+  // già superato, quindi non basta guardare l'ultimo round.
+  const seenConvosRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const convos = backendSimData?.fl?.conversations;
-    if (!Array.isArray(convos) || convos.length === 0) return;
+    if (!Array.isArray(convos) || convos.length === 0) {
+      if (Array.isArray(convos)) seenConvosRef.current = new Set(); // reset della simulazione
+      return;
+    }
 
-    const latest = convos[convos.length - 1];
-    if (!latest || latest.round === lastFlRoundRef.current) return;
-    lastFlRoundRef.current = latest.round;
+    const fresh = convos.filter((c: any) => {
+      const key = `${c.round}|${c.lab_id}|${(c.agents || []).join('+')}`;
+      if (seenConvosRef.current.has(key)) return false;
+      seenConvosRef.current.add(key);
+      return true;
+    });
+    if (fresh.length === 0) return;
+    if (seenConvosRef.current.size > 400) {
+      seenConvosRef.current = new Set(Array.from(seenConvosRef.current).slice(-200));
+    }
 
     const simTime = backendSimData.sim_time || new Date().toISOString();
     const newEntries: DialogEntry[] = [];
 
-    for (const convo of convos.filter((c: any) => c.round === latest.round)) {
+    for (const convo of fresh) {
       const dialog = convo.dialog as [string, string][];
       const roles = convo.roles as string[];
       for (let i = 0; i < dialog.length; i++) {
@@ -243,10 +256,11 @@ const LLMDialogPanel: React.FC<LLMDialogPanelProps> = ({
 
     appendEntries(newEntries);
 
+    // La scena recita la conversazione (e le statistiche la registrano)
     const gameInstance = getGameInstance();
     if (gameInstance) {
       try {
-        for (const convo of convos.filter((c: any) => c.round === latest.round)) {
+        for (const convo of fresh) {
           gameInstance.events.emit('analytics-fl-conversation', convo);
         }
       } catch (err) {
