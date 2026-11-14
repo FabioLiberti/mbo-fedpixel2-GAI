@@ -123,6 +123,10 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
   // Cooldown per state icons (agentId → next allowed timestamp)
   private zoneIconCooldowns: Map<string, number> = new Map();
 
+  // Listener registrati da questa scena sull'emettitore globale del gioco:
+  // vengono rimossi uno per uno alla chiusura della scena (vedi teardownScene)
+  private gameEventListeners: Array<[string, (...args: any[]) => void]> = [];
+
   constructor(key: string) {
     super(key);
     console.log(`BaseLabScene constructor called with key: ${key}`);
@@ -137,7 +141,76 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.assetsLoaded = false;
     this.textureTestContainers = [];
     this.rawSprites = [];
+
+    // Lo smontaggio è registrato qui e non in create(): le scene dei
+    // laboratori ridefiniscono create() senza chiamare super.create(), mentre
+    // init() viene eseguito a ogni avvio della scena. 'once' evita accumuli.
+    this.events.once('shutdown', this.teardownScene, this);
+
     console.log(`BaseLabScene initialized: ${this.scene.key}`);
+  }
+
+  /**
+   * Registra un listener sull'emettitore globale del gioco che verrà rimosso
+   * alla chiusura della scena.
+   */
+  protected onGameEvent(event: string, handler: (...args: any[]) => void): void {
+    this.game.events.on(event, handler, this);
+    this.gameEventListeners.push([event, handler]);
+  }
+
+  /**
+   * Smonta tutto ciò che la scena ha agganciato a emettitori che le
+   * sopravvivono (eventi globali del gioco, eventi della scena stessa).
+   * Senza questo, a ogni rientro in un laboratorio i listener si accumulano
+   * e ogni evento viene gestito più volte (bolle e chiamate duplicate).
+   */
+  protected teardownScene(): void {
+    const step = (what: string, action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        console.error(`[BaseLabScene] teardown (${what}) failed in ${this.scene.key}:`, error);
+      }
+    };
+
+    // Avvisa il resto del gioco (es. effetti visivi FL) che la scena si chiude
+    step('sceneShutdown', () => this.game.events.emit('sceneShutdown', this.scene.key));
+
+    // Oggetti che registrano listener globali
+    step('agentController', () => {
+      // Distrugge anche il proprio DialogController e il debugger dei dialoghi
+      if (this.agentController) { this.agentController.destroy(); this.agentController = null; }
+    });
+    step('dialogEventTracker', () => {
+      if (this.dialogEventTracker) { this.dialogEventTracker.destroy(); this.dialogEventTracker = null; }
+    });
+    step('dialogAnalytics', () => {
+      // window.dialogAnalytics resta consultabile: destroy() salva lo stato
+      if (this.dialogAnalytics) { this.dialogAnalytics.destroy(); this.dialogAnalytics = null; }
+    });
+    step('dialogController', () => { if (this.dialogController) this.dialogController.destroy(); });
+    step('flDialogIntegrator', () => { if (this.flDialogIntegrator) this.flDialogIntegrator.destroy(); });
+    step('dialogDebugger', () => {
+      if (this.dialogDebugger) { this.dialogDebugger.destroy(); this.dialogDebugger = null; }
+    });
+    step('labControlsMenu', () => {
+      if (this.labControlsMenu) { this.labControlsMenu.destroy(); this.labControlsMenu = null; }
+    });
+
+    // Listener registrati direttamente dalla scena
+    step('gameEventListeners', () => {
+      for (const [event, handler] of this.gameEventListeners) {
+        this.game.events.off(event, handler, this);
+      }
+      this.gameEventListeners = [];
+    });
+    step('sceneListeners', () => this.events.off('agent-state-change'));
+
+    // Stato che non deve sopravvivere al prossimo ingresso nella scena
+    this.zoneIconCooldowns.clear();
+    this.isZoomed = false;
+    this.zoomBackBtn = null;
   }
 
   preload(): void {
@@ -157,7 +230,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     console.log(`BaseLabScene create called: ${this.scene.key}`);
 
     // Monitora gli eventi di interazione tra agenti
-    this.game.events.on('agent-interaction', (data: AgentInteractionData) => {
+    this.onGameEvent('agent-interaction', (data: AgentInteractionData) => {
       console.log('DEBUG: Agent interaction event detected', data);
     });
 
@@ -211,18 +284,7 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
     this.initializeControlsMenu();
 
     console.log(`BaseLabScene ${this.scene.key} setup complete`);
-
-    // Emetti un evento quando la scena viene chiusa
-    this.events.on('shutdown', () => {
-      this.game.events.emit('sceneShutdown', this.scene.key);
-      if (this.dialogController) this.dialogController.destroy();
-      if (this.flDialogIntegrator) this.flDialogIntegrator.destroy();
-      if (this.dialogDebugger) { this.dialogDebugger.destroy(); this.dialogDebugger = null; }
-      if (this.labControlsMenu) { this.labControlsMenu.destroy(); this.labControlsMenu = null; }
-      this.game.events.off('agent-interaction');
-      this.game.events.off('coffee-break');
-      this.game.events.off('go-to-room');
-    });
+    // La chiusura della scena è gestita da teardownScene(), registrato in init()
   }
 
   // ------------------------------------------------------------------
@@ -457,11 +519,11 @@ export class BaseLabScene extends BaseScene implements ILabControlScene {
 
   /** Listen for coffee-break events and move agents to break_room zone. */
   protected enableCoffeeBreak(): void {
-    this.game.events.on('coffee-break', (data: { agentIds: string[] }) => {
+    this.onGameEvent('coffee-break', (data: { agentIds: string[] }) => {
       this.moveAgentsToZone(data.agentIds, 'break_room');
     });
     // Generic go-to-room event: { agentIds: string[], room: string }
-    this.game.events.on('go-to-room', (data: { agentIds: string[]; room: string }) => {
+    this.onGameEvent('go-to-room', (data: { agentIds: string[]; room: string }) => {
       this.moveAgentsToZone(data.agentIds, data.room);
     });
   }
